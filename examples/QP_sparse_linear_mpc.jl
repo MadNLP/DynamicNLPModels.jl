@@ -1,7 +1,7 @@
 using NLPModels, QuadraticModels, SparseArrays, Random, MadNLP, LinearAlgebra, NLPModelsIpopt
 
-# Build the (sparse) H matrix for quadratic models from Q and R matrices 
-# Objective function is z^T H z = sum(x^T Q x for i in 1:T) + sum(u^T R u for i in 1:T)
+" Build the (sparse) H matrix for quadratic models from Q and R matrices 
+ Objective function is 1/2 z^T H z = 1/2 sum(x^T Q x for i in 1:T) + 1/2 sum(u^T R u for i in 1:T)"
 function build_H(Q,R, nt)
     ns = size(Q)[1]
     nr = size(R)[1]
@@ -32,8 +32,8 @@ function build_H(Q,R, nt)
     return H
 end
 
-# Build the (sparse) A matrix for quadratic models from the Ac and B matrices
-# where 0 <= Az <= 0 for x_t+1 = Ac* x_t + B* u_t
+" Build the (sparse) A matrix for quadratic models from the Ac and B matrices
+ where 0 <= Az <= 0 for x_t+1 = Ac* x_t + B* u_t"
 function build_A(Ac,B, nt)
     ns = size(Ac)[2]
     nr = size(B)[2]
@@ -61,8 +61,8 @@ function build_A(Ac,B, nt)
 end
 
  
-# Get the QuadraticModels.jl QuadraticModel from the Q, R, A, and B matrices
-# nt is the number of time steps
+" Get the QuadraticModels.jl QuadraticModel from the Q, R, A, and B matrices
+ nt is the number of time steps"
 function get_QM(Q, R, A, B, nt;
     lvar = fill(-Inf, (nt*size(Q)[1] + nt*size(R)[1])), 
     uvar = fill(Inf, (nt*size(Q)[1] + nt*size(R)[1]))   )
@@ -77,40 +77,10 @@ function get_QM(Q, R, A, B, nt;
     c       = zeros(ns*nt + nu*nt)
     len_con = zeros(size(A)[1])
 
-
-
+    tril!(H)
     qp = QuadraticModel(c, H; A = A, lcon = len_con, ucon = len_con, lvar = lvar, uvar = uvar)
     
     return qp
 
 end
 
-
-# Build Q, R, A, and B matrices for 2 states and 1 input
-Random.seed!(10)
-Q_org = Random.rand(2,2)
-Q = Q_org * transpose(Q_org) + I
-R = rand(1) .+ 1
-
-A_org = rand(2,2)
-A = A_org * transpose(A_org) + I
-B = rand(2,1)
-
-
-# Set the lower value of state variables to be 1, upper value to be 5
-# Set the lower value of input variables to be 0, upper value to be 10
-lvar = fill(-Inf, 9)
-uvar = fill(Inf, 9)
-for i in 1:6
-    lvar[i] = 1
-    uvar[i] = 5
-end
-for i in 7:9
-    lvar[i] = 0
-    uvar[i] = 10
-end
-
-
-qp = get_QM(Q, R, A, B, 3; lvar=lvar, uvar = uvar)
-
-madnlp(qp, max_iter = 100)
