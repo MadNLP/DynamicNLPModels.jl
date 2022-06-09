@@ -80,16 +80,26 @@ end
 function get_QM(Q, R, A, B, nt; c=zeros(nt*size(Q)[1] + nt*size(R)[1]),
     lvar = fill(-Inf, (nt*size(Q)[1] + nt*size(R)[1])), 
     uvar = fill(Inf, (nt*size(Q)[1] + nt*size(R)[1])),
+    x0   = [],
     Qf = [])
 
-    ns = size(Q)[1]
-    nu = size(R)[1]
+    if length(x0) >0 && size(Q)[1] != length(x0)
+        error("x0 is not equal to the number of states given in Q")
+    end
+
+
 
     H = build_H(Q,R, nt; Qf=Qf)
     A = build_A(A,B, nt)
 
     len_con = zeros(size(A)[1])
 
+    if length(x0) != 0
+        for i in 1:length(x0)
+            lvar[i] = x0[i]
+            uvar[i] = x0[i]
+        end
+    end
     
     qp = QuadraticModel(c, H; A = A, lcon = len_con, ucon = len_con, lvar = lvar, uvar = uvar)
     

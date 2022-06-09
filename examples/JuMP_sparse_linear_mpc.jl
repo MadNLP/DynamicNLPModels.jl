@@ -5,6 +5,7 @@ using Ipopt, JuMP, Random, LinearAlgebra
 "Build a JuMP model to minimize 1/2 sum(x^T Q x for i in 1:nt) + 1/2 sum(u^T R u for i in 1:nt-1)
 subject to x(t+1) = Ax(t) + Bu(t) and lvar <= [x(1), ..., x(t), u(1), ..., u(t)] <= uvar"
 function build_QP_JuMP_model(Q,R,A,B, nt;
+        x0   = [],
         lvar = [], 
         uvar = [],
         Qf  = [])
@@ -55,6 +56,11 @@ function build_QP_JuMP_model(Q,R,A,B, nt;
         end
     end
 
+    if length(x0) != 0
+        for i in NS
+            @constraint(model, x[i,1] == x0[i])
+        end
+    end
     
 
     # Give constraints from A, B, matrices

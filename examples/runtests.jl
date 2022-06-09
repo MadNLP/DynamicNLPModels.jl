@@ -83,6 +83,24 @@ madnlp_ulbf = madnlp(qpulbf)
 @test abs(objective_value(mulbf) - madnlp_ulbf.objective) < 1e-7
 
 
+# Test new problem with x0
+x0 = lvar[1:2] .+ .5
+
+mulbx0  = build_QP_JuMP_model(Q,R,A,B, nt; lvar = lvar, uvar= uvar, x0 = x0)
+qpulbx0 = get_QM(Q, R, A, B, nt; lvar = lvar, uvar=uvar, x0=x0)
+
+# Solve new problem with x0
+optimize!(mulbx0)
+ipopt_ulbx0   = ipopt(qpulbx0)
+madnlp_ulbx0  = madnlp(qpulbx0)
+
+# Test results
+@test abs(objective_value(mulbx0) - ipopt_ulbx0.objective)  < 1e-7
+@test abs(objective_value(mulbx0) - madnlp_ulbx0.objective) < 1e-7
+@test abs(madnlp_ulbx0.objective  - ipopt_ulbx0.objective) < 1e-7
+
+
+
 # Test edge cases of model functions 
 nt = 50 # number of time steps
 ns = 50 # number of states
@@ -115,4 +133,3 @@ qpbig = get_QM(Q, R, A, B, nt; lvar=lvar, uvar=uvar, Qf=Qf)
 @test qpbig.data.c == zeros(nt*ns + nu*nt)
 @test qpbig.data.H[nt*ns + 1, nt*ns + 1] == R[1,1]
 @test qpbig.data.H[(nt-1) * ns + 1, (nt-1)*ns + 1] == Qf[1,1]
-
