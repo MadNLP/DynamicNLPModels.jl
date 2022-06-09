@@ -39,7 +39,7 @@ function build_A(Ac,B, nt)
     nr = size(B)[2]
 
 
-    A = sparse([],[],Float64[],(ns*nt), (ns*nt + nr*nt))
+    A = sparse([],[],Float64[],(ns*(nt-1)), (ns*nt + nr*nt))
 
     for i in 1:(nt-1)
         for j in 1:ns
@@ -64,8 +64,8 @@ end
 " Get the QuadraticModels.jl QuadraticModel from the Q, R, A, and B matrices
  nt is the number of time steps"
 function get_QM(Q, R, A, B, nt;
-    lvar = fill(-Inf, (nt*size(Q)[1] + nt*size(R)[1])), 
-    uvar = fill(Inf, (nt*size(Q)[1] + nt*size(R)[1]))   )
+    lvar = fill(-1e16, (nt*size(Q)[1] + nt*size(R)[1])), 
+    uvar = fill(1e16, (nt*size(Q)[1] + nt*size(R)[1]))   )
 
     ns = size(Q)[1]
     nu = size(R)[1]
@@ -73,14 +73,12 @@ function get_QM(Q, R, A, B, nt;
     H = build_H(Q,R, nt)
     A = build_A(A,B, nt)
 
-
     c       = zeros(ns*nt + nu*nt)
     len_con = zeros(size(A)[1])
 
-    tril!(H)
+    
     qp = QuadraticModel(c, H; A = A, lcon = len_con, ucon = len_con, lvar = lvar, uvar = uvar)
     
     return qp
 
 end
-
