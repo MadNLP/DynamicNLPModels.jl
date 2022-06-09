@@ -115,3 +115,4 @@ qpbig = get_QM(Q, R, A, B, nt; lvar=lvar, uvar=uvar, Qf=Qf)
 @test qpbig.data.c == zeros(nt*ns + nu*nt)
 @test qpbig.data.H[nt*ns + 1, nt*ns + 1] == R[1,1]
 @test qpbig.data.H[(nt-1) * ns + 1, (nt-1)*ns + 1] == Qf[1,1]
+
