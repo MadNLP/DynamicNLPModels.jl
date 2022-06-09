@@ -64,8 +64,8 @@ end
 " Get the QuadraticModels.jl QuadraticModel from the Q, R, A, and B matrices
  nt is the number of time steps"
 function get_QM(Q, R, A, B, nt; c=zeros(nt*size(Q)[1] + nt*size(R)[1]),
-    lvar = fill(-1e16, (nt*size(Q)[1] + nt*size(R)[1])), 
-    uvar = fill(1e16, (nt*size(Q)[1] + nt*size(R)[1]))   )
+    lvar = fill(-Inf, (nt*size(Q)[1] + nt*size(R)[1])), 
+    uvar = fill(Inf, (nt*size(Q)[1] + nt*size(R)[1]))   )
 
     ns = size(Q)[1]
     nu = size(R)[1]
