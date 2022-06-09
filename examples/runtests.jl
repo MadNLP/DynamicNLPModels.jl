@@ -17,8 +17,8 @@ A = A_org * transpose(A_org) + I
 B = rand(ns, nu)
 
 
-lvar = rand(0:.0000001:5, (ns*nt + nu*nt))
-uvar = lvar .+ 10
+lvar = rand(0:.0000001:1, (ns*nt + nu*nt))
+uvar = lvar .+ 100
 
 
 # build JuMP models
