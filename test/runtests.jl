@@ -1,4 +1,4 @@
-using Test, DynamicNLPModels, MadNLP, NLPModelsIpopt, LinearAlgebra, Random, JuMP, Ipopt
+using Test, DynamicNLPModels, MadNLP, NLPModelsIpopt, Random, JuMP, Ipopt
 include("sparse_lq_test.jl")
 
 N  = 3 # number of time steps
