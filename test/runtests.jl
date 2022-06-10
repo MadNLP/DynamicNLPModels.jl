@@ -1,8 +1,10 @@
-using Test, DynamicNLPModels, MadNLP, NLPModelsIpopt, SparseArrays, LinearAlgebra
+using Revise
+
+using Test, DynamicNLPModels, MadNLP, NLPModelsIpopt, LinearAlgebra, Random, JuMP, Ipopt
 include("JuMP_sparse_linear_mpc.jl")
 
 
-nt = 3 # number of time steps
+T = 3 # number of time steps
 ns = 2 # number of states
 nu = 1 # number of inputs
 
@@ -18,21 +20,23 @@ A = A_rand * transpose(A_rand) + I
 B = rand(ns, nu)
 
 # generate upper and lower bounds
-lvar = rand(0:.0000001:1, (ns*nt + nu*nt))
-uvar = lvar .+ 10
+sl = rand(ns)
+ul = rand(nu)
+su = sl .+ 10
+uu = ul .+ 10
 
 
 # build JuMP models
-mnb  = build_QP_JuMP_model(Q,R,A,B, nt)
-mlb  = build_QP_JuMP_model(Q,R,A,B, nt; lvar = lvar)
-mub  = build_QP_JuMP_model(Q,R,A,B, nt; uvar= uvar)
-mulb = build_QP_JuMP_model(Q,R,A,B, nt; lvar = lvar, uvar= uvar)
+mnb  = build_QP_JuMP_model(Q,R,A,B, T)
+mlb  = build_QP_JuMP_model(Q,R,A,B, T; sl = sl, ul = ul)
+mub  = build_QP_JuMP_model(Q,R,A,B, T; su = su, uu = uu)
+mulb = build_QP_JuMP_model(Q,R,A,B, T; sl = sl, su = su, ul = ul, uu = uu)
 
 # Build Quadratic Model
-qpnb  = get_QM(Q, R, A, B, nt)
-qplb  = get_QM(Q, R, A, B, nt; lvar=lvar)
-qpub  = get_QM(Q, R, A, B, nt; uvar=uvar)
-qpulb = get_QM(Q, R, A, B, nt; lvar = lvar, uvar=uvar)
+qpnb  = get_QM(Q, R, A, B, T)
+qplb  = get_QM(Q, R, A, B, T; sl = sl, ul = ul)
+qpub  = get_QM(Q, R, A, B, T; su = su, uu = uu)
+qpulb = get_QM(Q, R, A, B, T; sl = sl, ul = ul, su = su, uu = uu)
 
 
 # Solve JuMP model with Ipopt
@@ -70,8 +74,8 @@ madnlp_ulb = madnlp(qpulb, max_iter = 50)
 Qf_rand = Random.rand(ns,ns)
 Qf = Qf_rand * transpose(Qf_rand) + I
 
-mulbf  = build_QP_JuMP_model(Q,R,A,B, nt; lvar = lvar, uvar= uvar, Qf = Qf)
-qpulbf = get_QM(Q, R, A, B, nt; lvar = lvar, uvar=uvar, Qf = Qf)
+mulbf  = build_QP_JuMP_model(Q,R,A,B, T; sl = sl, su = su, ul = ul, uu = uu, Qf = Qf)
+qpulbf = get_QM(Q, R, A, B, T; sl = sl, su = su, ul = ul, uu = uu, Qf = Qf)
 
 # Solve new problem with Qf matrix
 optimize!(mulbf)
@@ -84,10 +88,10 @@ madnlp_ulbf = madnlp(qpulbf)
 
 
 # Test new problem with x0
-x0 = lvar[1:2] .+ .5
+s0 = sl .+ .5
 
-mulbx0  = build_QP_JuMP_model(Q,R,A,B, nt; lvar = lvar, uvar= uvar, x0 = x0)
-qpulbx0 = get_QM(Q, R, A, B, nt; lvar = lvar, uvar=uvar, x0=x0)
+mulbx0  = build_QP_JuMP_model(Q,R,A,B, T; sl = sl, su = su, ul = ul, uu = uu, s0 = s0)
+qpulbx0 = get_QM(Q, R, A, B, T; sl = sl, su = su, ul= ul, uu = uu, s0=s0)
 
 # Solve new problem with x0
 optimize!(mulbx0)
@@ -98,38 +102,3 @@ madnlp_ulbx0  = madnlp(qpulbx0)
 @test abs(objective_value(mulbx0) - ipopt_ulbx0.objective)  < 1e-7
 @test abs(objective_value(mulbx0) - madnlp_ulbx0.objective) < 1e-7
 @test abs(madnlp_ulbx0.objective  - ipopt_ulbx0.objective) < 1e-7
-
-
-
-# Test edge cases of model functions 
-nt = 50 # number of time steps
-ns = 50 # number of states
-nu = 10 # number of inputs
-
-# generate random Q, R, A, and B matrices
-Random.seed!(10)
-Q_rand = Random.rand(ns,ns)
-Q = Q_rand * transpose(Q_rand) + I
-R_rand   = Random.rand(nu,nu)
-R    = R_rand * transpose(R_rand) + I
-
-A_rand = rand(ns, ns)
-A = A_rand * transpose(A_rand) + I
-B = rand(ns, nu)
-
-# generate upper and lower bounds
-lvar = rand(0:.0000001:1, (ns*nt + nu*nt))
-uvar = lvar .+ 10
-
-Qf_rand = Random.rand(ns,ns)
-Qf = Qf_rand * transpose(Qf_rand) + I
-
-# Generate the big problems; these won't be solved because random bounds makes it likely infeasible
-mbig  = build_QP_JuMP_model(Q,R,A,B, nt; lvar=lvar, uvar=uvar, Qf=Qf)
-qpbig = get_QM(Q, R, A, B, nt; lvar=lvar, uvar=uvar, Qf=Qf)
-
-# Test if matrices formed correctly
-@test length(qpbig.data.H.rowval) == nt*ns^2 + (nt-1)*nu^2
-@test qpbig.data.c == zeros(nt*ns + nu*nt)
-@test qpbig.data.H[nt*ns + 1, nt*ns + 1] == R[1,1]
-@test qpbig.data.H[(nt-1) * ns + 1, (nt-1)*ns + 1] == Qf[1,1]
