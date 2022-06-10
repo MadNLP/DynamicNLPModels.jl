@@ -49,7 +49,7 @@ Build the (sparse) `H` matrix from square `Q` and `R` matrices such that
 
 # Examples
 ```julia-repl
-julia> Q = [1 2; 2 1]; R = ones(1,1); build_H(Q, R, 2)
+julia> Q = [1 2; 2 1]; R = ones(1,1); _build_H(Q, R, 2)
 6×6 SparseArrays.SparseMatrixCSC{Float64, Int64} with 9 stored entries:
  1.0  2.0   ⋅    ⋅    ⋅    ⋅ 
  2.0  1.0   ⋅    ⋅    ⋅    ⋅
@@ -115,7 +115,7 @@ Build the (sparse) `J` matrix or a linear model from `A` and `B` matrices such t
 
 # Examples
 ```julia-repl
-julia> A = [1 2 ; 3 4]; B = [5 6; 7 8]; build_J(A,B,3)
+julia> A = [1 2 ; 3 4]; B = [5 6; 7 8]; _build_J(A,B,3)
 4×12 SparseArrays.SparseMatrixCSC{Float64, Int64} with 20 stored entries:
  1.0  2.0  -1.0    ⋅     ⋅     ⋅   5.0  6.0   ⋅    ⋅    ⋅    ⋅
  3.0  4.0    ⋅   -1.0    ⋅     ⋅   7.0  8.0   ⋅    ⋅    ⋅    ⋅
