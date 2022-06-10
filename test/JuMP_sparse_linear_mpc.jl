@@ -3,8 +3,22 @@ using Ipopt, JuMP, Random, LinearAlgebra
 
 
 """
-Build a JuMP model to minimize 1/2 sum(x^T Q x for i in 1:N) + 1/2 sum(u^T R u for i in 1:(N-1))
-subject to x(t+1) = Ax(t) + Bu(t) and lvar <= [x(1), ..., x(t), u(1), ..., u(t)] <= uvar
+    build_QP_JuMP_model(Q,R,A,B,N;...) -> JuMP.Model(...)
+
+Return a `JuMP.jl` Model for the quadratic problem 
+    
+min 1/2 ( sum_{i=1}^{N-1} s_i^T Q s + sum_{i=1}^{N-1} u^T R u + s_N^T Qf s_n  )
+s.t. s_{i+1} = As_i + Bs_i for i = 1,..., N-1
+
+Optional Arguments
+- `Qf = []`: matrix multiplied by s_N in objective function (defaults to Q if not given)
+- `c = zeros(N*size(Q,1) + N*size(R,1)`:  linear term added to objective funciton, c^T z
+- `sl = fill(-Inf, size(Q,1))`: lower bound on state variables
+- `su = fill(Inf,  size(Q,1))`: upper bound on state variables
+- `ul = fill(-Inf, size(Q,1))`: lower bound on input variables
+- `uu = fill(Inf,  size(Q,1))`: upper bound on input variables
+- `s0 = []`: initial state of the first state variables
+
 """
 function build_QP_JuMP_model(
         Q,R,A,B, N;

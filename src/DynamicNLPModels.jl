@@ -41,8 +41,25 @@ function QPData(dnlp::LQDynData{VT,MT}) where {VT,MT}
 end
 
 """ 
-Build the (sparse) H matrix for quadratic models from Q and R matrices 
-Objective function is 1/2 z^T H z = 1/2 sum(x^T Q x for i in 1:T) + 1/2 sum(u^T R u for i in 1:(T-1))
+    build_H(Q, R, N; Qf = []) -> H
+
+Build the (sparse) `H` matrix from square `Q` and `R` matrices such that 
+ z^T H z = sum_{i=1}^{N-1} s_i^T Q s + sum_{i=1}^{N-1} u^T R u + s_N^T Qf s_n . 
+
+
+# Examples
+```julia-repl
+julia> Q = [1 2; 2 1]; R = ones(1,1); build_H(Q, R, 2)
+6×6 SparseArrays.SparseMatrixCSC{Float64, Int64} with 9 stored entries:
+ 1.0  2.0   ⋅    ⋅    ⋅    ⋅ 
+ 2.0  1.0   ⋅    ⋅    ⋅    ⋅
+  ⋅    ⋅   1.0  2.0   ⋅    ⋅
+  ⋅    ⋅   2.0  1.0   ⋅    ⋅
+  ⋅    ⋅    ⋅    ⋅   1.0   ⋅
+  ⋅    ⋅    ⋅    ⋅    ⋅     ⋅
+```
+
+If `Qf` is not given, then `Qf` defaults to `Q`
 """
 function build_H(
     Q, R, N;
@@ -91,10 +108,21 @@ end
 
 
 """
-Build the (sparse) A matrix for quadratic models from the Ac and B matrices
-where 0 <= Jz <= 0 for x_t+1 = Ac* x_t + B* u_t
-"""
+    build_J(A, B, N) -> J
 
+Build the (sparse) `J` matrix or a linear model from `A` and `B` matrices such that
+0 <= Jz <= 0 is equivalent to s_{i+1} = As_i + Bs_i for i = 1,..., N-1
+
+# Examples
+```julia-repl
+julia> A = [1 2 ; 3 4]; B = [5 6; 7 8]; build_J(A,B,3)
+4×12 SparseArrays.SparseMatrixCSC{Float64, Int64} with 20 stored entries:
+ 1.0  2.0  -1.0    ⋅     ⋅     ⋅   5.0  6.0   ⋅    ⋅    ⋅    ⋅
+ 3.0  4.0    ⋅   -1.0    ⋅     ⋅   7.0  8.0   ⋅    ⋅    ⋅    ⋅
+  ⋅    ⋅    1.0   2.0  -1.0    ⋅    ⋅    ⋅   5.0  6.0   ⋅    ⋅
+  ⋅    ⋅    3.0   4.0    ⋅   -1.0   ⋅    ⋅   7.0  8.0   ⋅    ⋅
+```
+"""
 function build_J(A,B, N)
     ns = size(A,2)
     nr = size(B,2)
@@ -124,8 +152,29 @@ end
 
  
 """
-Get the QuadraticModels.jl QuadraticModel from the Q, R, A, and B matrices
-nt is the number of time steps
+    get_QM(Q,R,A,B,N; ...) -> QuadraticModels.QuadraticModel(...)
+
+Returns a `QuadraticModel` from the matrices `Q`, `R`, `A`, and `B` with linear constraints over `N` time steps. 
+
+QuadraticModel has the form of  
+
+min 1/2 z^T H z 
+s.t. 0 <= Jx <= 0
+
+which is equivalent to the problem of 
+
+min 1/2 ( sum_{i=1}^{N-1} s_i^T Q s + sum_{i=1}^{N-1} u^T R u + s_N^T Qf s_n  )
+s.t. s_{i+1} = As_i + Bs_i for i = 1,..., N-1
+
+# Optional Arguments
+- `Qf = []`: matrix multiplied by s_N in objective function (defaults to Q if not given)
+- `c = zeros(N*size(Q,1) + N*size(R,1)`:  linear term added to objective funciton, c^T z
+- `sl = fill(-Inf, size(Q,1))`: lower bound on state variables
+- `su = fill(Inf,  size(Q,1))`: upper bound on state variables
+- `ul = fill(-Inf, size(Q,1))`: lower bound on input variables
+- `uu = fill(Inf,  size(Q,1))`: upper bound on input variables
+- `s0 = []`: initial state of the first state variables
+
 """
 function get_QM(
     Q, R, A, B, N;
