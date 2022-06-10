@@ -1,8 +1,7 @@
 using Test, DynamicNLPModels, MadNLP, NLPModelsIpopt, LinearAlgebra, Random, JuMP, Ipopt
-include("JuMP_sparse_linear_mpc.jl")
+include("sparse_lq_test.jl")
 
-
-T = 3 # number of time steps
+N  = 3 # number of time steps
 ns = 2 # number of states
 nu = 1 # number of inputs
 
@@ -25,16 +24,16 @@ uu = ul .+ 10
 
 
 # build JuMP models
-mnb  = build_QP_JuMP_model(Q,R,A,B, T)
-mlb  = build_QP_JuMP_model(Q,R,A,B, T; sl = sl, ul = ul)
-mub  = build_QP_JuMP_model(Q,R,A,B, T; su = su, uu = uu)
-mulb = build_QP_JuMP_model(Q,R,A,B, T; sl = sl, su = su, ul = ul, uu = uu)
+mnb  = build_QP_JuMP_model(Q,R,A,B, N)
+mlb  = build_QP_JuMP_model(Q,R,A,B, N; sl = sl, ul = ul)
+mub  = build_QP_JuMP_model(Q,R,A,B, N; su = su, uu = uu)
+mulb = build_QP_JuMP_model(Q,R,A,B, N; sl = sl, su = su, ul = ul, uu = uu)
 
 # Build Quadratic Model
-qpnb  = get_QM(Q, R, A, B, T)
-qplb  = get_QM(Q, R, A, B, T; sl = sl, ul = ul)
-qpub  = get_QM(Q, R, A, B, T; su = su, uu = uu)
-qpulb = get_QM(Q, R, A, B, T; sl = sl, ul = ul, su = su, uu = uu)
+qpnb  = get_QM(Q, R, A, B, N)
+qplb  = get_QM(Q, R, A, B, N; sl = sl, ul = ul)
+qpub  = get_QM(Q, R, A, B, N; su = su, uu = uu)
+qpulb = get_QM(Q, R, A, B, N; sl = sl, ul = ul, su = su, uu = uu)
 
 
 # Solve JuMP model with Ipopt
@@ -72,8 +71,8 @@ madnlp_ulb = madnlp(qpulb, max_iter = 50)
 Qf_rand = Random.rand(ns,ns)
 Qf = Qf_rand * transpose(Qf_rand) + I
 
-mulbf  = build_QP_JuMP_model(Q,R,A,B, T; sl = sl, su = su, ul = ul, uu = uu, Qf = Qf)
-qpulbf = get_QM(Q, R, A, B, T; sl = sl, su = su, ul = ul, uu = uu, Qf = Qf)
+mulbf  = build_QP_JuMP_model(Q,R,A,B, N; sl = sl, su = su, ul = ul, uu = uu, Qf = Qf)
+qpulbf = get_QM(Q, R, A, B, N; sl = sl, su = su, ul = ul, uu = uu, Qf = Qf)
 
 # Solve new problem with Qf matrix
 optimize!(mulbf)
@@ -88,8 +87,8 @@ madnlp_ulbf = madnlp(qpulbf)
 # Test new problem with x0
 s0 = sl .+ .5
 
-mulbx0  = build_QP_JuMP_model(Q,R,A,B, T; sl = sl, su = su, ul = ul, uu = uu, s0 = s0)
-qpulbx0 = get_QM(Q, R, A, B, T; sl = sl, su = su, ul= ul, uu = uu, s0=s0)
+mulbx0  = build_QP_JuMP_model(Q,R,A,B, N; sl = sl, su = su, ul = ul, uu = uu, s0 = s0)
+qpulbx0 = get_QM(Q, R, A, B, N; sl = sl, su = su, ul= ul, uu = uu, s0=s0)
 
 # Solve new problem with x0
 optimize!(mulbx0)

@@ -5,7 +5,7 @@ import QuadraticModels
 import LinearAlgebra
 import SparseArrays
 
-export build_H, build_J, get_QM
+export get_QM
 
 mutable struct LQDynData{VT,MT}
     N::Int
@@ -41,7 +41,7 @@ function QPData(dnlp::LQDynData{VT,MT}) where {VT,MT}
 end
 
 """ 
-    build_H(Q, R, N; Qf = []) -> H
+    _build_H(Q, R, N; Qf = []) -> H
 
 Build the (sparse) `H` matrix from square `Q` and `R` matrices such that 
  z^T H z = sum_{i=1}^{N-1} s_i^T Q s + sum_{i=1}^{N-1} u^T R u + s_N^T Qf s_n . 
@@ -61,7 +61,7 @@ julia> Q = [1 2; 2 1]; R = ones(1,1); build_H(Q, R, 2)
 
 If `Qf` is not given, then `Qf` defaults to `Q`
 """
-function build_H(
+function _build_H(
     Q, R, N;
     Qf = [])
     if size(Qf,1) == 0
@@ -108,7 +108,7 @@ end
 
 
 """
-    build_J(A, B, N) -> J
+    _build_J(A, B, N) -> J
 
 Build the (sparse) `J` matrix or a linear model from `A` and `B` matrices such that
 0 <= Jz <= 0 is equivalent to s_{i+1} = As_i + Bs_i for i = 1,..., N-1
@@ -123,7 +123,7 @@ julia> A = [1 2 ; 3 4]; B = [5 6; 7 8]; build_J(A,B,3)
   ⋅    ⋅    3.0   4.0    ⋅   -1.0   ⋅    ⋅   7.0  8.0   ⋅    ⋅
 ```
 """
-function build_J(A,B, N)
+function _build_J(A,B, N)
     ns = size(A,2)
     nr = size(B,2)
 
@@ -192,8 +192,8 @@ function get_QM(
 
 
 
-    H = build_H(Q,R, N; Qf=Qf)
-    J = build_J(A,B, N)
+    H = _build_H(Q,R, N; Qf=Qf)
+    J = _build_J(A,B, N)
 
     con = zeros(size(J,1))
 
