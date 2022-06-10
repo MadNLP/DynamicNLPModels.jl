@@ -40,9 +40,10 @@ function QPData(dnlp::LQDynData{VT,MT}) where {VT,MT}
     
 end
 
-
-" Build the (sparse) H matrix for quadratic models from Q and R matrices 
- Objective function is 1/2 z^T H z = 1/2 sum(x^T Q x for i in 1:T) + 1/2 sum(u^T R u for i in 1:(T-1))"
+""" 
+Build the (sparse) H matrix for quadratic models from Q and R matrices 
+Objective function is 1/2 z^T H z = 1/2 sum(x^T Q x for i in 1:T) + 1/2 sum(u^T R u for i in 1:(T-1))
+"""
 function build_H(
     Q, R, nt;
     Qf = [])
@@ -89,8 +90,11 @@ function build_H(
 end
 
 
-" Build the (sparse) A matrix for quadratic models from the Ac and B matrices
- where 0 <= Az <= 0 for x_t+1 = Ac* x_t + B* u_t"
+"""
+Build the (sparse) A matrix for quadratic models from the Ac and B matrices
+where 0 <= Az <= 0 for x_t+1 = Ac* x_t + B* u_t
+"""
+
 function build_A(Ac,B, nt)
     ns = size(Ac)[2]
     nr = size(B)[2]
@@ -119,8 +123,10 @@ end
 
 
  
-" Get the QuadraticModels.jl QuadraticModel from the Q, R, A, and B matrices
- nt is the number of time steps"
+"""
+Get the QuadraticModels.jl QuadraticModel from the Q, R, A, and B matrices
+nt is the number of time steps
+"""
 function get_QM(
     Q, R, A, B, nt;
     c    = zeros(nt*size(Q)[1] + nt*size(R)[1]),
