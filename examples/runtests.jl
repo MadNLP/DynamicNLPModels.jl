@@ -1,6 +1,6 @@
 using Test
 include("JuMP_sparse_linear_mpc.jl")
-include("QP_sparse_linear_mpc.jl")
+include("../src/DynamicNLPModels.jl")
 
 nt = 3 # number of time steps
 ns = 2 # number of states

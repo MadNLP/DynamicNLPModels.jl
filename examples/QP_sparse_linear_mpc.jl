@@ -53,7 +53,7 @@ function build_A(Ac,B, nt)
     nr = size(B)[2]
 
 
-    A = sparse([],[],Float64[],(ns*(nt-1)), (ns*nt + nr*nt))
+    A = sparse([],[],Float64[],(ns*(nt-1)), (ns*nt + nr*nt))    
 
     for i in 1:(nt-1)
         for j in 1:ns
