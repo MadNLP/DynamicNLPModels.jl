@@ -1,4 +1,3 @@
-using Revise
 using Test, DynamicNLPModels, MadNLP, NLPModelsIpopt, Random, JuMP, Ipopt, LinearAlgebra
 include("sparse_lq_test.jl")
 
