@@ -3,6 +3,7 @@ using Revise
 using DynamicNLPModels
 using Random
 using LinearAlgebra
+using SparseArrays
 N  = 3 # number of time steps
 ns = 2 # number of states
 nu = 1 # number of inputs
@@ -25,4 +26,4 @@ uu = ul .+ 10
 
 s0 = sl .+ 1
 
-LQDynamicData(s0, A, B, Q, R, N)
+LQDynamicData(s0, A, B, Q, R, N;)

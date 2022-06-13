@@ -9,7 +9,7 @@ export get_QM, LQDynamicData
 
 abstract type AbstractDynamicData{T,S} end
 
-struct LQDynamicData{T,S,M} <: AbstractDynamicData{T,S}
+mutable struct LQDynamicData{T,S,M} <: AbstractDynamicData{T,S}
     s0::S
     A::M
     B::M
@@ -43,7 +43,7 @@ function LQDynamicData{T,S,M}(
     su::S = (similar(s0) .=  Inf),
     ul::S = (similar(s0,nu) .= -Inf),
     uu::S = (similar(s0,nu) .=  Inf)
-    ) where {T,S,M}
+    ) where {T,S,M <: AbstractMatrix{T}}
 
     if size(Q,1) != size(Q,2) 
         error("Q matrix is not square")
@@ -109,11 +109,10 @@ function LQDynamicModel(dnlp::LQDynamicData{T,S,M}; condense = false) where {T,S
     ul = dnlp.ul
     uu = dnlp.uu
 
-    H = _build_H(Q, R, N; Qf)
+    H = _build_H(Q, R, N; Qf=Qf)
     J = _build_J(A, B, N)
 
     c0 = 0
-
 
     nvar = (ns*N + nu*N)
     nnzj = J.rowvals
@@ -162,6 +161,7 @@ function LQDynamicModel(dnlp::LQDynamicData{T,S,M}; condense = false) where {T,S
     )
 
 end
+
 
 
 
