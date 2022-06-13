@@ -27,7 +27,7 @@ mutable struct LQDynamicData{T,S,M} <: AbstractDynamicData{T,S}
     uu::S
 end
 
-function LQDynamicData{T,S,M}(
+function LQDynamicData(
     s0::S,
     A::M,
     B::M,
@@ -43,7 +43,7 @@ function LQDynamicData{T,S,M}(
     su::S = (similar(s0) .=  Inf),
     ul::S = (similar(s0,nu) .= -Inf),
     uu::S = (similar(s0,nu) .=  Inf)
-    ) where {T,S,M <: AbstractMatrix{T}}
+    ) where {T,S <: AbstractVector{T},M <: AbstractMatrix{T}}
 
     if size(Q,1) != size(Q,2) 
         error("Q matrix is not square")
@@ -71,7 +71,7 @@ function LQDynamicData{T,S,M}(
         error("x0 is not within the given upper and lower bounds")
     end
 
-    LQDynamicData(
+    LQDynamicData{T,S,M}(
         s0, A, B, Q, R, N,
 
         Qf, ns, nu,
