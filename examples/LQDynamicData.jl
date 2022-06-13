@@ -26,4 +26,8 @@ uu = ul .+ 10
 
 s0 = sl .+ 1
 
-LQDynamicData(s0, A, B, Q, R, N;)
+dnlp = LQDynamicData(s0, A, B, Q, R, N;)
+
+LQDynamicModel(dnlp; condense=false)
+
+
