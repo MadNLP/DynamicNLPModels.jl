@@ -5,40 +5,165 @@ import QuadraticModels
 import LinearAlgebra
 import SparseArrays
 
-export get_QM
+export get_QM, LQDynamicData
 
-mutable struct LQDynData{VT,MT}
+abstract type AbstractDynamicData{T,S} end
+
+struct LQDynamicData{T,S,M} <: AbstractDynamicData{T,S}
+    s0::S
+    A::M
+    B::M
+    Q::M
+    R::M
     N::Int
-    nx::Int
+
+    Qf::M
+    ns::Int
     nu::Int
-    
-    A::MT
-    B::MT
-    Q::MT
-    R::MT
-    Qf::MT
-    
-    x0::VT
-    xl::VT
-    xu::VT
-    ul::VT
-    uu::VT
+
+    sl::S
+    su::S
+    ul::S
+    uu::S
 end
 
-function LQDynData(
-    N, x0, A, B, Q, R;
-    Qf = Q,
-    xl = (similar(x0) .= -Inf),
-    xu = (similar(x0) .=  Inf),
-    ul = (similar(x0,nu) .= -Inf),
-    uu = (similar(x0,nu) .=  Inf)
+function LQDynamicData{T,S,M}(
+    s0::S,
+    A::M,
+    B::M,
+    Q::M,
+    R::M,
+    N::Int;
+
+    Qf::M = Q, 
+    ns::Int = size(Q,1),
+    nu::Int = size(R,1),
+
+    sl::S = (similar(s0) .= -Inf),
+    su::S = (similar(s0) .=  Inf),
+    ul::S = (similar(s0,nu) .= -Inf),
+    uu::S = (similar(s0,nu) .=  Inf)
+    ) where {T,S,M}
+
+    if size(Q,1) != size(Q,2) 
+        error("Q matrix is not square")
+    end
+    if size(R,1) != size(R,1)
+        error("R matrix is not square")
+    end
+    if size(A,2) != length(s0)
+        error("Number of columns of A are not equal to the number of states")
+    end
+    if size(B,2) != size(R,1)
+        error("Number of columns of B are not equal to the number of inputs")
+    end
+    if length(s0) != size(Q,1)
+        error("size of Q is not consistent with length of x0")
+    end
+
+    if !(sl  <= su)
+        error("lower bound(s) on x is > upper bound(s)")
+    end
+    if !(ul <= uu)
+        error("lower bound(s) on u is > upper bound(s)")
+    end
+    if !(s0 >= sl) || !(s0 <= su)
+        error("x0 is not within the given upper and lower bounds")
+    end
+
+    LQDynamicData(
+        s0, A, B, Q, R, N,
+
+        Qf, ns, nu,
+
+        sl, su, ul, uu 
+    )
+end
+
+
+
+abstract type AbstractDynamicModel{T,S} <: QuadraticModels.AbstractQuadraticModel{T, S} end
+
+mutable struct LQDynamicModel{T, S, M1, M2, M3} <:  AbstractDynamicModel{T,S} 
+  meta::NLPModels.NLPModelMeta{T, S}
+  counters::NLPModels.Counters
+  data::QuadraticModels.QPData{T, S, M1, M2}
+  dynamic_data::LQDynamicData{T,S,M3}
+  condense::Bool
+end
+
+function LQDynamicModel(dnlp::LQDynamicData{T,S,M}; condense = false) where {T,S,M}
+    s0 = dnlp.s0
+    A  = dnlp.A
+    B  = dnlp.B
+    Q  = dnlp.Q
+    R  = dnlp.R
+    N  = dnlp.N
+
+    Qf = dnlp.Qf
+    ns = dnlp.ns
+    nu = dnlp.nu
+
+    sl = dnlp.sl
+    su = dnlp.su
+    ul = dnlp.ul
+    uu = dnlp.uu
+
+    H = _build_H(Q, R, N; Qf)
+    J = _build_J(A, B, N)
+
+    c0 = 0
+
+
+    nvar = (ns*N + nu*N)
+    nnzj = J.rowvals
+    nnzh = H.rowvals
+    ncon = size(J,1)
+
+    c  = zeros(nvar)
+
+    lvar = copy(s0)
+    uvar = copy(s0)
+    con  = zeros(ncon)
+
+    for i in 1:ns
+        lvar = vcat(lvar, sl)
+        uvar = vcat(uvar, su)
+    end
+
+    for j in 1:nu
+        lvar = vcat(lvar, ul)
+        uvar = vcat(uvar, uu)
+    end
+    
+    LQDynamicModel(
+        NLPModels.NLPModelMeta(
+        nvar,
+        lvar = lvar,
+        uvar = uvar, 
+        ncon = ncon,
+        lcon = ncon,
+        ucon = ncon,
+        nnzj = nnzj,
+        nnzh = nnzh,
+        lin = 1:ncon,
+        islp = (ncon == 0);
+        kwargs...,
+        ),
+        NLPModels.Counters(),
+        QuadraticModels.QPData(
+        c0, 
+        c,
+        H,
+        J
+        ),
+        dnlp,
+        condense
     )
 
 end
 
-function QPData(dnlp::LQDynData{VT,MT}) where {VT,MT}
-    
-end
+
 
 """ 
     _build_H(Q, R, N; Qf = []) -> H
@@ -223,3 +348,38 @@ function get_QM(
 end
 
 end # module
+
+
+#=
+mutable struct LQDynData{VT,MT}
+    N::Int
+    nx::Int
+    nu::Int
+    
+    A::MT
+    B::MT
+    Q::MT
+    R::MT
+    Qf::MT
+    
+    x0::VT
+    xl::VT
+    xu::VT
+    ul::VT
+    uu::VT
+end
+
+function LQDynData(
+    N, x0, A, B, Q, R;
+    Qf = Q,
+    xl = (similar(x0) .= -Inf),
+    xu = (similar(x0) .=  Inf),
+    ul = (similar(x0,nu) .= -Inf),
+    uu = (similar(x0,nu) .=  Inf)
+    )
+
+end
+
+function QPData(dnlp::LQDynData{VT,MT}) where {VT,MT}
+    
+end=#
