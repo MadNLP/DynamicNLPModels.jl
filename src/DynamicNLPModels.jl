@@ -14,6 +14,33 @@ abstract type AbstractDynamicData{T,S} end
 
 """
     LQDynamicData{T,S,M} <: AbstractDynamicData{T,S}
+
+A type to represent the features of the optimization problem 
+
+    minimize    sum(si^T Q si for i in 1:(N-1)) + sum(ui^T R ui for i in 1:(N-1)) + sN^T Qf s_N
+    subject to  s{i+1} = A s{i} + B u{i}  for i in 1:(N-1)
+                sl <= s <= su
+                ul <= u <= uu
+                s{1} = s0
+
+--- 
+
+Attributes include:
+- `s0`: initial state of system
+- `A` : constraint matrix for system states
+- `B` : constraint matrix for system inputs
+- `Q` : objective function matrix for system states from 1:(N-1)
+- `R` : objective function matrix for system inputs from 1:(N-1)
+- `N` : number of time steps
+- `ns`: number of state variables
+- `nu`: number of input varaibles
+- `Qf`: objective function matrix for system state at time N; defaults to Q
+- `sl`: vector of lower bounds on state variables
+- `su`: vector of upper bounds on state variables
+- `ul`: vector of lower bounds on input variables
+- `uu`: vector of upper bounds on input variables
+
+see also `LQDynamicData(s0, A, B< Q, R, N; ...)`
 """
 struct LQDynamicData{T,S,M} <: AbstractDynamicData{T,S}
     s0::S
@@ -34,7 +61,35 @@ struct LQDynamicData{T,S,M} <: AbstractDynamicData{T,S}
 end
 
 """
-    LQDynamicData(s0, A, B, Q, R, N) -> LQDynamicData{T, S, M}
+    LQDynamicData(s0, A, B, Q, R, N;...) -> LQDynamicData{T, S, M}
+
+A constructor for building an object of type `LQDynamicData` for the optimization problem 
+
+    minimize    sum(si^T Q si for i in 1:(N-1)) + sum(ui^T R ui for i in 1:(N-1)) + sN^T Qf s_N
+    subject to  s{i+1} = A s{i} + B u{i}  for i in 1:(N-1)
+                sl <= s <= su
+                ul <= u <= uu
+                s{1} = s0
+
+---
+
+- `s0`: initial state of system
+- `A` : constraint matrix for system states
+- `B` : constraint matrix for system inputs
+- `Q` : objective function matrix for system states from 1:(N-1)
+- `R` : objective function matrix for system inputs from 1:(N-1)
+- `N` : number of time steps
+
+The following attributes of the LQDynamicData type are detected automatically from the length of s0 and size of R
+- `ns`: number of state variables
+- `nu`: number of input varaibles
+
+The following keyward arguments are also accepted
+- `Qf`: objective function matrix for system state at time N; defaults to Q
+- `sl = fill(-Inf, ns)`: vector of lower bounds on state variables
+- `su = fill(Inf, ns)` : vector of upper bounds on state variables
+- `ul = fill(-Inf, nu)`: vector of lower bounds on input variables
+- `uu = fill(Inf, nu)` : vector of upper bounds on input variables
 """
 function LQDynamicData(
     s0::S,
@@ -45,13 +100,10 @@ function LQDynamicData(
     N::Int;
 
     Qf::M = Q, 
-    ns::Int = size(Q,1),
-    nu::Int = size(R,1),
-
     sl::S = (similar(s0) .= -Inf),
     su::S = (similar(s0) .=  Inf),
-    ul::S = (similar(s0,nu) .= -Inf),
-    uu::S = (similar(s0,nu) .=  Inf)
+    ul::S = (similar(s0,size(R,1)) .= -Inf),
+    uu::S = (similar(s0,size(R,1)) .=  Inf)
     ) where {T,S <: AbstractVector{T},M <: AbstractMatrix{T}}
 
     if size(Q,1) != size(Q,2) 
@@ -80,6 +132,10 @@ function LQDynamicData(
         error("x0 is not within the given upper and lower bounds")
     end
 
+    ns= size(Q,1)
+    nu= size(R,1)
+
+
     LQDynamicData{T,S,M}(
         s0, A, B, Q, R, N,
 
@@ -88,7 +144,25 @@ function LQDynamicData(
         sl, su, ul, uu 
     )
 end
+"""
+    LQDynamicData(ns::Int, nu::Int, N::Int) -> LQDynamicData{T, S, M}
 
+A constructor for building an object of type `LQDynamicData` for the optimization problem 
+
+    minimize    sum(si^T Q si for i in 1:(N-1)) + sum(ui^T R ui for i in 1:(N-1)) + sN^T Qf s_N
+    subject to  s{i+1} = A s{i} + B u{i}  for i in 1:(N-1)
+                sl <= s <= su
+                ul <= u <= uu
+                s{1} = s0
+
+                ---
+Initializes empty `Q`, `R`, `A`, and `B` (sparse) arrays and empty `s0`, `sl`, `su`, `ul`, and `uu` vectors
+
+Inputs:
+-`ns`: number of states
+-`nu`: number of inputs
+-`N` : number of time points
+"""
 function LQDynamicData(ns::Int, 
     nu::Int, 
     N::Int

@@ -31,3 +31,13 @@ dnlp = LQDynamicData(s0, A, B, Q, R, N;)
 LQDynamicModel(dnlp; condense=false)
 
 
+dnlpe = LQDynamicData(ns, nu, N)
+
+get_s0(dnlpe)
+get_sl(dnlpe)
+get_su(dnlpe)
+
+
+set_Q!(dnlpe, 1,1,3.0)
+
+dnlpe.Q
