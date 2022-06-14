@@ -562,55 +562,6 @@ function _build_H(
 end
 
 
-function _build_H_condensed(
-  Q, R, A, B, N;
-  Qf = Q)
-
-  ns = size(Q,1)
-  nu = size(R,1)
-
-  B = zeros(ns*(N+1), nu*(N-1))
-  A = zeros(ns*(N+1), nu*(N-1))
-  Q = SparseArrays.sparse([],[], Float64[], ns*(N+1), ns*(N+1))
-  R = SparseArrays.sparse([],[], Float64[], nu*(N-1), nu*(N-1))
-
-  
-
-  H = SparseArrays.sparse([],[],Float64[],(ns*N + nr*(N-1)), (ns*N + nr*(N-1)))
-
-  for i in 1:(N-1)
-      for j in 1:ns
-          for k in 1:ns
-              row_index = (i-1)*ns + k
-              col_index = (i-1)*ns + j
-              H[row_index, col_index] = Q[k,j]
-
-          end
-      end
-  end
-
-  for j in 1:ns
-      for k in 1:ns
-          row_index = (N-1)*ns + k
-          col_index = (N-1)*ns + j
-          H[row_index, col_index] = Qf[k,j]
-      end
-  end
-
-
-  for i in 1:(N-1)
-      for j in 1:nr
-          for k in 1:nr
-              row_index = ns*N + (i-1) * nr + k
-              col_index = ns*N + (i-1) * nr + j
-              H[row_index, col_index] = R[k,j]
-          end
-      end
-  end
-
-  return H
-end
-
 """
     _build_J(A, B, N) -> J
 
