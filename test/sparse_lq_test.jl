@@ -44,7 +44,7 @@ function build_QP_JuMP_model(
 
 
         @variable(model, s[NS, NN]) # define states 
-        @variable(model, u[NU, NN]) # define inputs
+        @variable(model, u[NU, 1:(N-1)]) # define inputs
 
 
 
@@ -65,14 +65,14 @@ function build_QP_JuMP_model(
     end
     if length(ul) > 0
         for i in NU
-            for j in NN
+            for j in 1:(N-1)
                 @constraint(model,  u[i,j] >= ul[i])
             end
         end
     end
     if length(uu) > 0
         for i in NU
-            for j in NN
+            for j in 1:(N-1)
                 @constraint(model, u[i,j] <= uu[i])
             end
         end
