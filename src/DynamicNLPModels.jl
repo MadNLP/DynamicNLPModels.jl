@@ -197,7 +197,7 @@ function LQDynamicModel(dnlp::LQDynamicData{T,S,M}; condense = false) where {T,S
 
     c0 = 0.0
 
-    nvar = (ns*N + nu*N)
+    nvar = (ns*N + nu*(N-1))
     nnzj = length(J.rowval)
     nnzh = length(H.rowval)
     ncon = size(J,1)
@@ -213,7 +213,7 @@ function LQDynamicModel(dnlp::LQDynamicData{T,S,M}; condense = false) where {T,S
         uvar = vcat(uvar, su)
     end
 
-    for j in 1:N
+    for j in 1:(N-1)
         lvar = vcat(lvar, ul)
         uvar = vcat(uvar, uu)
     end
@@ -271,7 +271,7 @@ function LQDynamicModel(
 
     c0 = 0.0
 
-    nvar = (ns*N + nu*N)
+    nvar = (ns*N + nu*(N-1))
     nnzj = length(J.rowval)
     nnzh = length(H.rowval)
     ncon = size(J,1)
@@ -287,7 +287,7 @@ function LQDynamicModel(
         uvar = vcat(uvar, su)
     end
 
-    for j in 1:N
+    for j in 1:(N-1)
         lvar = vcat(lvar, ul)
         uvar = vcat(uvar, uu)
     end
@@ -526,7 +526,7 @@ function _build_H(
     ns = size(Q,1)
     nr = size(R,1)
 
-    H = SparseArrays.sparse([],[],Float64[],(ns*N + nr*(N)), (ns*N + nr*(N)))
+    H = SparseArrays.sparse([],[],Float64[],(ns*N + nr*(N-1)), (ns*N + nr*(N-1)))
 
     for i in 1:(N-1)
         for j in 1:ns
@@ -583,7 +583,7 @@ function _build_J(A,B, N)
     nr = size(B,2)
 
 
-    J = SparseArrays.sparse([],[],Float64[],(ns*(N-1)), (ns*N + nr*N))    
+    J = SparseArrays.sparse([],[],Float64[],(ns*(N-1)), (ns*N + nr*(N-1)))    
 
     for i in 1:(N-1)
         for j in 1:ns
