@@ -4,41 +4,496 @@ import NLPModels
 import QuadraticModels
 import LinearAlgebra
 import SparseArrays
+import SparseArrays: SparseMatrixCSC
 
-export get_QM
+export get_QM, LQDynamicData, LQDynamicModel
 
-mutable struct LQDynData{VT,MT}
-    N::Int
-    nx::Int
+abstract type AbstractLQDynData{T,S} end
+"""
+    LQDynamicData{T,S,M} <: AbstractLQDynData{T,S}
+
+A struct to represent the features of the optimization problem 
+
+    minimize    1/2 sum(si^T Q si for i in 1:(N-1)) + 1/2 sum(ui^T R ui for i in 1:(N-1)) + 1/2 sN^T Qf s_N
+    subject to  s{i+1} = A s{i} + B u{i}  for i in 1:(N-1)
+                sl <= s <= su
+                ul <= u <= uu
+                s{1} = s0
+
+--- 
+
+Attributes include:
+- `s0`: initial state of system
+- `A` : constraint matrix for system states
+- `B` : constraint matrix for system inputs
+- `Q` : objective function matrix for system states from 1:(N-1)
+- `R` : objective function matrix for system inputs from 1:(N-1)
+- `N` : number of time steps
+- `ns`: number of state variables
+- `nu`: number of input varaibles
+- `Qf`: objective function matrix for system state at time N; defaults to Q
+- `sl`: vector of lower bounds on state variables
+- `su`: vector of upper bounds on state variables
+- `ul`: vector of lower bounds on input variables
+- `uu`: vector of upper bounds on input variables
+
+see also `LQDynamicData(s0, A, B, Q, R, N; ...)`
+"""
+struct LQDynamicData{T,S,M} <: AbstractLQDynData{T,S}
+    s0::S
+    A::M
+    B::M
+    Q::M
+    R::M
+    N
+
+    Qf::M
+    ns::Int
     nu::Int
-    
-    A::MT
-    B::MT
-    Q::MT
-    R::MT
-    Qf::MT
-    
-    x0::VT
-    xl::VT
-    xu::VT
-    ul::VT
-    uu::VT
+
+    sl::S
+    su::S
+    ul::S
+    uu::S
 end
 
-function LQDynData(
-    N, x0, A, B, Q, R;
-    Qf = Q,
-    xl = (similar(x0) .= -Inf),
-    xu = (similar(x0) .=  Inf),
-    ul = (similar(x0,nu) .= -Inf),
-    uu = (similar(x0,nu) .=  Inf)
+"""
+    LQDynamicData(s0, A, B, Q, R, N;...) -> LQDynamicData{T, S, M}
+
+A constructor for building an object of type `LQDynamicData` for the optimization problem 
+
+    minimize    1/2 sum(si^T Q si for i in 1:(N-1)) + 1/2 sum(ui^T R ui for i in 1:(N-1)) + 1/2 sN^T Qf s_N
+    subject to  s{i+1} = A s{i} + B u{i}  for i in 1:(N-1)
+                sl <= s <= su
+                ul <= u <= uu
+                s{1} = s0
+
+---
+
+- `s0`: initial state of system
+- `A` : constraint matrix for system states
+- `B` : constraint matrix for system inputs
+- `Q` : objective function matrix for system states from 1:(N-1)
+- `R` : objective function matrix for system inputs from 1:(N-1)
+- `N` : number of time steps
+
+The following attributes of the `LQDynamicData` type are detected automatically from the length of s0 and size of R
+- `ns`: number of state variables
+- `nu`: number of input varaibles
+
+The following keyward arguments are also accepted
+- `Qf`: objective function matrix for system state at time N; defaults to Q
+- `sl = fill(-Inf, ns)`: vector of lower bounds on state variables
+- `su = fill(Inf, ns)` : vector of upper bounds on state variables
+- `ul = fill(-Inf, nu)`: vector of lower bounds on input variables
+- `uu = fill(Inf, nu)` : vector of upper bounds on input variables
+"""
+function LQDynamicData(
+    s0::S,
+    A::M,
+    B::M,
+    Q::M,
+    R::M,
+    N;
+
+    Qf::M = Q, 
+    sl::S = (similar(s0) .= -Inf),
+    su::S = (similar(s0) .=  Inf),
+    ul::S = (similar(s0,size(R,1)) .= -Inf),
+    uu::S = (similar(s0,size(R,1)) .=  Inf)
+    ) where {T,S <: AbstractVector{T},M <: AbstractMatrix{T}}
+
+    if size(Q,1) != size(Q,2) 
+        error("Q matrix is not square")
+    end
+    if size(R,1) != size(R,1)
+        error("R matrix is not square")
+    end
+    if size(A,2) != length(s0)
+        error("Number of columns of A are not equal to the number of states")
+    end
+    if size(B,2) != size(R,1)
+        error("Number of columns of B are not equal to the number of inputs")
+    end
+    if length(s0) != size(Q,1)
+        error("size of Q is not consistent with length of x0")
+    end
+
+    if !(sl  <= su)
+        error("lower bound(s) on x is > upper bound(s)")
+    end
+    if !(ul <= uu)
+        error("lower bound(s) on u is > upper bound(s)")
+    end
+    if !(s0 >= sl) || !(s0 <= su)
+        error("x0 is not within the given upper and lower bounds")
+    end
+
+    ns= size(Q,1)
+    nu= size(R,1)
+
+    LQDynamicData{T,S,M}(
+        s0, A, B, Q, R, N,
+        Qf, ns, nu,
+        sl, su, ul, uu 
+    )
+end
+
+
+
+abstract type AbstractDynamicModel{T,S} <: QuadraticModels.AbstractQuadraticModel{T, S} end
+
+mutable struct LQDynamicModel{T, S, M1, M2, M3} <:  AbstractDynamicModel{T,S} 
+  meta::NLPModels.NLPModelMeta{T, S}
+  counters::NLPModels.Counters
+  data::QuadraticModels.QPData{T, S, M1, M2}
+  dynamic_data::LQDynamicData{T,S,M3}
+  condense::Bool
+end
+
+"""
+    LQDynamicModel(dnlp::LQDynamicData; condense=false)      -> LQdynamicModel
+    LQDynamicModel(s0, A, B, Q, R, N; condense = false, ...) -> LQDynamicModel
+
+A constructor for building a `LQDynamicModel <: QuadraticModels.AbstractQuadraticModel` from `LQDynamicData`
+
+Data is converted from the form 
+
+minimize    1/2 sum(si^T Q si for i in 1:(N-1)) + 1/2 sum(ui^T R ui for i in 1:(N-1)) + 1/2 sN^T Qf s_N
+subject to  s{i+1} = A s{i} + B u{i}  for i in 1:(N-1)
+            sl <= s <= su
+            ul <= u <= uu
+            s{1} = s0
+
+to the form 
+
+    minimize    1/2 z^T H z 
+    subject to  0 <= Jz <= 0
+                lvar <= z <= uvar
+
+Resulting H and J matrices are stored as `QuadraticModels.QPData` within the `LQDynamicModel` struct and 
+variable and constraint limits are stored within `NLPModels.NLPModelMeta`
+
+"""
+function LQDynamicModel(dnlp::LQDynamicData{T,S,M}; condense = false) where {T,S <: AbstractVector{T} ,M  <: AbstractMatrix{T}}
+    s0 = dnlp.s0
+    A  = dnlp.A
+    B  = dnlp.B
+    Q  = dnlp.Q
+    R  = dnlp.R
+    N  = dnlp.N
+
+    Qf = dnlp.Qf
+    ns = dnlp.ns
+    nu = dnlp.nu
+
+    sl = dnlp.sl
+    su = dnlp.su
+    ul = dnlp.ul
+    uu = dnlp.uu
+
+    H = _build_H(Q, R, N; Qf=Qf)
+    J = _build_J(A, B, N)
+
+    c0 = 0.0
+
+    nvar = (ns*N + nu*N)
+    nnzj = length(J.rowval)
+    nnzh = length(H.rowval)
+    ncon = size(J,1)
+
+    c  = zeros(nvar)
+
+    lvar = copy(s0)
+    uvar = copy(s0)
+    con  = zeros(ncon)
+
+    for i in 1:(N-1)
+        lvar = vcat(lvar, sl)
+        uvar = vcat(uvar, su)
+    end
+
+    for j in 1:N
+        lvar = vcat(lvar, ul)
+        uvar = vcat(uvar, uu)
+    end
+
+
+    LQDynamicModel(
+        NLPModels.NLPModelMeta(
+        nvar,
+        lvar = lvar,
+        uvar = uvar, 
+        ncon = ncon,
+        lcon = con,
+        ucon = con,
+        nnzj = nnzj,
+        nnzh = nnzh,
+        lin = 1:ncon,
+        islp = (ncon == 0);
+        ),
+        NLPModels.Counters(),
+        QuadraticModels.QPData(
+        c0, 
+        c,
+        H,
+        J
+        ),
+        dnlp,
+        condense
     )
 
 end
 
-function QPData(dnlp::LQDynData{VT,MT}) where {VT,MT}
+
+function LQDynamicModel(
+    s0::S,
+    A::M,
+    B::M,
+    Q::M,
+    R::M,
+    N;
+    Qf::M = Q, 
+    sl::S = (similar(s0) .= -Inf),
+    su::S = (similar(s0) .=  Inf),
+    ul::S = (similar(s0,size(R,1)) .= -Inf),
+    uu::S = (similar(s0,size(R,1)) .=  Inf),
+    condense=false
+    ) where {T,S <: AbstractVector{T},M <: AbstractMatrix{T}}
+
+    dnlp = LQDynamicData(s0, A, B, Q, R, N; Qf = Qf, sl = sl, su = su, ul = ul, uu = uu)
     
+    ns = size(Q,1)
+    nu = size(R,1)
+
+    H = _build_H(Q, R, N; Qf=Qf)
+    J = _build_J(A, B, N)
+
+    c0 = 0.0
+
+    nvar = (ns*N + nu*N)
+    nnzj = length(J.rowval)
+    nnzh = length(H.rowval)
+    ncon = size(J,1)
+
+    c  = zeros(nvar)
+
+    lvar = copy(s0)
+    uvar = copy(s0)
+    con  = zeros(ncon)
+
+    for i in 1:(N-1)
+        lvar = vcat(lvar, sl)
+        uvar = vcat(uvar, su)
+    end
+
+    for j in 1:N
+        lvar = vcat(lvar, ul)
+        uvar = vcat(uvar, uu)
+    end
+
+
+    LQDynamicModel(
+        NLPModels.NLPModelMeta(
+        nvar,
+        lvar = lvar,
+        uvar = uvar, 
+        ncon = ncon,
+        lcon = con,
+        ucon = con,
+        nnzj = nnzj,
+        nnzh = nnzh,
+        lin = 1:ncon,
+        islp = (ncon == 0);
+        ),
+        NLPModels.Counters(),
+        QuadraticModels.QPData(
+        c0, 
+        c,
+        H,
+        J
+        ),
+        dnlp,
+        condense
+    )
 end
+
+
+
+for field in fieldnames(LQDynamicData)
+    method = Symbol("get_", field)
+    @eval begin
+        @doc """
+            $($method)(LQDynamicData)
+            $($method)(LQDynamicModel)
+        Return the value $($(QuoteNode(field))) from LQDynamicData or LQDynamicModel.dynamic_data
+        """
+        $method(dyn_data::LQDynamicData) = getproperty(dyn_data, $(QuoteNode(field)))
+    end
+    @eval $method(dyn_model::LQDynamicModel) = $method(dyn_model.dynamic_data)
+    @eval export $method
+end
+
+for field in [:A, :B, :Q, :R, :Qf]
+    method = Symbol("set_", field, "!")
+    @eval begin
+        @doc """
+            $($method)(LQDynamicData, row, col, val)
+            $($method)(LQDynamicModel, row, col, val)
+        Set the value of entry $($(QuoteNode(field)))[row, col] to val for LQDynamicData or LQDynamicModel.dynamic_data 
+        """
+        $method(dyn_data::LQDynamicData, row, col, val) = (dyn_data.$field[row, col] = val)
+    end
+    @eval $method(dyn_model::LQDynamicModel, row, col, val) = (dyn_model.dynamic_data.$field[row,col]=val)
+    @eval export $method
+end
+
+for field in [:s0, :sl, :su, :ul, :uu]
+    method = Symbol("set_", field, "!")
+    @eval begin
+        @doc """
+            $($method)(LQDynamicData, index, val)
+            $($method)(LQDynamicModel, index, val)
+        Set the value of entry $($(QuoteNode(field)))[index] to val for LQDynamicData or LQDynamicModel.dynamic_data 
+        """
+        $method(dyn_data::LQDynamicData, index, val) = (dyn_data.$field[index] = val)
+    end
+    @eval $method(dyn_model::LQDynamicModel, index, val) = (dyn_model.dynamic_data.$field[index]=val)
+    @eval export $method
+end
+
+
+  
+function fill_structure!(S::SparseMatrixCSC, rows, cols)
+  count = 1
+  @inbounds for col = 1:size(S, 2), k = S.colptr[col]:(S.colptr[col + 1] - 1)
+    rows[count] = S.rowval[k]
+    cols[count] = col
+    count += 1
+  end
+end
+
+function fill_coord!(S::SparseMatrixCSC, vals, obj_weight)
+  count = 1
+  @inbounds for col = 1:size(S, 2), k = S.colptr[col]:(S.colptr[col + 1] - 1)
+    vals[count] = obj_weight * S.nzval[k]
+    count += 1
+  end
+end
+
+function NLPModels.hess_structure!(
+  qp::LQDynamicModel{T, S, M1, M2, M3},
+  rows::AbstractVector{<:Integer},
+  cols::AbstractVector{<:Integer},
+) where {T, S, M1 <: SparseMatrixCSC, M2 <: SparseMatrixCSC, M3<: AbstractMatrix}
+  fill_structure!(qp.data.H, rows, cols)
+  return rows, cols
+end
+
+function NLPModels.hess_structure!(
+  qp::LQDynamicModel{T, S, M1, M2, M3},
+  rows::AbstractVector{<:Integer},
+  cols::AbstractVector{<:Integer},
+) where {T, S, M1 <: Matrix, M2<: Matrix, M3<: Matrix}
+  count = 1
+  for j = 1:(qp.meta.nvar)
+    for i = j:(qp.meta.nvar)
+      rows[count] = i
+      cols[count] = j
+      count += 1
+    end
+  end
+  return rows, cols
+end
+
+
+function NLPModels.hess_coord!(
+  qp::LQDynamicModel{T, S, M1, M2, M3},
+  x::AbstractVector{T},
+  vals::AbstractVector{T};
+  obj_weight::Real = one(eltype(x)),
+) where {T, S, M1 <: SparseMatrixCSC, M2 <: SparseMatrixCSC, M3 <: Matrix}
+  NLPModels.increment!(qp, :neval_hess)
+  fill_coord!(qp.data.H, vals, obj_weight)
+  return vals
+end
+
+function NLPModels.hess_coord!(
+  qp::LQDynamicModel{T, S, M1, M2, M3},
+  x::AbstractVector{T},
+  vals::AbstractVector{T};
+  obj_weight::Real = one(eltype(x)),
+) where {T, S, M1 <: Matrix, M2 <: Matrix, M3 <: Matrix}
+  NLPModels.increment!(qp, :neval_hess)
+  count = 1
+  for j = 1:(qp.meta.nvar)
+    for i = j:(qp.meta.nvar)
+      vals[count] = obj_weight * qp.data.H[i, j]
+      count += 1
+    end
+  end
+  return vals
+end
+
+NLPModels.hess_coord!(
+  qp::LQDynamicModel,
+  x::AbstractVector,
+  y::AbstractVector,
+  vals::AbstractVector;
+  obj_weight::Real = one(eltype(x)),
+) = NLPModels.hess_coord!(qp, x, vals, obj_weight = obj_weight)
+
+function NLPModels.jac_structure!(
+  qp::LQDynamicModel{T, S, M1, M2, M3},
+  rows::AbstractVector{<:Integer},
+  cols::AbstractVector{<:Integer},
+) where {T, S, M1 <: SparseMatrixCSC, M2 <: SparseMatrixCSC, M3<: AbstractMatrix}
+  fill_structure!(qp.data.A, rows, cols)
+  return rows, cols
+end
+
+function NLPModels.jac_structure!(
+  qp::LQDynamicModel{T, S, M1, M2, M3},
+  rows::AbstractVector{<:Integer},
+  cols::AbstractVector{<:Integer},
+) where {T, S, M1<: Matrix, M2 <: Matrix, M3 <: Matrix}
+  count = 1
+  for j = 1:(qp.meta.nvar)
+    for i = 1:(qp.meta.ncon)
+      rows[count] = i
+      cols[count] = j
+      count += 1
+    end
+  end
+  return rows, cols
+end
+
+function NLPModels.jac_coord!(
+  qp::LQDynamicModel{T, S, M1, M2, M3},
+  x::AbstractVector,
+  vals::AbstractVector,
+) where {T, S, M1 <: SparseMatrixCSC, M2 <: SparseMatrixCSC, M3 <: AbstractMatrix}
+  NLPModels.increment!(qp, :neval_jac)
+  fill_coord!(qp.data.A, vals, one(T))
+  return vals
+end
+
+function NLPModels.jac_coord!(
+  qp::LQDynamicModel{T, S, M1, M2, M3},
+  x::AbstractVector,
+  vals::AbstractVector,
+) where {T, S, M1 <: Matrix, M2 <: Matrix, M3 <: Matrix}
+  NLPModels.increment!(qp, :neval_jac)
+  count = 1
+  for j = 1:(qp.meta.nvar)
+    for i = 1:(qp.meta.ncon)
+      vals[count] = qp.data.A[i, j]
+      count += 1
+    end
+  end
+  return vals
+end
+
 
 """ 
     _build_H(Q, R, N; Qf = []) -> H
@@ -149,77 +604,6 @@ function _build_J(A,B, N)
     return J
 end
 
+end # module
 
  
-"""
-    get_QM(Q,R,A,B,N; ...) -> QuadraticModels.QuadraticModel(...)
-
-Returns a `QuadraticModel` from the matrices `Q`, `R`, `A`, and `B` with linear constraints over `N` time steps. 
-
-QuadraticModel has the form of  
-
-min 1/2 z^T H z 
-s.t. 0 <= Jx <= 0
-
-which is equivalent to the problem of 
-
-min 1/2 ( sum_{i=1}^{N-1} s_i^T Q s + sum_{i=1}^{N-1} u^T R u + s_N^T Qf s_n  )
-s.t. s_{i+1} = As_i + Bs_i for i = 1,..., N-1
-
-# Optional Arguments
-- `Qf = []`: matrix multiplied by s_N in objective function (defaults to Q if not given)
-- `c = zeros(N*size(Q,1) + N*size(R,1)`:  linear term added to objective funciton, c^T z
-- `sl = fill(-Inf, size(Q,1))`: lower bound on state variables
-- `su = fill(Inf,  size(Q,1))`: upper bound on state variables
-- `ul = fill(-Inf, size(Q,1))`: lower bound on input variables
-- `uu = fill(Inf,  size(Q,1))`: upper bound on input variables
-- `s0 = []`: initial state of the first state variables
-
-"""
-function get_QM(
-    Q, R, A, B, N;
-    c    = zeros(N*size(Q,1) + N*size(R,1)),
-    sl   = fill(-Inf, size(Q,1)),
-    su   = fill(Inf,  size(Q,1)),
-    ul   = fill(-Inf, size(R,1)),
-    uu   = fill(Inf,  size(R,1)),
-    s0   = [],
-    Qf   = [])
-
-    if length(s0) >0 && size(Q,1) != length(s0)
-        error("s0 is not equal to the number of states given in Q")
-    end
-
-
-
-    H = _build_H(Q,R, N; Qf=Qf)
-    J = _build_J(A,B, N)
-
-    con = zeros(size(J,1))
-
-
-    if length(s0) != 0
-        lvar = copy(s0)
-        uvar = copy(s0)
-    else
-        lvar = copy(sl)
-        uvar = copy(su)
-    end
-
-    for i in 1:(N-1)
-        lvar = vcat(lvar, sl)
-        uvar = vcat(uvar, su)
-    end
-
-    for i in 1:(N)
-        lvar = vcat(lvar, ul)
-        uvar = vcat(uvar, uu)
-    end
-
-    qp = QuadraticModels.QuadraticModel(c, H; A = J, lcon = con, ucon = con, lvar = lvar, uvar = uvar)
-    
-    return qp
-
-end
-
-end # module
