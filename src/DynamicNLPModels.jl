@@ -152,7 +152,8 @@ mutable struct LQDynamicModel{T, S, M1, M2, M3} <:  AbstractDynamicModel{T,S}
 end
 
 """
-    LQDynamicModel(dnlp::LQDynamicData; condense=false) -> LQdynamicModel
+    LQDynamicModel(dnlp::LQDynamicData; condense=false)      -> LQdynamicModel
+    LQDynamicModel(s0, A, B, Q, R, N; condense = false, ...) -> LQDynamicModel
 
 A constructor for building a `LQDynamicModel <: QuadraticModels.AbstractQuadraticModel` from `LQDynamicData`
 
@@ -492,12 +493,6 @@ function NLPModels.jac_coord!(
   end
   return vals
 end
-
-
-
-
-
-
 
 
 """ 
