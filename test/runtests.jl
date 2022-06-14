@@ -41,8 +41,6 @@ lqplb  = LQDynamicModel(dnlplb)
 lqpub  = LQDynamicModel(dnlpub)
 lqpulb = LQDynamicModel(dnlpulb)
 
-ldmnb = LQDynamicModel()
-
 # Solve JuMP model with Ipopt
 optimize!(mnb)
 optimize!(mlb)
