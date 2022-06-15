@@ -1,3 +1,4 @@
+using Revise
 using Test, DynamicNLPModels, MadNLP, NLPModelsIpopt, Random, JuMP, Ipopt, LinearAlgebra
 include("sparse_lq_test.jl")
 
@@ -17,11 +18,11 @@ A = A_rand * transpose(A_rand) + I
 B = rand(ns, nu)
 
 # generate upper and lower bounds
-sl = rand(ns)
-ul = rand(nu)
-su = sl .+ 10
-uu = ul .+ 10
-s0 = sl .+ 1
+sl = zeros(ns)
+ul = ones(nu)*-10
+su = sl .+ 20
+uu = ul .+ 20
+s0 = sl .+ 5
 
 
 # build JuMP models

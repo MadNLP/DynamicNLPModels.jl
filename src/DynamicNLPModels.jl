@@ -197,7 +197,7 @@ function LQDynamicModel(dnlp::LQDynamicData{T,S,M}; condense = false) where {T,S
 
     c0 = 0.0
 
-    nvar = (ns*N + nu*(N-1))
+    nvar = (ns*(N+1) + nu*(N))
     nnzj = length(J.rowval)
     nnzh = length(H.rowval)
     ncon = size(J,1)
@@ -208,12 +208,12 @@ function LQDynamicModel(dnlp::LQDynamicData{T,S,M}; condense = false) where {T,S
     uvar = copy(s0)
     con  = zeros(ncon)
 
-    for i in 1:(N-1)
+    for i in 1:(N)
         lvar = vcat(lvar, sl)
         uvar = vcat(uvar, su)
     end
 
-    for j in 1:(N-1)
+    for j in 1:(N)
         lvar = vcat(lvar, ul)
         uvar = vcat(uvar, uu)
     end
@@ -271,7 +271,7 @@ function LQDynamicModel(
 
     c0 = 0.0
 
-    nvar = (ns*N + nu*(N-1))
+    nvar = (ns*(N+1) + nu*(N))
     nnzj = length(J.rowval)
     nnzh = length(H.rowval)
     ncon = size(J,1)
@@ -282,12 +282,12 @@ function LQDynamicModel(
     uvar = copy(s0)
     con  = zeros(ncon)
 
-    for i in 1:(N-1)
+    for i in 1:(N)
         lvar = vcat(lvar, sl)
         uvar = vcat(uvar, su)
     end
 
-    for j in 1:(N-1)
+    for j in 1:(N)
         lvar = vcat(lvar, ul)
         uvar = vcat(uvar, uu)
     end
@@ -526,9 +526,9 @@ function _build_H(
     ns = size(Q,1)
     nr = size(R,1)
 
-    H = SparseArrays.sparse([],[],Float64[],(ns*N + nr*(N-1)), (ns*N + nr*(N-1)))
+    H = SparseArrays.sparse([],[],Float64[],(ns*(N+1) + nr*(N)), (ns*(N+1) + nr*(N)))
 
-    for i in 1:(N-1)
+    for i in 1:(N)
         for j in 1:ns
             for k in 1:ns
                 row_index = (i-1)*ns + k
@@ -541,18 +541,18 @@ function _build_H(
 
     for j in 1:ns
         for k in 1:ns
-            row_index = (N-1)*ns + k
-            col_index = (N-1)*ns + j
+            row_index = (N)*ns + k
+            col_index = (N)*ns + j
             H[row_index, col_index] = Qf[k,j]
         end
     end
 
 
-    for i in 1:(N-1)
+    for i in 1:(N)
         for j in 1:nr
             for k in 1:nr
-                row_index = ns*N + (i-1) * nr + k
-                col_index = ns*N + (i-1) * nr + j
+                row_index = ns*(N+1) + (i-1) * nr + k
+                col_index = ns*(N+1) + (i-1) * nr + j
                 H[row_index, col_index] = R[k,j]
             end
         end
@@ -583,9 +583,9 @@ function _build_J(A,B, N)
     nr = size(B,2)
 
 
-    J = SparseArrays.sparse([],[],Float64[],(ns*(N-1)), (ns*N + nr*(N-1)))    
+    J = SparseArrays.sparse([],[],Float64[],(ns*(N)), (ns*(N+1) + nr*(N)))    
 
-    for i in 1:(N-1)
+    for i in 1:(N)
         for j in 1:ns
             row_index = (i-1)*ns + j
             J[row_index, (i*ns + j)] = -1
@@ -595,7 +595,7 @@ function _build_J(A,B, N)
             end
 
             for k in 1:nr
-                col_index = (N*ns) + (i-1)*nr + k
+                col_index = ((N+1)*ns) + (i-1)*nr + k
                 J[row_index, col_index] = B[j,k]    
             end
         end
