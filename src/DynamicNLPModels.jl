@@ -225,134 +225,13 @@ If `condense=true`, data is converted to the form
 Resulting `H`, `J`, `h`, and `h0` matrices are stored within `QuadraticModels.QPData` as `H`, `A`, `c`, and `c0` attributes respectively
 """
 function LQDynamicModel(dnlp::LQDynamicData{T,S,M}; condense = false) where {T,S <: AbstractVector{T} ,M  <: AbstractMatrix{T}}
-    s0 = dnlp.s0
-    A  = dnlp.A
-    B  = dnlp.B
-    Q  = dnlp.Q
-    R  = dnlp.R
-    N  = dnlp.N
 
-    Qf = dnlp.Qf
-    ns = dnlp.ns
-    nu = dnlp.nu
-    E  = dnlp.E
-    F  = dnlp.F
-
-    sl = dnlp.sl
-    su = dnlp.su
-    ul = dnlp.ul
-    uu = dnlp.uu
-    gl = dnlp.gl
-    gu = dnlp.gu
-
-
-    if condense == false
-        H  = _build_H(Q, R, N; Qf=Qf)
-        J  = _build_J(A, B, N)
-        EF = _build_EF(E, F, N)
-
-        c0 = 0.0
-
-        nvar = ns * (N + 1) + nu * N
-
-        c  = zeros(nvar)
-
-        lvar  = copy(s0)
-        uvar  = copy(s0)
-        ucon  = zeros(size(J, 1))
-        lcon  = zeros(size(J, 1))
-        J     = vcat(J, EF)
-        ncon  = size(J, 1)
-
-        nnzj = length(J.rowval)
-        nnzh = length(H.rowval)
-
-
-        for i in 1:N
-            lvar = vcat(lvar, sl)
-            uvar = vcat(uvar, su)
-            lcon = vcat(lcon, gl)
-        end
-
-        for j in 1:N
-            lvar = vcat(lvar, ul)
-            uvar = vcat(uvar, uu)
-            ucon = vcat(ucon, gu)
-        end
+    if condense==false
+        _build_sparse_lq_dynamic_model(dnlp)
     else
-        condensed_blocks = _build_condensed_blocks(s0, Q, R, A, B, N; Qf = Qf)
-
-        block_A = condensed_blocks.block_A
-        block_B = condensed_blocks.block_B
-        H       = condensed_blocks.H
-        c       = condensed_blocks.c
-        c0      = condensed_blocks.c0
-
-        lvar = copy(ul)
-        uvar = copy(uu)
-
-        for i in 1:(N-1)
-            lvar = vcat(lvar, ul)
-            uvar = vcat(uvar, uu)
-        end
-
-        d    = fill(Inf, ns * 2)
-
-        d[1:ns] .= .-sl
-        d[(ns+1):(2*ns)] .= su
-
-
-        E_bounds = zeros(ns * 2, ns)
-        F_bounds = zeros(ns * 2, nu)
-
-        for i in 1:ns
-            E_bounds[i,i] = -1.0
-            E_bounds[i + ns, i] = 1.0
-        end
-
-        E_bounds = vcat(E_bounds, E)
-        F_bounds = vcat(F_bounds, F)
-        d        = vcat(d, gu)
-
-        E = vcat(E_bounds, .-E)
-        F = vcat(F_bounds, .-F)
-        d = vcat(d, .-gl)
-        
-        J, ucon = _build_G(block_A, block_B, E, F, d, s0, N)
-
-        lcon = fill(-Inf, length(ucon))
-
-        nvar = nu * N
-        nnzj = size(J, 1) * size(J, 2)
-        nnzh = sum(LinearAlgebra.LowerTriangular(H) .!= 0)
-        ncon = size(J, 1)
-        
+        _build_condensed_lq_dynamic_model(dnlp)
     end
-
-
-    LQDynamicModel(
-        NLPModels.NLPModelMeta(
-        nvar,
-        lvar = lvar,
-        uvar = uvar, 
-        ncon = ncon,
-        lcon = lcon,
-        ucon = ucon,
-        nnzj = nnzj,
-        nnzh = nnzh,
-        lin = 1:ncon,
-        islp = (ncon == 0);
-        ),
-        NLPModels.Counters(),
-        QuadraticModels.QPData(
-        c0, 
-        c,
-        H,
-        J
-        ),
-        dnlp,
-        condense
-    )
+    
 
 end
 
@@ -382,6 +261,182 @@ function LQDynamicModel(
 
 end
 
+function _build_sparse_lq_dynamic_model(dnlp::LQDynamicData{T,S,M})
+    s0 = dnlp.s0
+    A  = dnlp.A
+    B  = dnlp.B
+    Q  = dnlp.Q
+    R  = dnlp.R
+    N  = dnlp.N
+
+    Qf = dnlp.Qf
+    ns = dnlp.ns
+    nu = dnlp.nu
+    E  = dnlp.E
+    F  = dnlp.F
+
+    sl = dnlp.sl
+    su = dnlp.su
+    ul = dnlp.ul
+    uu = dnlp.uu
+    gl = dnlp.gl
+    gu = dnlp.gu
+
+
+
+    H   = _build_H(Q, R, N; Qf=Qf)
+    J1  = _build_sparse_J1(A, B, N)
+    J2  = _build_sparse_J2(E, F, N)
+
+    c0 = 0.0
+
+    nvar = ns * (N + 1) + nu * N
+    c  = zeros(nvar)
+    
+    lvar  = copy(s0)
+    uvar  = copy(s0)
+
+    ucon  = zeros(size(J1, 1))
+    lcon  = zeros(size(J1, 1))
+    J     = vcat(J1, J2)
+
+    ncon  = size(J, 1)
+    nnzj = length(J.rowval)
+    nnzh = length(H.rowval)
+
+    for i in 1:N
+        lvar = vcat(lvar, sl)
+        uvar = vcat(uvar, su)
+        lcon = vcat(lcon, gl)
+    end
+
+    for j in 1:N
+        lvar = vcat(lvar, ul)
+        uvar = vcat(uvar, uu)
+        ucon = vcat(ucon, gu)
+    end
+
+    LQDynamicModel(
+        NLPModels.NLPModelMeta(
+        nvar,
+        lvar = lvar,
+        uvar = uvar, 
+        ncon = ncon,
+        lcon = lcon,
+        ucon = ucon,
+        nnzj = nnzj,
+        nnzh = nnzh,
+        lin = 1:ncon,
+        islp = (ncon == 0);
+        ),
+        NLPModels.Counters(),
+        QuadraticModels.QPData(
+        c0, 
+        c,
+        H,
+        J
+        ),
+        dnlp,
+        false
+    )
+
+end
+
+function _build_condensed_lq_dynamic_model(dnlp::LQDynamicData{T,S,M})
+    s0 = dnlp.s0
+    A  = dnlp.A
+    B  = dnlp.B
+    Q  = dnlp.Q
+    R  = dnlp.R
+    N  = dnlp.N
+
+    Qf = dnlp.Qf
+    ns = dnlp.ns
+    nu = dnlp.nu
+    E  = dnlp.E
+    F  = dnlp.F
+
+    sl = dnlp.sl
+    su = dnlp.su
+    ul = dnlp.ul
+    uu = dnlp.uu
+    gl = dnlp.gl
+    gu = dnlp.gu
+
+    
+    condensed_blocks = _build_condensed_blocks(s0, Q, R, A, B, N; Qf = Qf)
+
+    block_A = condensed_blocks.block_A
+    block_B = condensed_blocks.block_B
+    H       = condensed_blocks.H
+    c       = condensed_blocks.c
+    c0      = condensed_blocks.c0
+
+    lvar = copy(ul)
+    uvar = copy(uu)
+
+    for i in 1:(N-1)
+        lvar = vcat(lvar, ul)
+        uvar = vcat(uvar, uu)
+    end
+
+    d    = fill(Inf, ns * 2)
+
+    d[1:ns] .= .-sl
+    d[(ns+1):(2*ns)] .= su
+
+
+    E_bounds = zeros(ns * 2, ns)
+    F_bounds = zeros(ns * 2, nu)
+
+    for i in 1:ns
+        E_bounds[i,i] = -1.0
+        E_bounds[i + ns, i] = 1.0
+    end
+
+    E_bounds = vcat(E_bounds, E)
+    F_bounds = vcat(F_bounds, F)
+    d        = vcat(d, gu)
+
+    E = vcat(E_bounds, .-E)
+    F = vcat(F_bounds, .-F)
+    d = vcat(d, .-gl)
+        
+    J, ucon = _build_G(block_A, block_B, E, F, d, s0, N)
+
+    lcon = fill(-Inf, length(ucon))
+
+    nvar = nu * N
+    nnzj = size(J, 1) * size(J, 2)
+    nnzh = sum(LinearAlgebra.LowerTriangular(H) .!= 0)
+    ncon = size(J, 1)
+
+
+    LQDynamicModel(
+        NLPModels.NLPModelMeta(
+        nvar,
+        lvar = lvar,
+        uvar = uvar, 
+        ncon = ncon,
+        lcon = lcon,
+        ucon = ucon,
+        nnzj = nnzj,
+        nnzh = nnzh,
+        lin = 1:ncon,
+        islp = (ncon == 0);
+        ),
+        NLPModels.Counters(),
+        QuadraticModels.QPData(
+        c0, 
+        c,
+        H,
+        J
+        ),
+        dnlp,
+        true
+    )
+end
+
 
 function _build_condensed_blocks(
     s0, Q, R, A, B, N;
@@ -393,8 +448,8 @@ function _build_condensed_blocks(
     # Define block matrices
     block_B = zeros(ns * (N + 1), nu * N)
     block_A = zeros(ns * (N + 1), ns)
-    block_Q = SparseArrays.sparse([],[], Float64[], ns * (N + 1), ns * (N + 1))
-    block_R = SparseArrays.sparse([],[], Float64[], nu * N, nu * N)
+    block_Q = SparseArrays.sparse([],[], eltype(Q)[], ns * (N + 1), ns * (N + 1))
+    block_R = SparseArrays.sparse([],[], eltype(R)[], nu * N, nu * N)
   
     block_A[1:ns, 1:ns] .= Matrix(LinearAlgebra.I, ns, ns)
   
@@ -495,7 +550,8 @@ function _build_G(block_A, block_B, E, F, d,s0, N)
     As0  = zeros(size(block_A, 1), 1)
     EAs0 = zeros(size(block_E, 1), 1)
 
-    LinearAlgebra.axpy!(1, block_F, LinearAlgebra.mul!(G, block_E, block_B))
+    LinearAlgebra.mul!(G, block_E, block_B)
+    LinearAlgebra.axpy!(1, block_F, G)
     LinearAlgebra.mul!(As0, block_A, s0)
     LinearAlgebra.mul!(EAs0, block_E, As0)
     LinearAlgebra.axpy!(-1, EAs0, block_d)
@@ -709,7 +765,7 @@ function _build_H(
     ns = size(Q, 1)
     nu = size(R, 1)
 
-    H = SparseArrays.sparse([],[],Float64[],(ns * (N + 1) + nu * N), (ns * (N+1) + nu * N))
+    H = SparseArrays.sparse([],[],eltype(Q)[],(ns * (N + 1) + nu * N), (ns * (N+1) + nu * N))
 
     for i in 1:N
         for j in 1:ns
@@ -746,7 +802,7 @@ end
 
 
 """
-    _build_J(A, B, N) -> J
+    _build_sparse_J1(A, B, N) -> J
 
 Build the (sparse) `J` matrix or a linear model from `A` and `B` matrices such that
 0 <= Jz <= 0 is equivalent to s_{i+1} = As_i + Bs_i for i = 1,..., N-1
@@ -761,12 +817,12 @@ julia> A = [1 2 ; 3 4]; B = [5 6; 7 8]; _build_J(A,B,3)
   ⋅    ⋅    3.0   4.0    ⋅   -1.0   ⋅    ⋅   7.0  8.0   ⋅    ⋅
 ```
 """
-function _build_J(A,B, N)
+function _build_sparse_J1(A,B, N)
     ns = size(A, 2)
     nu = size(B, 2)
 
 
-    J = SparseArrays.sparse([], [], Float64[], ns * N, (ns* (N + 1) + nu * N))    
+    J = SparseArrays.sparse([], [], eltype(A)[], ns * N, (ns* (N + 1) + nu * N))    
 
     for i in 1:N
         for j in 1:ns
@@ -787,12 +843,12 @@ function _build_J(A,B, N)
     return J
 end
 
-function _build_EF(E, F, N)
+function _build_sparse_J2(E, F, N)
     ns = size(E, 2)
     nu = size(F, 2)
     nc = size(E, 1)
 
-    EF = SparseArrays.sparse([],[], Float64[], N * nc, ns * (N + 1) + nu * N)
+    J2 = SparseArrays.sparse([],[], eltype(E)[], N * nc, ns * (N + 1) + nu * N)
 
 
     if nc != 0
@@ -801,12 +857,12 @@ function _build_EF(E, F, N)
             col_range_E = (1 + ns * (i - 1)):(ns * i)
             col_range_F = (ns * (N + 1) + 1 + nu * (i - 1)):(ns * (N + 1) + nu * i)
 
-            EF[row_range, col_range_E] .= E
-            EF[row_range, col_range_F] .= F
+            J2[row_range, col_range_E] .= E
+            J2[row_range, col_range_F] .= F
         end
     end
 
-    return EF
+    return J2
 
 end
 
