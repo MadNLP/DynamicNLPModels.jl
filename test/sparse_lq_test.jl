@@ -40,7 +40,7 @@ function build_QP_JuMP_model(
 
 
 
-    model = Model(Ipopt.Optimizer) # define model
+    model = Model(MadNLP.Optimizer) # define model
 
 
         @variable(model, s[NS, 0:N]) # define states 
