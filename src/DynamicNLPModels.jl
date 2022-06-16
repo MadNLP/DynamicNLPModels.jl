@@ -88,7 +88,7 @@ The following attributes of the `LQDynamicData` type are detected automatically 
 - `ns`: number of state variables
 - `nu`: number of input varaibles
 The following keyward arguments are also accepted
-- `Qf = Q`: objective function matrix for system state at time N
+- `Qf = Q`: objective function matrix for system state at time N; dimensions must be ns x ns
 - `E  = zeros(0, ns)` : constraint matrix for state variables
 - `F  = zeros(0, nu)` : constraint matrix for input variables
 - `sl = fill(-Inf, ns)`: vector of lower bounds on state variables
