@@ -7,7 +7,7 @@ nu = 1 # number of inputs
 
 # generate random Q, R, A, and B matrices
 Random.seed!(10)
-Q_rand = Random.rand(ns,ns)
+Q_rand = Random.rand(ns, ns)
 Q = Q_rand * transpose(Q_rand) + I
 R_rand   = Random.rand(nu,nu)
 R    = R_rand * transpose(R_rand) + I
@@ -18,73 +18,116 @@ B = rand(ns, nu)
 
 # generate upper and lower bounds
 sl = rand(ns)
-ul = rand(nu)
-su = sl .+ 10
+ul = fill(-15.0, nu)
+su = sl .+ 20
 uu = ul .+ 10
-s0 = sl .+ 1
-
-
-# build JuMP models
-mnb  = build_QP_JuMP_model(Q,R,A,B, N;s0=s0)
-mlb  = build_QP_JuMP_model(Q,R,A,B, N;s0=s0, sl = sl, ul = ul)
-mub  = build_QP_JuMP_model(Q,R,A,B, N;s0=s0, su = su, uu = uu)
-mulb = build_QP_JuMP_model(Q,R,A,B, N;s0=s0, sl = sl, su = su, ul = ul, uu = uu)
-
-# Build Quadratic Model
-dnlpnb  = LQDynamicData(s0, A, B, Q, R, N)
-dnlplb  = LQDynamicData(s0, A, B, Q, R, N; sl = sl, ul = ul)
-dnlpub  = LQDynamicData(s0, A, B, Q, R, N; su = su, uu = uu)
-dnlpulb = LQDynamicData(s0, A, B, Q, R, N; sl = sl, su = su, ul = ul, uu = uu)
-
-lqpnb  = LQDynamicModel(dnlpnb)
-lqplb  = LQDynamicModel(dnlplb)
-lqpub  = LQDynamicModel(dnlpub)
-lqpulb = LQDynamicModel(dnlpulb)
-
-# Solve JuMP model with Ipopt
-optimize!(mnb)
-optimize!(mlb)
-optimize!(mub)
-optimize!(mulb)
-
-# Solve QP with Ipopt
-ipopt_nb  = ipopt(lqpnb)
-ipopt_lb  = ipopt(lqplb)
-ipopt_ub  = ipopt(lqpub)
-ipopt_ulb = ipopt(lqpulb)
-
-# Solve QP with MadNLP
-madnlp_nb  = madnlp(lqpnb, max_iter=50)
-madnlp_lb  = madnlp(lqplb, max_iter=50)
-madnlp_ub  = madnlp(lqpub, max_iter = 50)
-madnlp_ulb = madnlp(lqpulb, max_iter = 50)
-
-
-# Test results
-@test abs(objective_value(mnb) - ipopt_nb.objective)   < 1e-7
-@test abs(objective_value(mlb) - ipopt_lb.objective)   < 1e-7
-@test abs(objective_value(mub) - ipopt_ub.objective)   < 1e-7
-@test abs(objective_value(mulb) - ipopt_ulb.objective) < 1e-7
-
-@test abs(objective_value(mnb) - madnlp_nb.objective)   < 1e-7
-@test abs(objective_value(mlb) - madnlp_lb.objective)   < 1e-7
-@test abs(objective_value(mub) - madnlp_ub.objective)   < 1e-7
-@test abs(objective_value(mulb) - madnlp_ulb.objective) < 1e-7
+s0 = sl .+ 5
 
 
 # Add Qf matrix
 Qf_rand = Random.rand(ns,ns)
 Qf = Qf_rand * transpose(Qf_rand) + I
 
-mulbf    = build_QP_JuMP_model(Q,R,A,B, N;s0 = s0, sl = sl, su = su, ul = ul, uu = uu, Qf = Qf)
-dnlpulbf = LQDynamicData(s0, A, B, Q, R, N; sl = sl, su = su, ul = ul, uu = uu, Qf = Qf)
-lqpulbf  = LQDynamicModel(dnlpulbf)
+# Test with no bounds
+model       = build_QP_JuMP_model(Q,R,A,B, N;s0=s0)
+dnlp        = LQDynamicData(s0, A, B, Q, R, N)
+lq_sparse   = LQDynamicModel(dnlp; condense=false)
+lq_condense = LQDynamicModel(dnlp; condense=true)
 
-# Solve new problem with Qf matrix
-optimize!(mulbf)
-ipopt_ulbf  = ipopt(lqpulbf)
-madnlp_ulbf = madnlp(lqpulbf)
+optimize!(model)
+madnlp_sol_ref_sparse   = madnlp(lq_sparse, max_iter=100) 
+madnlp_sol_ref_condense = madnlp(lq_condense, max_iter=100)
+ipopt_sol_ref_sparse    = ipopt(lq_sparse)
+ipopt_sol_ref_condense  = ipopt(lq_condense)
 
-# Test results
-@test abs(objective_value(mulbf) - ipopt_ulbf.objective)  < 1e-7
-@test abs(objective_value(mulbf) - madnlp_ulbf.objective) < 1e-7
+@test objective_value(model) ≈ madnlp_sol_ref_sparse.objective atol = 1e-7
+@test objective_value(model) ≈ madnlp_sol_ref_condense.objective atol = 1e-7
+@test objective_value(model) ≈ ipopt_sol_ref_sparse.objective atol = 1e-7
+@test objective_value(model) ≈ ipopt_sol_ref_condense.objective atol = 1e-7
+
+@test madnlp_sol_ref_sparse.solution[(ns * (N + 1) + 1):(ns * (N + 1) + nu*N)] ≈ madnlp_sol_ref_condense.solution atol =  1e-6
+
+
+
+# Test with lower bounds
+model       = build_QP_JuMP_model(Q,R,A,B, N;s0=s0, sl = sl, ul = ul)
+dnlp        = LQDynamicData(s0, A, B, Q, R, N;  sl = sl, ul=ul)
+lq_sparse   = LQDynamicModel(dnlp; condense=false)
+lq_condense = LQDynamicModel(dnlp; condense=true)
+
+optimize!(model)
+madnlp_sol_ref_sparse   = madnlp(lq_sparse, max_iter=100) 
+madnlp_sol_ref_condense = madnlp(lq_condense, max_iter=100)
+ipopt_sol_ref_sparse    = ipopt(lq_sparse)
+ipopt_sol_ref_condense  = ipopt(lq_condense)
+
+@test objective_value(model) ≈ madnlp_sol_ref_sparse.objective atol = 1e-7
+@test objective_value(model) ≈ madnlp_sol_ref_condense.objective atol = 1e-7
+@test objective_value(model) ≈ ipopt_sol_ref_sparse.objective atol = 1e-7
+@test objective_value(model) ≈ ipopt_sol_ref_condense.objective atol = 1e-7
+
+@test madnlp_sol_ref_sparse.solution[(ns * (N + 1) + 1):(ns * (N + 1) + nu*N)] ≈ madnlp_sol_ref_condense.solution atol =  1e-6
+
+
+
+# Test with upper bounds
+model       = build_QP_JuMP_model(Q,R,A,B, N;s0=s0, su = su, uu = uu)
+dnlp        = LQDynamicData(s0, A, B, Q, R, N; su = su, uu = uu)
+lq_sparse   = LQDynamicModel(dnlp; condense=false)
+lq_condense = LQDynamicModel(dnlp; condense=true)
+
+optimize!(model)
+madnlp_sol_ref_sparse   = madnlp(lq_sparse, max_iter=100) 
+madnlp_sol_ref_condense = madnlp(lq_condense, max_iter=100)
+ipopt_sol_ref_sparse    = ipopt(lq_sparse)
+ipopt_sol_ref_condense  = ipopt(lq_condense)
+
+@test objective_value(model) ≈ madnlp_sol_ref_sparse.objective atol = 1e-7
+@test objective_value(model) ≈ madnlp_sol_ref_condense.objective atol = 1e-7
+@test objective_value(model) ≈ ipopt_sol_ref_sparse.objective atol = 1e-7
+@test objective_value(model) ≈ ipopt_sol_ref_condense.objective atol = 1e-7
+
+@test madnlp_sol_ref_sparse.solution[(ns * (N + 1) + 1):(ns * (N + 1) + nu*N)] ≈ madnlp_sol_ref_condense.solution atol =  1e-6
+
+
+
+# Test with upper and lower bounds
+model       = build_QP_JuMP_model(Q,R,A,B, N;s0=s0, sl = sl, ul = ul, su = su, uu = uu)
+dnlp        = LQDynamicData(s0, A, B, Q, R, N; sl = sl, ul = ul, su = su, uu = uu)
+lq_sparse   = LQDynamicModel(dnlp; condense=false)
+lq_condense = LQDynamicModel(dnlp; condense=true)
+
+optimize!(model)
+madnlp_sol_ref_sparse   = madnlp(lq_sparse, max_iter=100) 
+madnlp_sol_ref_condense = madnlp(lq_condense, max_iter=100)
+ipopt_sol_ref_sparse    = ipopt(lq_sparse)
+ipopt_sol_ref_condense  = ipopt(lq_condense)
+
+@test objective_value(model) ≈ madnlp_sol_ref_sparse.objective atol = 1e-7
+@test objective_value(model) ≈ madnlp_sol_ref_condense.objective atol = 1e-7
+@test objective_value(model) ≈ ipopt_sol_ref_sparse.objective atol = 1e-7
+@test objective_value(model) ≈ ipopt_sol_ref_condense.objective atol = 1e-7
+
+@test madnlp_sol_ref_sparse.solution[(ns * (N + 1) + 1):(ns * (N + 1) + nu*N)] ≈ madnlp_sol_ref_condense.solution atol =  1e-6
+
+
+
+
+# Test with Qf matrix
+model       = build_QP_JuMP_model(Q,R,A,B, N;s0=s0, sl = sl, ul = ul, su = su, uu = uu, Qf=Qf)
+dnlp        = LQDynamicData(s0, A, B, Q, R, N; sl = sl, ul = ul, su = su, uu = uu, Qf = Qf)
+lq_sparse   = LQDynamicModel(dnlp; condense=false)
+lq_condense = LQDynamicModel(dnlp; condense=true)
+
+optimize!(model)
+madnlp_sol_ref_sparse   = madnlp(lq_sparse, max_iter=100) 
+madnlp_sol_ref_condense = madnlp(lq_condense, max_iter=100)
+ipopt_sol_ref_sparse    = ipopt(lq_sparse)
+ipopt_sol_ref_condense  = ipopt(lq_condense)
+
+@test objective_value(model) ≈ madnlp_sol_ref_sparse.objective atol = 1e-7
+@test objective_value(model) ≈ madnlp_sol_ref_condense.objective atol = 1e-7
+@test objective_value(model) ≈ ipopt_sol_ref_sparse.objective atol = 1e-7
+@test objective_value(model) ≈ ipopt_sol_ref_condense.objective atol = 1e-7
+
+@test madnlp_sol_ref_sparse.solution[(ns * (N + 1) + 1):(ns * (N + 1) + nu*N)] ≈ madnlp_sol_ref_condense.solution atol =  1e-6
