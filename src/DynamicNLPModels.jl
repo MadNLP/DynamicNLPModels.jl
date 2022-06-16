@@ -324,59 +324,8 @@ function LQDynamicModel(
 
     dnlp = LQDynamicData(s0, A, B, Q, R, N; Qf = Qf, sl = sl, su = su, ul = ul, uu = uu)
     
-    ns = size(Q, 1)
-    nu = size(R, 1)
+    LQDynamicModel(dnlp; condense=condense)
 
-    H = _build_H(Q, R, N; Qf=Qf)
-    J = _build_J(A, B, N)
-
-    c0 = 0.0
-
-    nvar = (ns * (N + 1) + nu * N)
-    nnzj = length(J.rowval)
-    nnzh = length(H.rowval)
-    ncon = size(J, 1)
-
-    c  = zeros(nvar)
-
-    lvar = copy(s0)
-    uvar = copy(s0)
-    con  = zeros(ncon)
-
-    for i in 1:N
-        lvar = vcat(lvar, sl)
-        uvar = vcat(uvar, su)
-    end
-
-    for j in 1:N
-        lvar = vcat(lvar, ul)
-        uvar = vcat(uvar, uu)
-    end
-
-
-    LQDynamicModel(
-        NLPModels.NLPModelMeta(
-        nvar,
-        lvar = lvar,
-        uvar = uvar, 
-        ncon = ncon,
-        lcon = con,
-        ucon = con,
-        nnzj = nnzj,
-        nnzh = nnzh,
-        lin = 1:ncon,
-        islp = (ncon == 0);
-        ),
-        NLPModels.Counters(),
-        QuadraticModels.QPData(
-        c0, 
-        c,
-        H,
-        J
-        ),
-        dnlp,
-        condense
-    )
 end
 
 function _build_condensed_blocks(

@@ -1,4 +1,4 @@
-using Test, DynamicNLPModels, MadNLP, NLPModelsIpopt, Random, JuMP, Ipopt, LinearAlgebra
+using Test, DynamicNLPModels, MadNLP, Random, JuMP, LinearAlgebra
 include("sparse_lq_test.jl")
 
 N  = 3 # number of time steps
@@ -34,18 +34,22 @@ dnlp        = LQDynamicData(s0, A, B, Q, R, N)
 lq_sparse   = LQDynamicModel(dnlp; condense=false)
 lq_condense = LQDynamicModel(dnlp; condense=true)
 
+lq_sparse_from_data   = LQDynamicModel(s0, A, B, Q, R, N; condense=false)
+lq_condense_from_data = LQDynamicModel(s0, A, B, Q, R, N; condense=true)
+
 optimize!(model)
-madnlp_sol_ref_sparse   = madnlp(lq_sparse, max_iter=100) 
-madnlp_sol_ref_condense = madnlp(lq_condense, max_iter=100)
-ipopt_sol_ref_sparse    = ipopt(lq_sparse)
-ipopt_sol_ref_condense  = ipopt(lq_condense)
+solution_ref_sparse             = madnlp(lq_sparse, max_iter=100) 
+solution_ref_condense           = madnlp(lq_condense, max_iter=100)
+solution_ref_sparse_from_data   = madnlp(lq_sparse_from_data, max_iter=100)
+solution_ref_condense_from_data = madnlp(lq_condense_from_data, max_iter=100)
 
-@test objective_value(model) ≈ madnlp_sol_ref_sparse.objective atol = 1e-7
-@test objective_value(model) ≈ madnlp_sol_ref_condense.objective atol = 1e-7
-@test objective_value(model) ≈ ipopt_sol_ref_sparse.objective atol = 1e-7
-@test objective_value(model) ≈ ipopt_sol_ref_condense.objective atol = 1e-7
+@test objective_value(model) ≈ solution_ref_sparse.objective atol = 1e-7
+@test objective_value(model) ≈ solution_ref_condense.objective atol = 1e-7
+@test objective_value(model) ≈ solution_ref_sparse_from_data.objective atol = 1e-7
+@test objective_value(model) ≈ solution_ref_condense_from_data.objective atol = 1e-7
 
-@test madnlp_sol_ref_sparse.solution[(ns * (N + 1) + 1):(ns * (N + 1) + nu*N)] ≈ madnlp_sol_ref_condense.solution atol =  1e-6
+@test solution_ref_sparse.solution[(ns * (N + 1) + 1):(ns * (N + 1) + nu*N)] ≈ solution_ref_condense.solution atol =  1e-6
+@test solution_ref_sparse_from_data.solution[(ns * (N + 1) + 1):(ns * (N + 1) + nu*N)] ≈ solution_ref_condense_from_data.solution atol =  1e-6
 
 
 
@@ -55,18 +59,22 @@ dnlp        = LQDynamicData(s0, A, B, Q, R, N;  sl = sl, ul=ul)
 lq_sparse   = LQDynamicModel(dnlp; condense=false)
 lq_condense = LQDynamicModel(dnlp; condense=true)
 
+lq_sparse_from_data   = LQDynamicModel(s0, A, B, Q, R, N; sl = sl, ul = ul, condense=false)
+lq_condense_from_data = LQDynamicModel(s0, A, B, Q, R, N; sl = sl, ul = ul, condense=true)
+
 optimize!(model)
-madnlp_sol_ref_sparse   = madnlp(lq_sparse, max_iter=100) 
-madnlp_sol_ref_condense = madnlp(lq_condense, max_iter=100)
-ipopt_sol_ref_sparse    = ipopt(lq_sparse)
-ipopt_sol_ref_condense  = ipopt(lq_condense)
+solution_ref_sparse             = madnlp(lq_sparse, max_iter=100) 
+solution_ref_condense           = madnlp(lq_condense, max_iter=100)
+solution_ref_sparse_from_data   = madnlp(lq_sparse_from_data, max_iter=100)
+solution_ref_condense_from_data = madnlp(lq_condense_from_data, max_iter=100)
 
-@test objective_value(model) ≈ madnlp_sol_ref_sparse.objective atol = 1e-7
-@test objective_value(model) ≈ madnlp_sol_ref_condense.objective atol = 1e-7
-@test objective_value(model) ≈ ipopt_sol_ref_sparse.objective atol = 1e-7
-@test objective_value(model) ≈ ipopt_sol_ref_condense.objective atol = 1e-7
+@test objective_value(model) ≈ solution_ref_sparse.objective atol = 1e-7
+@test objective_value(model) ≈ solution_ref_condense.objective atol = 1e-7
+@test objective_value(model) ≈ solution_ref_sparse_from_data.objective atol = 1e-7
+@test objective_value(model) ≈ solution_ref_condense_from_data.objective atol = 1e-7
 
-@test madnlp_sol_ref_sparse.solution[(ns * (N + 1) + 1):(ns * (N + 1) + nu*N)] ≈ madnlp_sol_ref_condense.solution atol =  1e-6
+@test solution_ref_sparse.solution[(ns * (N + 1) + 1):(ns * (N + 1) + nu*N)] ≈ solution_ref_condense.solution atol =  1e-6
+@test solution_ref_sparse_from_data.solution[(ns * (N + 1) + 1):(ns * (N + 1) + nu*N)] ≈ solution_ref_condense_from_data.solution atol =  1e-6
 
 
 
@@ -76,18 +84,22 @@ dnlp        = LQDynamicData(s0, A, B, Q, R, N; su = su, uu = uu)
 lq_sparse   = LQDynamicModel(dnlp; condense=false)
 lq_condense = LQDynamicModel(dnlp; condense=true)
 
+lq_sparse_from_data   = LQDynamicModel(s0, A, B, Q, R, N; su = su, uu = uu, condense=false)
+lq_condense_from_data = LQDynamicModel(s0, A, B, Q, R, N; su = su, uu = uu, condense=true)
+
 optimize!(model)
-madnlp_sol_ref_sparse   = madnlp(lq_sparse, max_iter=100) 
-madnlp_sol_ref_condense = madnlp(lq_condense, max_iter=100)
-ipopt_sol_ref_sparse    = ipopt(lq_sparse)
-ipopt_sol_ref_condense  = ipopt(lq_condense)
+solution_ref_sparse             = madnlp(lq_sparse, max_iter=100) 
+solution_ref_condense           = madnlp(lq_condense, max_iter=100)
+solution_ref_sparse_from_data   = madnlp(lq_sparse_from_data, max_iter=100)
+solution_ref_condense_from_data = madnlp(lq_condense_from_data, max_iter=100)
 
-@test objective_value(model) ≈ madnlp_sol_ref_sparse.objective atol = 1e-7
-@test objective_value(model) ≈ madnlp_sol_ref_condense.objective atol = 1e-7
-@test objective_value(model) ≈ ipopt_sol_ref_sparse.objective atol = 1e-7
-@test objective_value(model) ≈ ipopt_sol_ref_condense.objective atol = 1e-7
+@test objective_value(model) ≈ solution_ref_sparse.objective atol = 1e-7
+@test objective_value(model) ≈ solution_ref_condense.objective atol = 1e-7
+@test objective_value(model) ≈ solution_ref_sparse_from_data.objective atol = 1e-7
+@test objective_value(model) ≈ solution_ref_condense_from_data.objective atol = 1e-7
 
-@test madnlp_sol_ref_sparse.solution[(ns * (N + 1) + 1):(ns * (N + 1) + nu*N)] ≈ madnlp_sol_ref_condense.solution atol =  1e-6
+@test solution_ref_sparse.solution[(ns * (N + 1) + 1):(ns * (N + 1) + nu*N)] ≈ solution_ref_condense.solution atol =  1e-6
+@test solution_ref_sparse_from_data.solution[(ns * (N + 1) + 1):(ns * (N + 1) + nu*N)] ≈ solution_ref_condense_from_data.solution atol =  1e-6
 
 
 
@@ -97,18 +109,22 @@ dnlp        = LQDynamicData(s0, A, B, Q, R, N; sl = sl, ul = ul, su = su, uu = u
 lq_sparse   = LQDynamicModel(dnlp; condense=false)
 lq_condense = LQDynamicModel(dnlp; condense=true)
 
+lq_sparse_from_data   = LQDynamicModel(s0, A, B, Q, R, N; sl=sl, ul=ul, su = su, uu = uu, condense=false)
+lq_condense_from_data = LQDynamicModel(s0, A, B, Q, R, N; sl=sl, ul=ul, su = su, uu = uu, condense=true)
+
 optimize!(model)
-madnlp_sol_ref_sparse   = madnlp(lq_sparse, max_iter=100) 
-madnlp_sol_ref_condense = madnlp(lq_condense, max_iter=100)
-ipopt_sol_ref_sparse    = ipopt(lq_sparse)
-ipopt_sol_ref_condense  = ipopt(lq_condense)
+solution_ref_sparse             = madnlp(lq_sparse, max_iter=100) 
+solution_ref_condense           = madnlp(lq_condense, max_iter=100)
+solution_ref_sparse_from_data   = madnlp(lq_sparse_from_data, max_iter=100)
+solution_ref_condense_from_data = madnlp(lq_condense_from_data, max_iter=100)
 
-@test objective_value(model) ≈ madnlp_sol_ref_sparse.objective atol = 1e-7
-@test objective_value(model) ≈ madnlp_sol_ref_condense.objective atol = 1e-7
-@test objective_value(model) ≈ ipopt_sol_ref_sparse.objective atol = 1e-7
-@test objective_value(model) ≈ ipopt_sol_ref_condense.objective atol = 1e-7
+@test objective_value(model) ≈ solution_ref_sparse.objective atol = 1e-7
+@test objective_value(model) ≈ solution_ref_condense.objective atol = 1e-7
+@test objective_value(model) ≈ solution_ref_sparse_from_data.objective atol = 1e-7
+@test objective_value(model) ≈ solution_ref_condense_from_data.objective atol = 1e-7
 
-@test madnlp_sol_ref_sparse.solution[(ns * (N + 1) + 1):(ns * (N + 1) + nu*N)] ≈ madnlp_sol_ref_condense.solution atol =  1e-6
+@test solution_ref_sparse.solution[(ns * (N + 1) + 1):(ns * (N + 1) + nu*N)] ≈ solution_ref_condense.solution atol =  1e-6
+@test solution_ref_sparse_from_data.solution[(ns * (N + 1) + 1):(ns * (N + 1) + nu*N)] ≈ solution_ref_condense_from_data.solution atol =  1e-6
 
 
 
@@ -119,15 +135,19 @@ dnlp        = LQDynamicData(s0, A, B, Q, R, N; sl = sl, ul = ul, su = su, uu = u
 lq_sparse   = LQDynamicModel(dnlp; condense=false)
 lq_condense = LQDynamicModel(dnlp; condense=true)
 
+lq_sparse_from_data   = LQDynamicModel(s0, A, B, Q, R, N; sl = sl, ul = ul, su = su, uu = uu, Qf = Qf, condense=false)
+lq_condense_from_data = LQDynamicModel(s0, A, B, Q, R, N; sl = sl, ul = ul, su = su, uu = uu, Qf = Qf, condense=true)
+
 optimize!(model)
-madnlp_sol_ref_sparse   = madnlp(lq_sparse, max_iter=100) 
-madnlp_sol_ref_condense = madnlp(lq_condense, max_iter=100)
-ipopt_sol_ref_sparse    = ipopt(lq_sparse)
-ipopt_sol_ref_condense  = ipopt(lq_condense)
+solution_ref_sparse             = madnlp(lq_sparse, max_iter=100) 
+solution_ref_condense           = madnlp(lq_condense, max_iter=100)
+solution_ref_sparse_from_data   = madnlp(lq_sparse_from_data, max_iter=100)
+solution_ref_condense_from_data = madnlp(lq_condense_from_data, max_iter=100)
 
-@test objective_value(model) ≈ madnlp_sol_ref_sparse.objective atol = 1e-7
-@test objective_value(model) ≈ madnlp_sol_ref_condense.objective atol = 1e-7
-@test objective_value(model) ≈ ipopt_sol_ref_sparse.objective atol = 1e-7
-@test objective_value(model) ≈ ipopt_sol_ref_condense.objective atol = 1e-7
+@test objective_value(model) ≈ solution_ref_sparse.objective atol = 1e-7
+@test objective_value(model) ≈ solution_ref_condense.objective atol = 1e-7
+@test objective_value(model) ≈ solution_ref_sparse_from_data.objective atol = 1e-7
+@test objective_value(model) ≈ solution_ref_condense_from_data.objective atol = 1e-7
 
-@test madnlp_sol_ref_sparse.solution[(ns * (N + 1) + 1):(ns * (N + 1) + nu*N)] ≈ madnlp_sol_ref_condense.solution atol =  1e-6
+@test solution_ref_sparse.solution[(ns * (N + 1) + 1):(ns * (N + 1) + nu*N)] ≈ solution_ref_condense.solution atol =  1e-6
+@test solution_ref_sparse_from_data.solution[(ns * (N + 1) + 1):(ns * (N + 1) + nu*N)] ≈ solution_ref_condense_from_data.solution atol =  1e-6
