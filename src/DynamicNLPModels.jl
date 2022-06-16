@@ -231,7 +231,7 @@ function LQDynamicModel(dnlp::LQDynamicData{T,S,M}; condense = false) where {T,S
     else
         _build_condensed_lq_dynamic_model(dnlp)
     end
-    
+
 
 end
 
@@ -261,7 +261,7 @@ function LQDynamicModel(
 
 end
 
-function _build_sparse_lq_dynamic_model(dnlp::LQDynamicData{T,S,M})
+function _build_sparse_lq_dynamic_model(dnlp::LQDynamicData{T,S,M}) where {T,S <: AbstractVector{T} ,M  <: AbstractMatrix{T}}
     s0 = dnlp.s0
     A  = dnlp.A
     B  = dnlp.B
@@ -284,37 +284,44 @@ function _build_sparse_lq_dynamic_model(dnlp::LQDynamicData{T,S,M})
 
 
 
-    H   = _build_H(Q, R, N; Qf=Qf)
+    H   = _build_H(Q, R, N; Qf = Qf)
     J1  = _build_sparse_J1(A, B, N)
     J2  = _build_sparse_J2(E, F, N)
-
+    J   = vcat(J1, J2)
     c0 = 0.0
 
+    
     nvar = ns * (N + 1) + nu * N
     c  = zeros(nvar)
     
-    lvar  = copy(s0)
-    uvar  = copy(s0)
+    lvar  = zeros(nvar)
+    uvar  = zeros(nvar)
 
-    ucon  = zeros(size(J1, 1))
-    lcon  = zeros(size(J1, 1))
-    J     = vcat(J1, J2)
+    lvar[1:ns] .= s0
+    uvar[1:ns] .= s0
+
+
+    ucon  = zeros(ns * N + N * length(gl))
+    lcon  = zeros(ns * N + N * length(gl))
 
     ncon  = size(J, 1)
     nnzj = length(J.rowval)
     nnzh = length(H.rowval)
 
     for i in 1:N
-        lvar = vcat(lvar, sl)
-        uvar = vcat(uvar, su)
-        lcon = vcat(lcon, gl)
+        lvar[(i * ns + 1):((i + 1) * ns)] .= sl
+        uvar[(i * ns + 1):((i + 1) * ns)] .= su
+
+        lcon[(ns * N + 1 + (i -1) * length(gl)):(ns * N + i * length(gl))] .= gl
+        ucon[(ns * N + 1 + (i -1) * length(gl)):(ns * N + i * length(gl))] .= gu
     end
 
     for j in 1:N
-        lvar = vcat(lvar, ul)
-        uvar = vcat(uvar, uu)
-        ucon = vcat(ucon, gu)
+        lvar[((N + 1) * ns + (j - 1) * nu + 1):((N + 1) * ns + j * nu)] .= ul
+        uvar[((N + 1) * ns + (j - 1) * nu + 1):((N + 1) * ns + j * nu)] .= uu
     end
+    
+
 
     LQDynamicModel(
         NLPModels.NLPModelMeta(
@@ -342,7 +349,7 @@ function _build_sparse_lq_dynamic_model(dnlp::LQDynamicData{T,S,M})
 
 end
 
-function _build_condensed_lq_dynamic_model(dnlp::LQDynamicData{T,S,M})
+function _build_condensed_lq_dynamic_model(dnlp::LQDynamicData{T,S,M}) where {T,S <: AbstractVector{T} ,M  <: AbstractMatrix{T}}
     s0 = dnlp.s0
     A  = dnlp.A
     B  = dnlp.B
@@ -372,39 +379,63 @@ function _build_condensed_lq_dynamic_model(dnlp::LQDynamicData{T,S,M})
     c       = condensed_blocks.c
     c0      = condensed_blocks.c0
 
-    lvar = copy(ul)
-    uvar = copy(uu)
+    lvar = zeros(nu * N)
+    uvar = zeros(nu * N)
 
-    for i in 1:(N-1)
-        lvar = vcat(lvar, ul)
-        uvar = vcat(uvar, uu)
+    for i in 1:(N)
+        lvar[((i - 1) * nu + 1):(i * nu)] = ul
+        uvar[((i - 1) * nu + 1):(i * nu)] = uu
     end
 
-    d    = fill(Inf, ns * 2)
 
-    d[1:ns] .= .-sl
-    d[(ns+1):(2*ns)] .= su
+    nE1 = size(E, 1)
+    nE2 = size(E, 2)
+    nF1 = size(F, 1)
+    nF2 = size(F, 2)
+    ng  = length(gl)
 
-
-    E_bounds = zeros(ns * 2, ns)
-    F_bounds = zeros(ns * 2, nu)
-
-    for i in 1:ns
-        E_bounds[i,i] = -1.0
-        E_bounds[i + ns, i] = 1.0
+    
+    block_E  = zeros(nE1 * N, nE2 * (N + 1))
+    block_F  = zeros(nF1 * N, nF2 * N)
+    block_gl = zeros(ng * N, 1)
+    block_gu = zeros(ng * N, 1)
+  
+    for i in 1:N
+        block_E[((i - 1) * nE1 + 1):(i * nE1), ((i - 1) * nE2 + 1):(i * nE2)] .= E
+        block_F[((i - 1) * nF1 + 1):(i * nF1), ((i - 1) * nF2 + 1):(i * nF2)] .= F
+        block_gl[((i - 1) * ng  + 1):(i * ng)]  .= gl
+        block_gu[((i - 1) * ng  + 1):(i * ng)]  .= gu
     end
 
-    E_bounds = vcat(E_bounds, E)
-    F_bounds = vcat(F_bounds, F)
-    d        = vcat(d, gu)
+    
 
-    E = vcat(E_bounds, .-E)
-    F = vcat(F_bounds, .-F)
-    d = vcat(d, .-gl)
-        
-    J, ucon = _build_G(block_A, block_B, E, F, d, s0, N)
+    J1, lcon1, ucon1, As0 = _build_condensed_G(block_A, block_B, block_E, block_F, block_gl, block_gu, s0, N)
 
-    lcon = fill(-Inf, length(ucon))
+    J2    = block_B[(1 + ns):end,:]
+
+    lcon2 = zeros(size(J2, 1),1)
+    ucon2 = zeros(size(J2, 1),1)
+
+    lcon  = zeros(length(lcon1) + size(J2,1))
+    ucon  = zeros(length(ucon1) + size(J2,1))
+
+    lcon[1:length(lcon1)] .= lcon1
+    ucon[1:length(ucon1)] .= ucon1
+
+
+    for i in 1:N
+        ucon2[((i - 1) * ns + 1):(i * ns),1] = su
+        lcon2[((i - 1) * ns + 1):(i * ns),1] = sl
+    end
+
+    LinearAlgebra.axpy!(-1, As0[(1 + ns):end,1], ucon2)
+    LinearAlgebra.axpy!(-1, As0[(1 + ns):end, 1], lcon2)
+
+    lcon[(length(lcon1) + 1):end] .= lcon2
+    ucon[(length(ucon1) + 1):end] .= ucon2
+
+    J = vcat(J1, J2)
+
 
     nvar = nu * N
     nnzj = size(J, 1) * size(J, 2)
@@ -527,23 +558,7 @@ function _build_condensed_blocks(
     return (H = BQB, c = vec(h), c0 = c0, block_A = block_A, block_B = block_B, block_Q = block_Q, block_R = block_R)
 end
 
-function _build_G(block_A, block_B, E, F, d,s0, N)
-    
-    nE1 = size(E, 1)
-    nE2 = size(E, 2)
-    nF1 = size(F, 1)
-    nF2 = size(F, 2)
-    nd  = length(d)
-    
-    block_E = zeros(nE1 * N, nE2 * (N + 1))
-    block_F = zeros(nF1 * N, nF2 * N)
-    block_d = zeros(nd * N, 1)
-  
-    for i in 1:N
-        block_E[((i - 1) * nE1 + 1):(i * nE1), ((i - 1) * nE2 + 1):(i * nE2)] .= E
-        block_F[((i - 1) * nF1 + 1):(i * nF1), ((i - 1) * nF2 + 1):(i * nF2)] .= F
-        block_d[((i - 1) * nd  + 1):(i * nd)]  .= d
-    end
+function _build_condensed_G(block_A, block_B, block_E, block_F, block_gl, block_gu, s0, N)
   
     G = zeros(size(block_F))
   
@@ -552,11 +567,13 @@ function _build_G(block_A, block_B, E, F, d,s0, N)
 
     LinearAlgebra.mul!(G, block_E, block_B)
     LinearAlgebra.axpy!(1, block_F, G)
+
     LinearAlgebra.mul!(As0, block_A, s0)
     LinearAlgebra.mul!(EAs0, block_E, As0)
-    LinearAlgebra.axpy!(-1, EAs0, block_d)
+    LinearAlgebra.axpy!(-1, EAs0, block_gl)
+    LinearAlgebra.axpy!(-1, EAs0, block_gu)
   
-    return G, vec(block_d)
+    return G, vec(block_gl), vec(block_gu), As0
 end
 
 for field in fieldnames(LQDynamicData)
