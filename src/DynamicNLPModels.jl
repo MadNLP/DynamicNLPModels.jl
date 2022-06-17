@@ -59,6 +59,7 @@ struct LQDynamicData{T,V,M} <: AbstractLQDynData{T,V}
     nu::Int
     E::M
     F::M
+    K::Union{M, Nothing}
 
     sl::V
     su::V
@@ -113,6 +114,7 @@ function LQDynamicData(
     S::Union{M, Nothing}  = nothing,
     E::M  = zeros(0, length(s0)),
     F::M  = zeros(0, size(R, 1)),
+    K::Union{M, Nothing} = nothing,
 
     sl::V = (similar(s0) .= -Inf),
     su::V = (similar(s0) .=  Inf),
@@ -171,14 +173,18 @@ function LQDynamicData(
             error("Dimensions of S do not match dimensions of Q and R")
         end
     end
-
-
+    if K != nothing
+        if size(K, 1) != size(R, 1) || size(K, 2) != size(Q,1)
+            error("Dimensions of K  do not match number of states and inputs")
+        end
+    end
+    
     ns = size(Q,1)
     nu = size(R,1)
 
     LQDynamicData{T,V,M}(
         s0, A, B, Q, R, N,
-        Qf, S, ns, nu, E, F,
+        Qf, S, ns, nu, E, F, K,
         sl, su, ul, uu, gl, gu
     )
 end
@@ -255,6 +261,7 @@ function LQDynamicModel(
     S::Union{M, Nothing}  = nothing,
     E::M  = zeros(0, length(s0)),
     F::M  = zeros(0, size(R, 1)),
+    K::Union{M, Nothing} = nothing,
     sl::V = (similar(s0) .= -Inf),
     su::V = (similar(s0) .=  Inf),
     ul::V = (similar(s0,size(R, 1)) .= -Inf),
@@ -264,7 +271,7 @@ function LQDynamicModel(
     condense=false
     ) where {T, V <: AbstractVector{T}, M <: AbstractMatrix{T}}
 
-    dnlp = LQDynamicData(s0, A, B, Q, R, N; Qf = Qf, S = S, E = E, F = F, sl = sl, su = su, ul = ul, uu = uu, gl = gl, gu = gu)
+    dnlp = LQDynamicData(s0, A, B, Q, R, N; Qf = Qf, S = S, E = E, F = F, K = K, sl = sl, su = su, ul = ul, uu = uu, gl = gl, gu = gu)
     
     LQDynamicModel(dnlp; condense=condense)
 
@@ -284,6 +291,7 @@ function _build_sparse_lq_dynamic_model(dnlp::LQDynamicData{T,V,M}) where {T, V 
     nu = dnlp.nu
     E  = dnlp.E
     F  = dnlp.F
+    K  = dnlp.K
 
     sl = dnlp.sl
     su = dnlp.su
@@ -292,17 +300,22 @@ function _build_sparse_lq_dynamic_model(dnlp::LQDynamicData{T,V,M}) where {T, V 
     gl = dnlp.gl
     gu = dnlp.gu
 
-
-
     H   = _build_H(Q, R, N; Qf = Qf, S = S)
-    J1  = _build_sparse_J1(A, B, N)
     J2  = _build_sparse_J2(E, F, N)
-    J   = vcat(J1, J2)
-    c0 = 0.0
 
-    
-    nvar = ns * (N + 1) + nu * N
-    c  = zeros(nvar)
+    if K != nothing
+        J1  = _build_sparse_J1(A, B, N)
+        nvar = ns * (N + 1) + nu * N
+    else
+        J1 = _build_sparse_J1_with_K(A, B, N, K)
+        nvar = ns * (N + 1) + 2 * nu * N
+        new_H = SparseArrays.sparse([],[], eltype(Q)[], nvar, nvar)
+        new_H[1:size(H, 1), 1:size(H,2)] = H
+        H = new_H
+        J2 = hcat(J2, zeros(size(J2,1), nu * N))
+    end
+
+    J   = vcat(J1, J2)
     
     lvar  = zeros(nvar)
     uvar  = zeros(nvar)
@@ -311,28 +324,41 @@ function _build_sparse_lq_dynamic_model(dnlp::LQDynamicData{T,V,M}) where {T, V 
     uvar[1:ns] .= s0
 
 
-    ucon  = zeros(ns * N + N * length(gl))
-    lcon  = zeros(ns * N + N * length(gl))
+    ucon  = zeros(size(J, 1))
+    lcon  = zeros(size(J, 1))
 
     ncon  = size(J, 1)
-    nnzj = length(J.rowval)
-    nnzh = length(H.rowval)
+    nnzj  = length(J.rowval)
+    nnzh  = length(H.rowval)
+
+    nJ1   = size(J1, 1)
 
     for i in 1:N
-        lvar[(i * ns + 1):((i + 1) * ns)] .= sl
-        uvar[(i * ns + 1):((i + 1) * ns)] .= su
+        lvar[(i * ns + 1):((i + 1) * ns)] = sl
+        uvar[(i * ns + 1):((i + 1) * ns)] = su
 
-        lcon[(ns * N + 1 + (i -1) * length(gl)):(ns * N + i * length(gl))] .= gl
-        ucon[(ns * N + 1 + (i -1) * length(gl)):(ns * N + i * length(gl))] .= gu
+        lcon[(nJ1 + 1 + (i -1) * length(gl)):(nJ1 + i * length(gl))] = gl
+        ucon[(nJ1 + 1 + (i -1) * length(gl)):(nJ1 + i * length(gl))] = gu
     end
 
     for j in 1:N
-        lvar[((N + 1) * ns + (j - 1) * nu + 1):((N + 1) * ns + j * nu)] .= ul
-        uvar[((N + 1) * ns + (j - 1) * nu + 1):((N + 1) * ns + j * nu)] .= uu
+        lvar[((N + 1) * ns + (j - 1) * nu + 1):((N + 1) * ns + j * nu)] = ul
+        uvar[((N + 1) * ns + (j - 1) * nu + 1):((N + 1) * ns + j * nu)] = uu
     end
+
+    lvar_v = fill(-Inf, nu)
+    uvar_v = fill(Inf, nu)
+
+    if K != nothing
+        for j in 1:N
+            lvar[(ns * (N + 1) + nu * (j - 1 + N) + 1):(ns * (N + 1) + nu * (j + N))] = lvar_v
+            uvar[(ns * (N + 1) + nu * (j - 1 + N) + 1):(ns * (N + 1) + nu * (j + N))] = uvar_v
+        end
+    end
+
+    c0 = 0.0
+    c  = zeros(nvar)
     
-
-
     LQDynamicModel(
         NLPModels.NLPModelMeta(
         nvar,
@@ -373,6 +399,7 @@ function _build_condensed_lq_dynamic_model(dnlp::LQDynamicData{T,V,M}) where {T,
     nu = dnlp.nu
     E  = dnlp.E
     F  = dnlp.F
+    K  = dnlp.K
 
     sl = dnlp.sl
     su = dnlp.su
@@ -412,10 +439,10 @@ function _build_condensed_lq_dynamic_model(dnlp::LQDynamicData{T,V,M}) where {T,
     block_gu = zeros(ng * N, 1)
   
     for i in 1:N
-        block_E[((i - 1) * nE1 + 1):(i * nE1), ((i - 1) * nE2 + 1):(i * nE2)] .= E
-        block_F[((i - 1) * nF1 + 1):(i * nF1), ((i - 1) * nF2 + 1):(i * nF2)] .= F
-        block_gl[((i - 1) * ng  + 1):(i * ng)]  .= gl
-        block_gu[((i - 1) * ng  + 1):(i * ng)]  .= gu
+        block_E[((i - 1) * nE1 + 1):(i * nE1), ((i - 1) * nE2 + 1):(i * nE2)] = E
+        block_F[((i - 1) * nF1 + 1):(i * nF1), ((i - 1) * nF2 + 1):(i * nF2)] = F
+        block_gl[((i - 1) * ng  + 1):(i * ng)]  = gl
+        block_gu[((i - 1) * ng  + 1):(i * ng)]  = gu
     end
 
 
@@ -528,21 +555,137 @@ function _build_condensed_blocks(
     for j in 1:N
         row_range = (j * ns + 1):((j + 1) * ns)
         col_range = ((j - 1) * nu+ 1):(j * nu)
-        block_B[row_range, col_range] .= B
+        block_B[row_range, col_range] = B
   
-        block_Q[((j - 1) * ns + 1):(j * ns), ((j - 1) * ns + 1):(j * ns)] .= Q
-        block_R[((j - 1) * nu + 1):(j * nu), ((j - 1) * nu + 1):(j * nu)] .= R
+        block_Q[((j - 1) * ns + 1):(j * ns), ((j - 1) * ns + 1):(j * ns)] = Q
+        block_R[((j - 1) * nu + 1):(j * nu), ((j - 1) * nu + 1):(j * nu)] = R
     end
   
     # Fill the A and B matrices
     for i in 1:(N - 1)
         if i == 1
-            block_A[(ns + 1):ns*2, :] .= A
+            block_A[(ns + 1):ns*2, :] = A
             LinearAlgebra.mul!(AB_k, A, B)
             for k in 1:(N-i)
                 row_range = (1 + (k + 1) * ns):((k + 2) * ns)
                 col_range = (1 + (k - 1) * nu):(k * nu)
-                block_B[row_range, col_range] .= AB_k
+                block_B[row_range, col_range] = AB_k
+            end
+            AB_klast = copy(AB_k)
+        else
+            LinearAlgebra.mul!(AB_k, A, AB_klast)
+            LinearAlgebra.mul!(A_k, A, A_klast)
+            block_A[(ns * i + 1):ns * (i + 1),:] = A_k
+  
+            for k in 1:(N-i)
+                row_range = (1 + (k + i) * ns):((k + i + 1) * ns)
+                col_range = (1 + (k - 1) * nu):(k * nu)
+                block_B[row_range, col_range] = AB_k
+            end
+  
+            AB_klast = copy(AB_k)
+            A_klast  = copy(A_k)
+        end
+    end
+  
+
+    LinearAlgebra.mul!(A_k, A, A_klast)
+
+    block_A[(ns * N + 1):ns * (N + 1), :] = A_k
+    block_Q[(ns * N + 1):((N + 1) * ns), (N * ns + 1):((N + 1) * ns)] = Qf
+  
+    # build quadratic term
+    QB  = similar(block_B)
+    BQB = zeros(nu * N, nu * N)
+
+    LinearAlgebra.mul!(QB, block_Q, block_B)
+    LinearAlgebra.mul!(BQB, transpose(block_B), QB)
+    LinearAlgebra.axpy!(1, block_R, BQB)
+    
+    # build linear term 
+    h    = zeros(1, nu * N)
+    s0TAT = zeros(1, size(block_A,1))
+    LinearAlgebra.mul!(s0TAT, transpose(s0), transpose(block_A))
+    LinearAlgebra.mul!(h, s0TAT, QB)
+  
+    # build constant term 
+    QAs = zeros(size(s0TAT,2), size(s0TAT,1))
+    h0  = zeros(1,1)
+    LinearAlgebra.mul!(QAs, block_Q, transpose(s0TAT))
+    LinearAlgebra.mul!(h0, s0TAT, QAs)
+  
+    c0 = h0[1,1] / 2
+  
+    if S != nothing
+        if !iszero(S)
+            block_S = zeros(ns * (N + 1), nu * N)
+
+            for i in 1:N
+                row_range = (1 + ns * (i - 1)):(ns * i)
+                col_range = (1 + nu * (i - 1)):(nu * i)
+
+                block_S[row_range, col_range] = S
+            end        
+
+            BTS      = zeros(nu * N, nu * N)
+            s0T_AT_S = zeros(1, nu * N)
+
+            LinearAlgebra.mul!(BTS, transpose(block_B), block_S)
+
+            LinearAlgebra.axpy!(1, BTS, BQB)
+            LinearAlgebra.axpy!(1, transpose(BTS), BQB)
+
+            LinearAlgebra.mul!(s0T_AT_S, s0TAT, block_S)
+            LinearAlgebra.axpy!(1, s0T_AT_S, h)
+        end
+    end
+  
+    return (H = BQB, c = vec(h), c0 = c0, block_A = block_A, block_B = block_B, block_Q = block_Q, block_R = block_R)
+end
+
+function _build_condensed_blocks_with_K(
+    s0, Q, R, A, B, N, K;
+    Qf = Q, 
+    S = zeros(size(Q, 1), size(R, 1)))
+  
+    ns = size(Q, 1)
+    nu = size(R, 1)
+  
+    # Define block matrices
+    block_B = zeros(ns * (N + 1), nu * N)
+    block_A = zeros(ns * (N + 1), ns)
+    block_Q = SparseArrays.sparse([],[], eltype(Q)[], ns * (N + 1), ns * (N + 1))
+    block_R = SparseArrays.sparse([],[], eltype(R)[], nu * N, nu * N)
+    block_K = SparseArrays.sparse([],[], eltype(R)[], nu * N, ns * (N+1))
+  
+    block_A[1:ns, 1:ns] = Matrix(LinearAlgebra.I, ns, ns)
+  
+    # Define matrices for mul!
+    A_klast  = copy(A)
+    A_k      = zeros(size(A))
+    AB_klast = zeros(size(B))
+    AB_k     = zeros(size(B))
+  
+    # Add diagonal of Bs and fill Q and R block matrices
+    for j in 1:N
+        row_range = (j * ns + 1):((j + 1) * ns)
+        col_range = ((j - 1) * nu + 1):(j * nu)
+        block_B[row_range, col_range] = B
+        block_K[col_range, row_range] = K
+
+        block_Q[((j - 1) * ns + 1):(j * ns), ((j - 1) * ns + 1):(j * ns)] = Q
+        block_R[((j - 1) * nu + 1):(j * nu), ((j - 1) * nu + 1):(j * nu)] = R
+    end
+  
+    # Fill the A and B matrices
+    for i in 1:(N - 1)
+        if i == 1
+            block_A[(ns + 1):ns*2, :] = A
+            LinearAlgebra.mul!(AB_k, A, B)
+            for k in 1:(N-i)
+                row_range = (1 + (k + 1) * ns):((k + 2) * ns)
+                col_range = (1 + (k - 1) * nu):(k * nu)
+                block_B[row_range, col_range] = AB_k
             end
             AB_klast = copy(AB_k)
         else
@@ -589,28 +732,28 @@ function _build_condensed_blocks(
   
     c0 = h0[1,1] / 2
   
-    if S != nothing
-        if !iszero(S)
-            block_S = zeros(ns * (N + 1), nu * N)
+    if S != zeros(size(Q, 1), size(R, 1))
+        block_S = zeros(ns * (N + 1), nu * N)
 
-            for i in 1:N
-                row_range = (1 + ns * (i - 1)):(ns * i)
-                col_range = (1 + nu * (i - 1)):(nu * i)
+        for i in 1:N
+            row_range = (1 + ns * (i - 1)):(ns * i)
+            col_range = (1 + nu * (i - 1)):(nu * i)
 
-                block_S[row_range, col_range] = S
-            end        
+            block_S[row_range, col_range] = S
+        end        
 
-            BTS      = zeros(nu * N, nu * N)
-            s0T_AT_S = zeros(1, nu * N)
+        BTS      = zeros(nu * N, nu * N)
+        STB      = zeros(nu * N, nu * N)
+        s0T_AT_S = zeros(1, nu * N)
 
-            LinearAlgebra.mul!(BTS, transpose(block_B), block_S)
+        LinearAlgebra.mul!(BTS, transpose(block_B), block_S)
+        LinearAlgebra.mul!(STB, transpose(block_S), block_B)
 
-            LinearAlgebra.axpy!(1, BTS, BQB)
-            LinearAlgebra.axpy!(1, transpose(BTS), BQB)
+        LinearAlgebra.axpy!(1, BTS, BQB)
+        LinearAlgebra.axpy!(1, STB, BQB)
 
-            LinearAlgebra.mul!(s0T_AT_S, s0TAT, block_S)
-            LinearAlgebra.axpy!(1, s0T_AT_S, h)
-        end
+        LinearAlgebra.mul!(s0T_AT_S, s0TAT, block_S)
+        LinearAlgebra.axpy!(1, s0T_AT_S, h)
     end
   
     return (H = BQB, c = vec(h), c0 = c0, block_A = block_A, block_B = block_B, block_Q = block_Q, block_R = block_R)
@@ -897,6 +1040,38 @@ function _build_sparse_J1(A::M, B::M, N) where M <: AbstractMatrix
 
     return J1
 end
+
+function _build_sparse_J1_with_K(A::M, B::M, N, K::M) where M <: AbstractMatrix
+
+    ns = size(A, 2)
+    nu = size(B, 2)
+
+    J1 = SparseArrays.sparse([], [], eltype(A)[], 2 * ns * N, (ns* (N + 1) + 2 * nu * N))
+
+    I_s = .-Matrix(LinearAlgebra.I, ns, ns)
+    I_u = .-Matrix(LinearAlgebra.I, nu, nu)
+    I_v = Matrix(LinearAlgebra.I, nu, nu)
+
+    for i in 1:N
+        row_range  = (ns * (i - 1) + 1):(i * ns)
+        Acol_range = (ns * (i - 1) + 1):(i * ns)
+        Bcol_range = (ns * (N + 1) + 1 + (i - 1) * nu):(ns * (N + 1) + i * nu)
+        J1[row_range, Acol_range] = A
+        J1[row_range, Bcol_range] = B
+
+        Iscol_range  = (ns * i + 1):(ns * (i + 1))
+        Iucol_range  = (ns * (N + 1) + 1 + (i - 1) * nu):(ns * (N + 1) + i * nu)
+        Ivcol_range  = (ns * (N + 1) + nu * N + 1 + (i - 1) * nu): (ns * (N + 1) + nu * N + nu * i)
+        row_range_K  = (ns * (i + N - 1) + 1):((N + i) * ns)
+
+        J1[row_range, Iscol_range]   = I_s
+        J1[row_range_K, Acol_range]  = K
+        J1[row_range_K, Iucol_range] = I_u
+        J1[row_range_K, Ivcol_range] = I_v
+        
+    end
+
+    return J1
 
 function _build_sparse_J2(E, F, N)
     ns = size(E, 2)
