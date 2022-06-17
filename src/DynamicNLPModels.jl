@@ -795,49 +795,26 @@ julia> Q = [1 2; 2 1]; R = ones(1,1); _build_H(Q, R, 2)
 If `Qf` is not given, then `Qf` defaults to `Q`
 """
 function _build_H(
-    Q, R, N;
-    Qf = [])
-    if size(Qf,1) == 0
-        Qf = copy(Q)
-    end
-
+    Q::M, R::M, N;
+    Qf::M = Q) where M <: AbstractMatrix
     ns = size(Q, 1)
     nu = size(R, 1)
 
     H = SparseArrays.sparse([],[],eltype(Q)[],(ns * (N + 1) + nu * N), (ns * (N+1) + nu * N))
 
     for i in 1:N
-        for j in 1:ns
-            for k in 1:ns
-                row_index = (i - 1) * ns + k
-                col_index = (i - 1) * ns + j
-                H[row_index, col_index] = Q[k,j]
-
-            end
-        end
+        range_Q = (1 + (i - 1) * ns): (i * ns)
+        range_R = (ns * (N + 1) + 1 + (i - 1) * nu):(ns * (N + 1) + i * nu)
+        H[range_Q, range_Q] = Q
+        H[range_R, range_R] = R
     end
 
-    for j in 1:ns
-        for k in 1:ns
-            row_index = N * ns + k
-            col_index = N * ns + j
-            H[row_index, col_index] = Qf[k,j]
-        end
-    end
-
-
-    for i in 1:N
-        for j in 1:nu
-            for k in 1:nu
-                row_index = ns * (N + 1) + (i - 1) * nu + k
-                col_index = ns * (N + 1) + (i - 1) * nu + j
-                H[row_index, col_index] = R[k,j]
-            end
-        end
-    end
+    H[(N * ns + 1):( N * ns + ns), (N * ns + 1):(N * ns + ns)] = Qf
 
     return H
 end
+
+
 
 
 """
@@ -856,30 +833,28 @@ julia> A = [1 2 ; 3 4]; B = [5 6; 7 8]; _build_J(A,B,3)
   ⋅    ⋅    3.0   4.0    ⋅   -1.0   ⋅    ⋅   7.0  8.0   ⋅    ⋅
 ```
 """
-function _build_sparse_J1(A,B, N)
+function _build_sparse_J1(A::M, B::M, N) where M <: AbstractMatrix
+
     ns = size(A, 2)
     nu = size(B, 2)
 
+    J1 = SparseArrays.sparse([], [], eltype(A)[], ns * N, (ns* (N + 1) + nu * N))
 
-    J = SparseArrays.sparse([], [], eltype(A)[], ns * N, (ns* (N + 1) + nu * N))    
+    neg_ones = .-Matrix(LinearAlgebra.I, ns, ns)
 
     for i in 1:N
-        for j in 1:ns
-            row_index = (i - 1) * ns + j
-            J[row_index, (i * ns + j)] = -1
-            for k in 1:ns
-                col_index = (i - 1) * ns + k
-                J[row_index, col_index] = A[j,k]
-            end
+        row_range  = (ns * (i - 1) + 1):(i * ns)
+        Acol_range = (ns * (i - 1) + 1):(i * ns)
+        Bcol_range = (ns * (N + 1) + 1 + (i - 1) * nu):(ns * (N + 1) + i * nu)
+        J1[row_range, Acol_range] = A
+        J1[row_range, Bcol_range] = B
 
-            for k in 1:nu
-                col_index = ((N + 1) * ns) + (i - 1) * nu + k
-                J[row_index, col_index] = B[j,k]    
-            end
-        end
+        Icol_range = (ns * i + 1):(ns * (i + 1))
+
+        J1[row_range, Icol_range] = neg_ones
     end
 
-    return J
+    return J1
 end
 
 function _build_sparse_J2(E, F, N)
