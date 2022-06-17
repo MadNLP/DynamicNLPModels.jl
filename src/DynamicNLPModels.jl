@@ -795,9 +795,8 @@ julia> Q = [1 2; 2 1]; R = ones(1,1); _build_H(Q, R, 2)
 If `Qf` is not given, then `Qf` defaults to `Q`
 """
 function _build_H(
-    Q, R, N;
-    Qf = Q)
-
+    Q::M, R::M, N;
+    Qf::M = Q) where M <: AbstractMatrix
     ns = size(Q, 1)
     nu = size(R, 1)
 
@@ -816,6 +815,8 @@ function _build_H(
 end
 
 
+
+
 """
     _build_sparse_J1(A, B, N) -> J
 
@@ -832,7 +833,7 @@ julia> A = [1 2 ; 3 4]; B = [5 6; 7 8]; _build_J(A,B,3)
   ⋅    ⋅    3.0   4.0    ⋅   -1.0   ⋅    ⋅   7.0  8.0   ⋅    ⋅
 ```
 """
-function _build_sparse_J1(A, B, N)
+function _build_sparse_J1(A::M, B::M, N) where M <: AbstractMatrix
 
     ns = size(A, 2)
     nu = size(B, 2)
@@ -840,7 +841,7 @@ function _build_sparse_J1(A, B, N)
     J1 = SparseArrays.sparse([], [], eltype(A)[], ns * N, (ns* (N + 1) + nu * N))
 
     neg_ones = .-Matrix(LinearAlgebra.I, ns, ns)
-    
+
     for i in 1:N
         row_range  = (ns * (i - 1) + 1):(i * ns)
         Acol_range = (ns * (i - 1) + 1):(i * ns)
