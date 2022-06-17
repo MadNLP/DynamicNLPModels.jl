@@ -56,28 +56,36 @@ function build_QP_JuMP_model(
     if length(sl) > 0
         for i in NS
             for j in 0:N
-                @constraint(model, s[i,j] >= sl[i])
+                if sl[i] != -Inf
+                    @constraint(model, s[i,j] >= sl[i])
+                end
             end
         end
     end
     if length(su) > 0
         for i in NS
             for j in 0:N
-                @constraint(model, s[i,j] <= su[i])
+                if su[i] != Inf
+                    @constraint(model, s[i,j] <= su[i])
+                end
             end
         end
     end
     if length(ul) > 0
         for i in NU
             for j in 0:(N-1)
-                @constraint(model,  u[i,j] >= ul[i])
+                if ul[i] != -Inf
+                    @constraint(model,  u[i,j] >= ul[i])
+                end
             end
         end
     end
     if length(uu) > 0
         for i in NU
             for j in 0:(N-1)
-                @constraint(model, u[i,j] <= uu[i])
+                if uu[i] != Inf
+                    @constraint(model, u[i,j] <= uu[i])
+                end
             end
         end
     end

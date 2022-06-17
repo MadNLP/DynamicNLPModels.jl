@@ -407,35 +407,57 @@ function _build_condensed_lq_dynamic_model(dnlp::LQDynamicData{T,S,M}) where {T,
         block_gu[((i - 1) * ng  + 1):(i * ng)]  .= gu
     end
 
-    
 
-    J1, lcon1, ucon1, As0 = _build_condensed_G(block_A, block_B, block_E, block_F, block_gl, block_gu, s0, N)
+    condensed_blocks_G = _build_condensed_G(block_A, block_B, block_E, block_F, block_gl, block_gu, s0, N)
 
-    J2    = block_B[(1 + ns):end,:]
+    J1    = condensed_blocks_G.J
+    lcon1 = condensed_blocks_G.lcon
+    ucon1 = condensed_blocks_G.ucon
+    As0   = condensed_blocks_G.As0
 
-    lcon2 = zeros(size(J2, 1),1)
-    ucon2 = zeros(size(J2, 1),1)
+    bool_vec        = (su .!= Inf .|| sl .!= -Inf)
+    num_real_bounds = sum(bool_vec)
+
+    if num_real_bounds == length(sl)
+        J2         = block_B[(1 + ns):end,:]
+        As0_bounds = As0[(1 + ns):end,1]
+    else        
+        J2         = zeros(num_real_bounds * N, nu * N)
+        As0_bounds = zeros(num_real_bounds * N, 1)
+        for i in 1:N
+            row_range = (1 + (i - 1) * num_real_bounds):(i * num_real_bounds)
+            J2[row_range, :] = block_B[(1 + ns * i): (ns * (i + 1)), :][bool_vec, :]
+            As0_bounds[row_range, :] = As0[(1 + ns * i):(ns * (i + 1)), :][bool_vec, :]
+        end
+
+
+        sl = sl[bool_vec]
+        su = su[bool_vec]
+    end
+
 
     lcon  = zeros(length(lcon1) + size(J2,1))
     ucon  = zeros(length(ucon1) + size(J2,1))
+
+    lcon2 = zeros(size(J2, 1),1)
+    ucon2 = zeros(size(J2, 1),1)
 
     lcon[1:length(lcon1)] .= lcon1
     ucon[1:length(ucon1)] .= ucon1
 
 
     for i in 1:N
-        ucon2[((i - 1) * ns + 1):(i * ns),1] = su
-        lcon2[((i - 1) * ns + 1):(i * ns),1] = sl
+        lcon2[((i - 1) * length(su) + 1):(i * length(su)),1] = sl
+        ucon2[((i - 1) * length(su) + 1):(i * length(su)),1] = su
     end
 
-    LinearAlgebra.axpy!(-1, As0[(1 + ns):end,1], ucon2)
-    LinearAlgebra.axpy!(-1, As0[(1 + ns):end, 1], lcon2)
+    LinearAlgebra.axpy!(-1, As0_bounds, ucon2)
+    LinearAlgebra.axpy!(-1, As0_bounds, lcon2)
 
     lcon[(length(lcon1) + 1):end] .= lcon2
     ucon[(length(ucon1) + 1):end] .= ucon2
 
     J = vcat(J1, J2)
-
 
     nvar = nu * N
     nnzj = size(J, 1) * size(J, 2)
@@ -573,7 +595,7 @@ function _build_condensed_G(block_A, block_B, block_E, block_F, block_gl, block_
     LinearAlgebra.axpy!(-1, EAs0, block_gl)
     LinearAlgebra.axpy!(-1, EAs0, block_gu)
   
-    return G, vec(block_gl), vec(block_gu), As0
+    return (J = G, lcon = vec(block_gl), ucon = vec(block_gu), As0 = As0)
 end
 
 for field in fieldnames(LQDynamicData)
