@@ -165,7 +165,7 @@ function LQDynamicData(
         error("Dimensions of gu do not match E and F")
     end
 
-    if size(S, 1) != size(Q, 1) || size(S,2) != size(R,1)
+    if size(S, 1) != size(Q, 1) || size(S, 2) != size(R, 1)
         error("Dimensions of S do not match dimensions of Q and R")
     end
 
@@ -250,7 +250,7 @@ function LQDynamicModel(
     R::M,
     N;
     Qf::M = Q, 
-    S::M  = zeros(size(Q, 1), size(Q, 2)),
+    S::M  = zeros(size(Q, 1), size(R, 1)),
     E::M  = zeros(0, length(s0)),
     F::M  = zeros(0, size(R, 1)),
     sl::V = (similar(s0) .= -Inf),
