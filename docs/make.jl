@@ -29,6 +29,6 @@ makedocs(
 
 
 deploydocs(
-    repo = "github.com/sshin23/DynamicNLPModels.jl.git"
+    repo = "github.com/MadNLP/DynamicNLPModels.jl.git"
 )
 
