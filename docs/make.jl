@@ -30,5 +30,9 @@ makedocs(
 
 deploydocs(
     repo = "github.com/MadNLP/DynamicNLPModels.jl.git"
+    target = "build",
+    devbranch = "main",
+    devurl = "dev",
+    push_preview = true,
 )
 
