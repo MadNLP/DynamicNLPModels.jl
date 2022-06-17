@@ -28,7 +28,8 @@ function build_QP_JuMP_model(
         E  = [],
         F  = [],
         gl = [],
-        gu = []
+        gu = [],
+        S  = []
         )
 
     if size(Qf,1) == 0
@@ -47,8 +48,8 @@ function build_QP_JuMP_model(
     model = Model(MadNLP.Optimizer) # define model
 
 
-        @variable(model, s[NS, 0:N]) # define states 
-        @variable(model, u[NU, 0:(N-1)]) # define inputs
+    @variable(model, s[NS, 0:N]) # define states 
+    @variable(model, u[NU, 0:(N-1)]) # define inputs
 
 
 
@@ -110,7 +111,9 @@ function build_QP_JuMP_model(
     # Give objective function as xT Q x + uT R u where x is summed over T and u is summed over T-1
     @objective(model,Min,  sum( 1/2 * Q[s1, s2]*s[s1,t]*s[s2,t] for s1 in NS, s2 in NS, t in 0:(N-1)) + 
             sum( 1/2 * R[u1,u2] * u[u1, t] * u[u2,t] for t in 0:(N-1) , u1 in NU, u2 in NU) + 
-            sum( 1/2 * Qf[s1,s2] * s[s1,N] * s[s2, N]  for s1 in NS, s2 in NS))
+            sum( 1/2 * Qf[s1,s2] * s[s1,N] * s[s2, N]  for s1 in NS, s2 in NS) +
+            sum( S[s1, u1] * s[s1, t] * u[u1, t] for s1 in NS, u1 in NU, t in NN)
+            )
 
     return model
 end
