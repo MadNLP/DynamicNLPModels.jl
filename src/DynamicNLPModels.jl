@@ -15,7 +15,7 @@ abstract type AbstractLQDynData{T,V} end
 A struct to represent the features of the optimization problem 
 
 ```math
-    minimize    \\frac{1}{2} \\sum_{i = 0}^{N-1}(s_i^T Q s_i + u_i^T R u_i) + \\frac{1}{2} s_N^T Qf s_N
+    minimize    \\frac{1}{2} \\sum_{i = 0}^{N-1}(s_i^T Q s_i + 2 u_i^T S^T x_i + u_i^T R u_i) + \\frac{1}{2} s_N^T Qf s_N
     subject to  s_{i+1} = A s_i + B u_i  for i=0, 1, ..., N-1
                 gl \\le E s_i + F u_i \\le gu for i = 0, 1, ..., N-1
                 sl \\le s \\le su
@@ -30,7 +30,8 @@ Attributes include:
 - `Q` : objective function matrix for system states from 1:(N-1)
 - `R` : objective function matrix for system inputs from 1:(N-1)
 - `N` : number of time steps
-- `Qf`: objective function matrix for system state at time N; defaults to Q
+- `Qf`: objective function matrix for system state at time N
+- `S` : objective function matrix for system states and inputs
 - `ns`: number of state variables
 - `nu`: number of input varaibles
 - `E` : constraint matrix for state variables
@@ -71,7 +72,7 @@ end
     LQDynamicData(s0, A, B, Q, R, N; ...) -> LQDynamicData{T, V, M}
 A constructor for building an object of type `LQDynamicData` for the optimization problem 
 ```math
-    minimize    \\frac{1}{2} \\sum_{i = 0}^{N-1}(s_i^T Q s_i + u_i^T R u_i) + \\frac{1}{2} s_N^T Qf s_N
+    minimize    \\frac{1}{2} \\sum_{i = 0}^{N-1}(s_i^T Q s_i + 2 u_i^T S^T x_i + u_i^T R u_i) + \\frac{1}{2} s_N^T Qf s_N
     subject to  s_{i+1} = A s_i + B u_i  for i=0, 1, ..., N-1
                 gl \\le E s_i + F u_i \\le gu for i = 0, 1, ..., N-1
                 sl \\le s \\le su
@@ -90,6 +91,7 @@ The following attributes of the `LQDynamicData` type are detected automatically 
 - `nu`: number of input varaibles
 The following keyward arguments are also accepted
 - `Qf = Q`: objective function matrix for system state at time N; dimensions must be ns x ns
+- `S = zeros(size(Q, 1), size(R, 1))`: objective function matrix for system state and inputs
 - `E  = zeros(0, ns)` : constraint matrix for state variables
 - `F  = zeros(0, nu)` : constraint matrix for input variables
 - `sl = fill(-Inf, ns)`: vector of lower bounds on state variables
@@ -199,7 +201,7 @@ end
 A constructor for building a `LQDynamicModel <: QuadraticModels.AbstractQuadraticModel` from `LQDynamicData`
 Input data is for the problem of the form 
 ```math
-    minimize    \\frac{1}{2} \\sum_{i = 0}^{N-1}(s_i^T Q s_i + u_i^T R u_i) + \\frac{1}{2} s_N^T Qf s_N
+    minimize    \\frac{1}{2} \\sum_{i = 0}^{N-1}(s_i^T Q s_i + 2 u_i^T S^T x_i + u_i^T R u_i) + \\frac{1}{2} s_N^T Qf s_N
     subject to  s_{i+1} = A s_i + B u_i  for i=0, 1, ..., N-1
                 gl \\le E s_i + F u_i \\le gu for i = 0, 1, ..., N-1            
                 sl \\le s \\le su
