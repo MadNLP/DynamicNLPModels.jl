@@ -215,7 +215,7 @@ solution_ref_condense_from_data = madnlp(lq_condense_from_data, max_iter=100)
 @test solution_ref_sparse.solution[(ns * (N + 1) + 1):(ns * (N + 1) + nu*N)] ≈ solution_ref_condense.solution atol =  1e-6
 @test solution_ref_sparse_from_data.solution[(ns * (N + 1) + 1):(ns * (N + 1) + nu*N)] ≈ solution_ref_condense_from_data.solution atol =  1e-6
 
-@test size(lq_condense.data.A, 1) == size(E, 1) * 3 + sum(su .!= Inf .|| sl .!= -Inf) * N
+@test size(lq_condense.data.A, 1) == size(E, 1) * 3 + sum(su_with_inf .!= Inf .|| sl_with_inf .!= -Inf) * N
 
 
 # Test S matrix case
