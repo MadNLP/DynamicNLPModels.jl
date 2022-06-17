@@ -54,7 +54,7 @@ struct LQDynamicData{T,V,M} <: AbstractLQDynData{T,V}
     N
 
     Qf::M
-    S::M
+    S::Union{M, Nothing}
     ns::Int
     nu::Int
     E::M
@@ -91,7 +91,7 @@ The following attributes of the `LQDynamicData` type are detected automatically 
 - `nu`: number of input varaibles
 The following keyward arguments are also accepted
 - `Qf = Q`: objective function matrix for system state at time N; dimensions must be ns x ns
-- `S = zeros(size(Q, 1), size(R, 1))`: objective function matrix for system state and inputs
+- `S  = nothing`: objective function matrix for system state and inputs
 - `E  = zeros(0, ns)` : constraint matrix for state variables
 - `F  = zeros(0, nu)` : constraint matrix for input variables
 - `sl = fill(-Inf, ns)`: vector of lower bounds on state variables
@@ -110,7 +110,7 @@ function LQDynamicData(
     N;
 
     Qf::M = Q, 
-    S::M  = zeros(size(Q, 1), size(R, 1)),
+    S::Union{M, Nothing}  = nothing,
     E::M  = zeros(0, length(s0)),
     F::M  = zeros(0, size(R, 1)),
 
@@ -166,15 +166,15 @@ function LQDynamicData(
     if length(gu) != size(E, 1)
         error("Dimensions of gu do not match E and F")
     end
-
-    if size(S, 1) != size(Q, 1) || size(S, 2) != size(R, 1)
-        error("Dimensions of S do not match dimensions of Q and R")
+    if S != nothing
+        if size(S, 1) != size(Q, 1) || size(S, 2) != size(R, 1)
+            error("Dimensions of S do not match dimensions of Q and R")
+        end
     end
 
 
-
-    ns= size(Q,1)
-    nu= size(R,1)
+    ns = size(Q,1)
+    nu = size(R,1)
 
     LQDynamicData{T,V,M}(
         s0, A, B, Q, R, N,
@@ -252,7 +252,7 @@ function LQDynamicModel(
     R::M,
     N;
     Qf::M = Q, 
-    S::M  = zeros(size(Q, 1), size(R, 1)),
+    S::Union{M, Nothing}  = nothing,
     E::M  = zeros(0, length(s0)),
     F::M  = zeros(0, size(R, 1)),
     sl::V = (similar(s0) .= -Inf),
@@ -505,7 +505,7 @@ end
 function _build_condensed_blocks(
     s0, Q, R, A, B, N;
     Qf = Q, 
-    S = zeros(size(Q, 1), size(R, 1)))
+    S = nothing)
   
     ns = size(Q, 1)
     nu = size(R, 1)
@@ -589,28 +589,28 @@ function _build_condensed_blocks(
   
     c0 = h0[1,1] / 2
   
-    if S != zeros(size(Q, 1), size(R, 1))
-        block_S = zeros(ns * (N + 1), nu * N)
+    if S != nothing
+        if !iszero(S)
+            block_S = zeros(ns * (N + 1), nu * N)
 
-        for i in 1:N
-            row_range = (1 + ns * (i - 1)):(ns * i)
-            col_range = (1 + nu * (i - 1)):(nu * i)
+            for i in 1:N
+                row_range = (1 + ns * (i - 1)):(ns * i)
+                col_range = (1 + nu * (i - 1)):(nu * i)
 
-            block_S[row_range, col_range] = S
-        end        
+                block_S[row_range, col_range] = S
+            end        
 
-        BTS      = zeros(nu * N, nu * N)
-        STB      = zeros(nu * N, nu * N)
-        s0T_AT_S = zeros(1, nu * N)
+            BTS      = zeros(nu * N, nu * N)
+            s0T_AT_S = zeros(1, nu * N)
 
-        LinearAlgebra.mul!(BTS, transpose(block_B), block_S)
-        LinearAlgebra.mul!(STB, transpose(block_S), block_B)
+            LinearAlgebra.mul!(BTS, transpose(block_B), block_S)
 
-        LinearAlgebra.axpy!(1, BTS, BQB)
-        LinearAlgebra.axpy!(1, STB, BQB)
+            LinearAlgebra.axpy!(1, BTS, BQB)
+            LinearAlgebra.axpy!(1, transpose(BTS), BQB)
 
-        LinearAlgebra.mul!(s0T_AT_S, s0TAT, block_S)
-        LinearAlgebra.axpy!(1, s0T_AT_S, h)
+            LinearAlgebra.mul!(s0T_AT_S, s0TAT, block_S)
+            LinearAlgebra.axpy!(1, s0T_AT_S, h)
+        end
     end
   
     return (H = BQB, c = vec(h), c0 = c0, block_A = block_A, block_B = block_B, block_Q = block_Q, block_R = block_R)
@@ -833,7 +833,7 @@ If `Qf` is not given, then `Qf` defaults to `Q`
 function _build_H(
     Q::M, R::M, N;
     Qf::M = Q,
-    S::M = zeros(size(Q, 1), size(R, 1))) where M <: AbstractMatrix
+    S::Union{M, Nothing} = nothing) where M <: AbstractMatrix
     ns = size(Q, 1)
     nu = size(R, 1)
 
@@ -844,9 +844,10 @@ function _build_H(
         range_R = (ns * (N + 1) + 1 + (i - 1) * nu):(ns * (N + 1) + i * nu)
         H[range_Q, range_Q] = Q
         H[range_R, range_R] = R
-
-        H[range_Q, range_R] = S
-        H[range_R, range_Q] = transpose(S)
+        if S != nothing
+            H[range_Q, range_R] = S
+            H[range_R, range_Q] = transpose(S)
+        end
     end
 
     H[(N * ns + 1):( N * ns + ns), (N * ns + 1):(N * ns + ns)] = Qf
