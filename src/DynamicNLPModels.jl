@@ -6,7 +6,7 @@ import LinearAlgebra
 import SparseArrays
 import SparseArrays: SparseMatrixCSC
 
-export get_QM, LQDynamicData, LQDynamicModel
+export LQDynamicData, LQDynamicModel
 
 abstract type AbstractLQDynData{T,V} end
 """
@@ -448,13 +448,11 @@ function _build_condensed_lq_dynamic_model(dnlp::LQDynamicData{T,V,M}) where {T,
         block_gu[((i - 1) * ng  + 1):(i * ng)]  = gu
     end
 
-
     condensed_blocks_G = _build_condensed_G(block_A, block_B, block_E, block_F, block_gl, block_gu, As0, s0, N)
 
     J1    = condensed_blocks_G.J
     lcon1 = condensed_blocks_G.lcon
     ucon1 = condensed_blocks_G.ucon
-    As0   = condensed_blocks_G.As0
 
     bool_vec        = (su .!= Inf .|| sl .!= -Inf)
     num_real_bounds = sum(bool_vec)
@@ -471,11 +469,9 @@ function _build_condensed_lq_dynamic_model(dnlp::LQDynamicData{T,V,M}) where {T,
             As0_bounds[row_range, :] = As0[(1 + ns * i):(ns * (i + 1)), :][bool_vec, :]
         end
 
-
         sl = sl[bool_vec]
         su = su[bool_vec]
     end
-
 
     lcon  = zeros(length(lcon1) + size(J2,1))
     ucon  = zeros(length(ucon1) + size(J2,1))
@@ -485,7 +481,6 @@ function _build_condensed_lq_dynamic_model(dnlp::LQDynamicData{T,V,M}) where {T,
 
     lcon[1:length(lcon1)] .= lcon1
     ucon[1:length(ucon1)] .= ucon1
-
 
     for i in 1:N
         lcon2[((i - 1) * length(su) + 1):(i * length(su)),1] = sl
@@ -504,7 +499,6 @@ function _build_condensed_lq_dynamic_model(dnlp::LQDynamicData{T,V,M}) where {T,
     nnzj = size(J, 1) * size(J, 2)
     nnzh = sum(LinearAlgebra.LowerTriangular(H) .!= 0)
     ncon = size(J, 1)
-
 
     LQDynamicModel(
         NLPModels.NLPModelMeta(
@@ -554,7 +548,6 @@ function _build_condensed_lq_dynamic_model_with_K(dnlp::LQDynamicData{T,V,M}) wh
     gl = dnlp.gl
     gu = dnlp.gu
 
-    
     condensed_blocks = _build_condensed_blocks_with_K(s0, Q, R, A, B, N, K; Qf = Qf, S = S)
 
     block_A = condensed_blocks.block_A
@@ -563,6 +556,7 @@ function _build_condensed_lq_dynamic_model_with_K(dnlp::LQDynamicData{T,V,M}) wh
     c       = condensed_blocks.c
     c0      = condensed_blocks.c0
     block_K = condensed_blocks.block_K
+    As0     = condensed_blocks.As0
 
     nE1 = size(E, 1)
     nE2 = size(E, 2)
@@ -583,8 +577,7 @@ function _build_condensed_lq_dynamic_model_with_K(dnlp::LQDynamicData{T,V,M}) wh
         block_gu[((i - 1) * ng  + 1):(i * ng)]  = gu
     end
 
-
-    condensed_blocks_G = _build_condensed_G_with_K(block_A, block_B, block_E, block_F, block_gl, block_gu, block_K, s0, N)
+    condensed_blocks_G = _build_condensed_G_with_K(block_A, block_B, block_E, block_F, block_gl, block_gu, block_K, As0, s0, N)
 
     # J1 are the constraints from the E and F matrices,
     # J2 are the constraints from the state variable bounds, and
@@ -593,7 +586,6 @@ function _build_condensed_lq_dynamic_model_with_K(dnlp::LQDynamicData{T,V,M}) wh
     J1    = condensed_blocks_G.J   
     lcon1 = condensed_blocks_G.lcon
     ucon1 = condensed_blocks_G.ucon
-    As0   = condensed_blocks_G.As0
 
     bool_vec2        = (su .!= Inf .|| sl .!= -Inf)
     num_real_bounds = sum(bool_vec2)
@@ -614,36 +606,30 @@ function _build_condensed_lq_dynamic_model_with_K(dnlp::LQDynamicData{T,V,M}) wh
         su = su[bool_vec2]
     end
 
-    bool_vec3       = (ul != -Inf .|| uu != Inf)
+    bool_vec3       = (ul .!= -Inf .|| uu .!= Inf)
     num_real_bounds = sum(bool_vec3)
 
-    if num_real_bounds != 0
-        KBI  = zeros(nu * N, nu * N)
-        KAs0 = zeros(nu * N, 1)
+    KBI  = zeros(nu * N, nu * N)
+    KAs0 = zeros(nu * N, 1)
+    I_mat = 1.0Matrix(LinearAlgebra.I, nu * N, nu * N)
 
-        LinearAlgebra.mul!(KBI, block_K, block_B)
-        LinearAlgebra.axpy!(1, LinearAlgebra.I, KBI)
-        LinearAlgebra.mul!(KAs0, block_K, As0)
-        if num_real_bounds == length(ul)
-            J3 = KBI
-        else
-            J3          = zeros(num_real_bounds * N, nu * N)
-            KAs0_bounds = zeros(num_real_boudns * N, 1)
-            for i in 1:N
-                row_range   = (1 + (i - 1) * num_real-bounds):(i * num_real_bounds)
-                J3[row_range, :] = KBI[(1 + nu * (i - 1)):(nu * i), :][bool_vec3, :]
-                KAs0_bounds      = KAs0[(1 + nu * (i - 1)):(nu * i), 1][bool_vec3,1]
-            end
-
-            ul = ul[bool_vec3]
-            uu = uu[bool_vec3]
+    LinearAlgebra.mul!(KBI, block_K, block_B)
+    LinearAlgebra.axpy!(1, I_mat, KBI)
+    LinearAlgebra.mul!(KAs0, block_K, As0)
+    if num_real_bounds == length(ul)
+        J3 = KBI
+    else
+        J3          = zeros(num_real_bounds * N, nu * N)
+        KAs0_bounds = zeros(num_real_bounds * N, 1)
+        for i in 1:N
+            row_range   = (1 + (i - 1) * num_real_bounds):(i * num_real_bounds)
+            J3[row_range, :] = KBI[(1 + nu * (i - 1)):(nu * i), :][bool_vec3, :]
+            KAs0_bounds[row_range, :]      = KAs0[(1 + nu * (i - 1)):(nu * i), 1][bool_vec3,1]
         end
+
+        ul = ul[bool_vec3]
+        uu = uu[bool_vec3]
     end
-
-
-    
-
-
 
     lcon  = zeros(length(lcon1) + size(J2, 1) + size(J3, 1))
     ucon  = zeros(length(ucon1) + size(J2, 1) + size(J3, 1))
@@ -663,12 +649,19 @@ function _build_condensed_lq_dynamic_model_with_K(dnlp::LQDynamicData{T,V,M}) wh
         ucon2[((i - 1) * length(su) + 1):(i * length(su)),1] = su
 
         lcon3[((i -1) * length(uu) + 1):(i * length(uu)),1] = ul
-        lcon3[((i -1) * length(uu) + 1):(i * length(uu)),1] = uu
+        ucon3[((i -1) * length(uu) + 1):(i * length(uu)),1] = uu
     end
-
 
     LinearAlgebra.axpy!(-1, As0_bounds, ucon2)
     LinearAlgebra.axpy!(-1, As0_bounds, lcon2)
+
+    if num_real_bounds == nu
+        LinearAlgebra.axpy!(-1, KAs0, ucon3)
+        LinearAlgebra.axpy!(-1, KAs0, lcon3)
+    else
+        LinearAlgebra.axpy!(-1, KAs0_bounds, lcon3)
+        LinearAlgebra.axpy!(-1, KAs0_bounds, ucon3)
+    end
 
     lcon[(length(lcon1) + 1):(length(lcon1) + size(lcon2,1))] .= lcon2
     ucon[(length(ucon1) + 1):(length(lcon1) + size(lcon2,1))] .= ucon2
@@ -707,7 +700,6 @@ function _build_condensed_lq_dynamic_model_with_K(dnlp::LQDynamicData{T,V,M}) wh
         true
     )
 end
-
 
 function _build_condensed_blocks(
     s0, Q, R, A, B, N;
@@ -773,7 +765,7 @@ function _build_condensed_blocks(
 
     block_A[(ns * N + 1):ns * (N + 1), :] = A_k
     block_Q[(ns * N + 1):((N + 1) * ns), (N * ns + 1):((N + 1) * ns)] = Qf
-  
+
     # build quadratic term
     QB  = similar(block_B)
     BQB = zeros(nu * N, nu * N)
@@ -820,7 +812,7 @@ function _build_condensed_blocks(
         end
     end
   
-    return (H = BQB, c = vec(h), c0 = c0, block_A = block_A, block_B = block_B, block_Q = block_Q, block_R = block_R, As0 = transpose(S0TAT))
+    return (H = BQB, c = vec(h), c0 = c0, block_A = block_A, block_B = block_B, block_Q = block_Q, block_R = block_R, As0 = transpose(s0TAT))
 end
 
 function _build_condensed_blocks_with_K(
@@ -840,9 +832,15 @@ function _build_condensed_blocks_with_K(
   
     block_A[1:ns, 1:ns] = Matrix(LinearAlgebra.I, ns, ns)
   
+    A_k = copy(A)
+    bk  = zeros(size(B,1), size(K,2))
+
+    LinearAlgebra.mul!(bk, B, K)
+    LinearAlgebra.axpy!(1, bk, A_k)
+
     # Define matrices for mul!
-    A_klast  = copy(A)
-    A_k      = zeros(size(A))
+    A_klast  = copy(A_k)
+    A_knew   = zeros(size(A))
     AB_klast = zeros(size(B))
     AB_k     = zeros(size(B))
   
@@ -851,7 +849,7 @@ function _build_condensed_blocks_with_K(
         row_range = (j * ns + 1):((j + 1) * ns)
         col_range = ((j - 1) * nu + 1):(j * nu)
         block_B[row_range, col_range] = B
-        block_K[col_range, row_range] = K
+        block_K[col_range, ((j - 1) * ns + 1):(j * ns)] = K
 
         block_Q[((j - 1) * ns + 1):(j * ns), ((j - 1) * ns + 1):(j * ns)] = Q
         block_R[((j - 1) * nu + 1):(j * nu), ((j - 1) * nu + 1):(j * nu)] = R
@@ -860,8 +858,8 @@ function _build_condensed_blocks_with_K(
     # Fill the A and B matrices
     for i in 1:(N - 1)
         if i == 1
-            block_A[(ns + 1):ns*2, :] = A
-            LinearAlgebra.mul!(AB_k, A, B)
+            block_A[(ns + 1):ns*2, :] = A_k
+            LinearAlgebra.mul!(AB_k, A_k, B)
             for k in 1:(N-i)
                 row_range = (1 + (k + 1) * ns):((k + 2) * ns)
                 col_range = (1 + (k - 1) * nu):(k * nu)
@@ -869,9 +867,9 @@ function _build_condensed_blocks_with_K(
             end
             AB_klast = copy(AB_k)
         else
-            LinearAlgebra.mul!(AB_k, A, AB_klast)
-            LinearAlgebra.mul!(A_k, A, A_klast)
-            block_A[(ns * i + 1):ns * (i + 1),:] .= A_k
+            LinearAlgebra.mul!(AB_k, A_k, AB_klast)
+            LinearAlgebra.mul!(A_knew, A_k, A_klast)
+            block_A[(ns * i + 1):ns * (i + 1),:] .= A_knew
   
             for k in 1:(N-i)
                 row_range = (1 + (k + i) * ns):((k + i + 1) * ns)
@@ -880,16 +878,15 @@ function _build_condensed_blocks_with_K(
             end
   
             AB_klast = copy(AB_k)
-            A_klast  = copy(A_k)
+            A_klast  = copy(A_knew)
         end
     end
-  
 
-    LinearAlgebra.mul!(A_k, A, A_klast)
 
-    block_A[(ns * N + 1):ns * (N + 1), :] .= A_k
+    LinearAlgebra.mul!(A_knew, A_k, A_klast)
+
+    block_A[(ns * N + 1):ns * (N + 1), :] .= A_knew
     block_Q[(ns * N + 1):((N + 1) * ns), (N * ns + 1):((N + 1) * ns)] .= Qf
-
 
     if S != nothing
         block_S = zeros(ns * (N + 1), nu * N)
@@ -901,19 +898,28 @@ function _build_condensed_blocks_with_K(
         end
     end
 
-    RK   = zeros(nu * N, ns * (N + 1))
-    KTRK = zeros(ns * (N + 1), ns * (N + 1))
-    KB   = zeros(nu * N, nu * N)
-    RKBI = zeros(nu * N, nu * N)
-    RKB  = zeros(nu * N, nu * N)
+    RK    = zeros(nu * N, ns * (N + 1))
+    KTRK  = zeros(ns * (N + 1), ns * (N + 1))
+    KB    = zeros(nu * N, nu * N)
+    RKBI  = zeros(nu * N, nu * N)
+    RKB   = zeros(nu * N, nu * N)
+    I_mat = 1.0Matrix(LinearAlgebra.I, nu * N, nu * N)
     
 
     LinearAlgebra.mul!(RK, block_R, block_K)             # RK for H term
     LinearAlgebra.mul!(KTRK, transpose(block_K), RK)     # K^T RK for H term
     LinearAlgebra.mul!(KB, block_K, block_B)             # KB for h term
     KBI  = copy(KB)
-    LinearAlgebra.axpy!(1, LinearAlgebra.I, KBI)    # (KB + I) for h term
-    LinearAlgebra.mul!(RKBI, block_R, KBI)          # R(KB + I) for h term
+    LinearAlgebra.axpy!(1, I_mat, KBI)                   # (KB + I) for h term
+    LinearAlgebra.mul!(RKBI, block_R, KBI)               # R(KB + I) for h h0R_term
+
+    h0R_term = zeros(1,1)
+    s0TAT = zeros(1, ns * (N + 1))
+    KTRKAs0 = zeros(ns * (N + 1), 1)
+
+    LinearAlgebra.mul!(s0TAT, transpose(s0), transpose(block_A))
+    LinearAlgebra.mul!(KTRKAs0, KTRK, transpose(s0TAT))
+    LinearAlgebra.mul!(h0R_term, s0TAT, KTRKAs0)
 
     if S != nothing
         SK  = zeros(ns * (N + 1), ns * (N + 1))
@@ -929,13 +935,9 @@ function _build_condensed_blocks_with_K(
 
         LinearAlgebra.axpy!(1, STB, RKBI)
         LinearAlgebra.axpy!(1, transpose(block_S), RK)
-        
-        LinearAlgebra.axpy!(1, SK, KTRK)
-        LinearAlgebra.axpy!(1, transpose(SK), KTRK)
     end
 
     LinearAlgebra.axpy!(1, block_Q, KTRK)  
-    LinearAlgebra.mul!(RKB, RK, block_B)
 
     # build quadratic term
     KTRK_B   = zeros(ns * (N + 1), nu * N)
@@ -943,27 +945,25 @@ function _build_condensed_blocks_with_K(
 
     LinearAlgebra.mul!(KTRK_B, KTRK, block_B)
     LinearAlgebra.mul!(B_KTRK_B, transpose(block_B), KTRK_B)
+
     LinearAlgebra.axpy!(1, block_R, B_KTRK_B)
-    
-    if S != nothing
-        LinearAlgebra.axpy!(1, RKB, B_KTRK_B)
-        LinearAlgebra.axpy!(1, transpose(RKB), B_KTRK_B)
-    end
-    
+
+    LinearAlgebra.mul!(RKB, RK, block_B)
+
+    LinearAlgebra.axpy!(1, RKB, B_KTRK_B)
+    LinearAlgebra.axpy!(1, transpose(RKB), B_KTRK_B)
+
     # build linear term 
     h    = zeros(1, nu * N)
-    s0TAT = zeros(1, ns * (N + 1))
-    LinearAlgebra.mul!(s0TAT, transpose(s0), transpose(block_A))
 
     QB = zeros(ns * (N + 1), nu * N)
     LinearAlgebra.mul!(QB, block_Q, block_B)
     if S != nothing
-        LinearAlgebra.axpy!(1, STB, RBKI)
         LinearAlgebra.axpy!(1, SKBI, QB)
     end
 
     KT_RKBI = zeros(ns * (N + 1), nu * N)
-    LinearAlgebra.mul!(KT_RKBI, transpose(K), RKBI)
+    LinearAlgebra.mul!(KT_RKBI, transpose(block_K), RKBI)
     LinearAlgebra.axpy!(1, KT_RKBI, QB)
 
     LinearAlgebra.mul!(h, s0TAT, QB)
@@ -973,10 +973,20 @@ function _build_condensed_blocks_with_K(
     h0  = zeros(1,1)
     LinearAlgebra.mul!(QAs, block_Q, transpose(s0TAT))
     LinearAlgebra.mul!(h0, s0TAT, QAs)
-  
+    LinearAlgebra.axpy!(1, h0R_term, h0)
+
+    if S != nothing
+        SKAs0   = zeros(ns * (N + 1), 1)
+        h0S_term = zeros(1,1)
+
+        LinearAlgebra.mul!(SKAs0, SK, transpose(s0TAT))
+        LinearAlgebra.mul!(h0S_term, s0TAT, SKAs0)
+        LinearAlgebra.axpy!(2, h0S_term, h0)
+    end
+
     c0 = h0[1,1] / 2
   
-    return (H = B_KTRK_B, c = vec(h), c0 = c0, block_A = block_A, block_B = block_B, block_Q = block_Q, block_R = block_R, As0 = transpose(S0TAT), block_K = block_K)
+    return (H = B_KTRK_B, c = vec(h), c0 = c0, block_A = block_A, block_B = block_B, block_Q = block_Q, block_R = block_R, As0 = transpose(s0TAT), block_K = block_K)
 end
 
 function _build_condensed_G(block_A, block_B, block_E, block_F, block_gl, block_gu, As0, s0, N)
@@ -998,6 +1008,7 @@ end
 function _build_condensed_G_with_K(block_A, block_B, block_E, block_F, block_gl, block_gu, block_K, As0, s0, N)
   
     G = zeros(size(block_F))
+    ns = length(s0)
   
     EAs0 = zeros(size(block_E, 1), 1)
     FK   = zeros(size(block_F, 1), ns * (N + 1))
@@ -1055,8 +1066,6 @@ for field in [:s0, :sl, :su, :ul, :uu]
     @eval $method(dyn_model::LQDynamicModel, index, val) = (dyn_model.dynamic_data.$field[index]=val)
     @eval export $method
 end
-
-
 
 function fill_structure!(S::SparseMatrixCSC, rows, cols)
   count = 1
@@ -1188,7 +1197,6 @@ function NLPModels.jac_coord!(
   return vals
 end
 
-
 """ 
     _build_H(Q, R, N; Qf = []) -> H
 
@@ -1235,9 +1243,6 @@ function _build_H(
     return H
 end
 
-
-
-
 """
     _build_sparse_J1(A, B, N) -> J
 
@@ -1283,7 +1288,7 @@ function _build_sparse_J1_with_K(A::M, B::M, N, K::M) where M <: AbstractMatrix
     ns = size(A, 2)
     nu = size(B, 2)
 
-    J1 = SparseArrays.sparse([], [], eltype(A)[], 2 * ns * N, (ns* (N + 1) + 2 * nu * N))
+    J1 = SparseArrays.sparse([], [], eltype(A)[], nu * N + ns * N, (ns* (N + 1) + 2 * nu * N))
 
     I_s = .-Matrix(LinearAlgebra.I, ns, ns)
     I_u = .-Matrix(LinearAlgebra.I, nu, nu)
@@ -1299,7 +1304,7 @@ function _build_sparse_J1_with_K(A::M, B::M, N, K::M) where M <: AbstractMatrix
         Iscol_range  = (ns * i + 1):(ns * (i + 1))
         Iucol_range  = (ns * (N + 1) + 1 + (i - 1) * nu):(ns * (N + 1) + i * nu)
         Ivcol_range  = (ns * (N + 1) + nu * N + 1 + (i - 1) * nu): (ns * (N + 1) + nu * N + nu * i)
-        row_range_K  = (ns * (i + N - 1) + 1):((N + i) * ns)
+        row_range_K  = (ns * N + nu * (i - 1) + 1):(ns * N + i * nu)
 
         J1[row_range, Iscol_range]   = I_s
         J1[row_range_K, Acol_range]  = K
@@ -1309,6 +1314,7 @@ function _build_sparse_J1_with_K(A::M, B::M, N, K::M) where M <: AbstractMatrix
     end
 
     return J1
+end
 
 function _build_sparse_J2(E, F, N)
     ns = size(E, 2)
