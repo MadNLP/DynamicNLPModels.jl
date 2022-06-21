@@ -8,12 +8,12 @@ nu = 1 # number of inputs
 # generate random Q, R, A, and B matrices
 Random.seed!(10)
 Q_rand = Random.rand(ns, ns)
-Q = Q_rand * transpose(Q_rand) + I
+Q = Q_rand * Q_rand' + I
 R_rand   = Random.rand(nu,nu)
-R    = R_rand * transpose(R_rand) + I
+R    = R_rand * R_rand' + I
 
 A_rand = rand(ns, ns)
-A = A_rand * transpose(A_rand) + I
+A = A_rand * A_rand' + I
 B = rand(ns, nu)
 
 # generate upper and lower bounds
@@ -31,7 +31,7 @@ sl_with_inf[1] = -Inf
 
 
 Qf_rand = Random.rand(ns,ns)
-Qf = Qf_rand * transpose(Qf_rand) + I
+Qf = Qf_rand * Qf_rand' + I
 
 E  = rand(3, ns)
 F  = rand(3, nu)

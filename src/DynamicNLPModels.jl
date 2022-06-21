@@ -37,7 +37,7 @@ Attributes include:
 - `nu`: number of input varaibles
 - `E` : constraint matrix for state variables
 - `F` : constraint matrix for input variables
-- `K` : constraint matrix for state elimination
+- `K` : feedback gain matrix
 - `sl`: vector of lower bounds on state variables
 - `su`: vector of upper bounds on state variables
 - `ul`: vector of lower bounds on input variables
@@ -96,9 +96,9 @@ The following attributes of the `LQDynamicData` type are detected automatically 
 The following keyward arguments are also accepted
 - `Qf = Q`: objective function matrix for system state at time N; dimensions must be ns x ns
 - `S  = nothing`: objective function matrix for system state and inputs
-- `E  = zeros(0, ns)` : constraint matrix for state variables
-- `F  = zeros(0, nu)` : constraint matrix for input variables
-- `K  = nothing`      : constraint matrix for state elimination
+- `E  = zeros(0, ns)`  : constraint matrix for state variables
+- `F  = zeros(0, nu)`  : constraint matrix for input variables
+- `K  = nothing`       : feedback gain matrix
 - `sl = fill(-Inf, ns)`: vector of lower bounds on state variables
 - `su = fill(Inf, ns)` : vector of upper bounds on state variables
 - `ul = fill(-Inf, nu)`: vector of lower bounds on input variables
@@ -405,7 +405,7 @@ function _build_sparse_lq_dynamic_model(dnlp::LQDynamicData{T, V, M, MK}) where 
     new_E = copy(E)
 
     KTR  = zeros(size(K, 2), size(R, 2))
-    LinearAlgebra.mul!(KTR, transpose(K), R)
+    LinearAlgebra.mul!(KTR, K', R)
     LinearAlgebra.axpy!(1, KTR, new_S)
 
     SK   = zeros(size(S, 1), size(K, 2))
@@ -413,7 +413,7 @@ function _build_sparse_lq_dynamic_model(dnlp::LQDynamicData{T, V, M, MK}) where 
     LinearAlgebra.mul!(SK, S, K)
     LinearAlgebra.mul!(KTRK, KTR, K)
     LinearAlgebra.axpy!(1, SK, new_Q)
-    LinearAlgebra.axpy!(1, transpose(SK), new_Q)
+    LinearAlgebra.axpy!(1, SK', new_Q)
     LinearAlgebra.axpy!(1, KTRK, new_Q)
 
     BK    = zeros(size(B, 1), size(K, 2))
@@ -883,24 +883,24 @@ function _build_condensed_H_blocks(block_Q, block_R, block_A, block_B, block_S, 
 
     LinearAlgebra.mul!(As0, block_A, s0)
     LinearAlgebra.mul!(QB, block_Q, block_B)
-    LinearAlgebra.mul!(STB, transpose(block_S), block_B)
-    LinearAlgebra.mul!(B_Q_B, transpose(block_B), QB)
+    LinearAlgebra.mul!(STB, block_S', block_B)
+    LinearAlgebra.mul!(B_Q_B, block_B', QB)
 
     # Define Hessian term so that H = B_Q_B
     LinearAlgebra.axpy!(1, block_R, B_Q_B)
     LinearAlgebra.axpy!(1, STB, B_Q_B)
-    LinearAlgebra.axpy!(1, transpose(STB), B_Q_B)
+    LinearAlgebra.axpy!(1, STB', B_Q_B)
 
     # Define linear term so that c = h
     h = zeros(1, size(block_B, 2))
     LinearAlgebra.axpy!(1, block_S, QB)
-    LinearAlgebra.mul!(h, transpose(As0), QB)
+    LinearAlgebra.mul!(h, As0', QB)
 
     # Define linear term so that c0 = h0
     h0   = zeros(1,1)
     QAs0 = zeros(size(block_Q, 1), 1)
     LinearAlgebra.mul!(QAs0, block_Q, As0)
-    LinearAlgebra.mul!(h0, transpose(As0), QAs0)
+    LinearAlgebra.mul!(h0, As0', QAs0)
 
     return (H = B_Q_B, c = h, c0 = h0 / 2)
 end
@@ -924,10 +924,10 @@ function _build_condensed_H_blocks(block_Q, block_R, block_A, block_B, block_S, 
     LinearAlgebra.mul!(RKB, RK, block_B)
     LinearAlgebra.mul!(SK, block_S, block_K)
     LinearAlgebra.mul!(SKB, SK, block_B)
-    LinearAlgebra.mul!(STB, transpose(block_S), block_B)
-    LinearAlgebra.mul!(KTSTB, transpose(block_K), STB)
+    LinearAlgebra.mul!(STB, block_S', block_B)
+    LinearAlgebra.mul!(KTSTB, block_K', STB)
     LinearAlgebra.mul!(QB, block_Q, block_B)
-    LinearAlgebra.mul!(KTRK, transpose(block_K), RK)
+    LinearAlgebra.mul!(KTRK, block_K', RK)
     LinearAlgebra.mul!(KTRK_B, KTRK, block_B)
 
     LinearAlgebra.axpy!(1, KTRK_B, QB)
@@ -935,18 +935,18 @@ function _build_condensed_H_blocks(block_Q, block_R, block_A, block_B, block_S, 
     LinearAlgebra.axpy!(1, KTSTB, QB)  # QB now equals QB + KTRKB + SKB + KTSTB
 
     # Define Hessian term so that H = B_Q_B
-    LinearAlgebra.mul!(B_Q_B, transpose(block_B), QB)
+    LinearAlgebra.mul!(B_Q_B, block_B', QB)
     LinearAlgebra.axpy!(1, block_R, B_Q_B)
-    LinearAlgebra.axpy!(1, transpose(RKB), B_Q_B)
+    LinearAlgebra.axpy!(1, RKB', B_Q_B)
     LinearAlgebra.axpy!(1, RKB, B_Q_B)
     LinearAlgebra.axpy!(1, STB, B_Q_B)
-    LinearAlgebra.axpy!(1, transpose(STB), B_Q_B)
+    LinearAlgebra.axpy!(1, STB', B_Q_B)
 
     # Define linear term so that c = h
     h = zeros(1, size(block_B, 2))
     LinearAlgebra.axpy!(1, block_S, QB)
-    LinearAlgebra.axpy!(1, transpose(RK), QB)
-    LinearAlgebra.mul!(h, transpose(As0), QB)
+    LinearAlgebra.axpy!(1, RK', QB)
+    LinearAlgebra.mul!(h, As0', QB)
 
     # Define constant term sot hat c0 = h0
     hR_term = zeros(1, 1) # = s0^T A^T K^T R K A s0
@@ -961,9 +961,9 @@ function _build_condensed_H_blocks(block_Q, block_R, block_A, block_B, block_S, 
     LinearAlgebra.mul!(SKAs0, SK, As0)
     LinearAlgebra.mul!(QAs0, block_Q, As0)
 
-    LinearAlgebra.mul!(hR_term, transpose(As0), KTRKAs0)
-    LinearAlgebra.mul!(hS_term, transpose(As0), SKAs0)
-    LinearAlgebra.mul!(hQ_term, transpose(As0), QAs0)
+    LinearAlgebra.mul!(hR_term, As0', KTRKAs0)
+    LinearAlgebra.mul!(hS_term, As0', SKAs0)
+    LinearAlgebra.mul!(hQ_term, As0', QAs0)
     
     h0 = 1 / 2 * hR_term + 1 / 2 * hQ_term + hS_term
 
@@ -1205,7 +1205,7 @@ function _build_H(
         H[range_R, range_R] = R
         if S != nothing
             H[range_Q, range_R] = S
-            H[range_R, range_Q] = transpose(S)
+            H[range_R, range_Q] = S'
         end
     end
 
