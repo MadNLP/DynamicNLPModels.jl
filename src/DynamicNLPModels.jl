@@ -430,11 +430,9 @@ function _build_sparse_lq_dynamic_model(dnlp::LQDynamicData{T, V, M, MK}) where 
     J2  = _build_sparse_J2(new_E, F, N)
     J3, lcon3, ucon3  = _build_sparse_J3(K, N, uu, ul)
 
-    println(size(J2))
-
     J   = vcat(J1, J2)
     J   = vcat(J, J3)
-    
+
     nvar = ns * (N + 1) + nu * N
     
     lvar  = fill(-Inf, nvar)
