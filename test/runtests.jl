@@ -168,6 +168,13 @@ solution_ref_condense_from_data = madnlp(lq_condense_from_data, max_iter=100)
 @test solution_ref_sparse_from_data.solution[(ns * (N + 1) + 1):(ns * (N + 1) + nu*N)] ≈ solution_ref_condense_from_data.solution atol =  1e-6
 
 
+# Test get_u and get_s functions with no K matrix
+s_values = value.(all_variables(model)[1:(ns * (N + 1))])
+u_values = value.(all_variables(model)[(1 + ns * (N + 1)):(ns * (N + 1) + nu * N)])
+
+@test s_values ≈ get_s(solution_ref_sparse, lq_sparse) atol = 1e-7
+@test u_values ≈ get_u(solution_ref_sparse, lq_sparse) atol = 1e-7
+
 
 # Test with E and F matrix bounds
 model       = build_QP_JuMP_model(Q,R,A,B, N;s0=s0, sl = sl, ul = ul, su = su, uu = uu, E = E, F = F, gl = gl, gu = gu)
@@ -372,7 +379,9 @@ solution_ref_condense_from_data = madnlp(lq_condense_from_data, max_iter=100)
 
 
 
-# Test get_u function
+# Test get_u and get_s functions with K matrix
+s_values = value.(all_variables(model)[1:(ns * (N + 1))])
 u_values = value.(all_variables(model)[(1 + ns * (N + 1)):(ns * (N + 1) + nu * N)])
 
+@test s_values ≈ get_s(solution_ref_sparse, lq_sparse) atol = 1e-7
 @test u_values ≈ get_u(solution_ref_sparse, lq_sparse) atol = 1e-7

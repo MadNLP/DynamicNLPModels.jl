@@ -6,7 +6,7 @@ import LinearAlgebra
 import SparseArrays
 import SparseArrays: SparseMatrixCSC
 
-export LQDynamicData, LQDynamicModel, get_u
+export LQDynamicData, LQDynamicModel, get_u, get_s
 
 abstract type AbstractLQDynData{T,V} end
 """
@@ -1023,8 +1023,41 @@ function get_u(
 
             u[start_v:end_v] = Ks
         end
-        
+
         return u
+    end
+end
+
+function get_u(
+    solver_status, 
+    lqdm::LQDynamicModel{T, V, M1, M2, M3, MK}
+    ) where {T, V <: AbstractVector{T}, M1 <: AbstractMatrix{T}, M2 <: AbstractMatrix{T}, M3 <: AbstractMatrix{T}, MK <: Nothing}
+
+    if lqdm.condense == false
+        solution = solver_status.solution
+        ns       = lqdm.dynamic_data.ns
+        nu       = lqdm.dynamic_data.nu
+        N        = lqdm.dynamic_data.N
+
+        u = solution[(ns * (N + 1)+1):end]
+        return u
+    else
+        return solver_stats.solution
+    end
+end
+
+function get_s(
+    solver_status, 
+    lqdm::LQDynamicModel{T, V, M1, M2, M3, MK}
+    ) where {T, V <: AbstractVector{T}, M1 <: AbstractMatrix{T}, M2 <: AbstractMatrix{T}, M3 <: AbstractMatrix{T}, MK <: Union{Nothing, AbstractMatrix}}
+
+    if lqdm.condense == false
+        solution = solver_status.solution
+        ns       = lqdm.dynamic_data.ns
+        N        = lqdm.dynamic_data.N
+
+        s = solution[1:(ns * (N + 1))]
+        return s
     end
 end
 
