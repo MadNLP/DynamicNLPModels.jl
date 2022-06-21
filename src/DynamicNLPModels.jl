@@ -6,7 +6,7 @@ import LinearAlgebra
 import SparseArrays
 import SparseArrays: SparseMatrixCSC
 
-export LQDynamicData, LQDynamicModel, _build_condensed_blocks
+export LQDynamicData, LQDynamicModel, get_u
 
 abstract type AbstractLQDynData{T,V} end
 """
@@ -991,6 +991,41 @@ function _build_condensed_G_blocks(block_A, block_B, block_E, block_F, block_K, 
     LinearAlgebra.axpy!(-1, EAs0, block_gu)
   
     return (J = G, lcon = vec(block_gl), ucon = vec(block_gu), As0 = As0)
+end
+
+function get_u(
+    solver_status, 
+    lqdm::LQDynamicModel{T, V, M1, M2, M3, MK}
+    ) where {T, V <: AbstractVector{T}, M1 <: AbstractMatrix{T}, M2 <: AbstractMatrix{T}, M3 <: AbstractMatrix{T}, MK <: AbstractMatrix{T}}
+
+    if lqdm.condense == false
+        solution = solver_status.solution
+        ns       = lqdm.dynamic_data.ns
+        nu       = lqdm.dynamic_data.nu
+        N        = lqdm.dynamic_data.N
+        K        = lqdm.dynamic_data.K
+
+        u = zeros(T, nu * N)
+
+        for i in 1:N
+            start_v = (i - 1) * nu + 1
+            end_v   = i * nu
+            start_s = (i - 1) * ns + 1
+            end_s   = i * ns
+
+            Ks = zeros(T, size(K, 1), 1)
+
+            s = solution[start_s:end_s]
+            v = solution[(ns * (N + 1) + start_v):(ns * (N + 1) + end_v)]
+
+            LinearAlgebra.mul!(Ks, K, s)
+            LinearAlgebra.axpy!(1, v, Ks)
+
+            u[start_v:end_v] = Ks
+        end
+        
+        return u
+    end
 end
 
 for field in fieldnames(LQDynamicData)
