@@ -10,13 +10,14 @@ export LQDynamicData, LQDynamicModel, _build_condensed_blocks
 
 abstract type AbstractLQDynData{T,V} end
 """
-    LQDynamicData{T,V,M} <: AbstractLQDynData{T,V}
+    LQDynamicData{T,V,M,MK} <: AbstractLQDynData{T,V}
 
 A struct to represent the features of the optimization problem 
 
 ```math
     minimize    \\frac{1}{2} \\sum_{i = 0}^{N-1}(s_i^T Q s_i + 2 u_i^T S^T x_i + u_i^T R u_i) + \\frac{1}{2} s_N^T Qf s_N
     subject to  s_{i+1} = A s_i + B u_i  for i=0, 1, ..., N-1
+                u_i = Kx_i + v_i  \\forall i = 0, 1, ..., N - 1
                 gl \\le E s_i + F u_i \\le gu for i = 0, 1, ..., N-1
                 sl \\le s \\le su
                 ul \\le u \\le uu
@@ -36,6 +37,7 @@ Attributes include:
 - `nu`: number of input varaibles
 - `E` : constraint matrix for state variables
 - `F` : constraint matrix for input variables
+- `K` : constraint matrix for state elimination
 - `sl`: vector of lower bounds on state variables
 - `su`: vector of upper bounds on state variables
 - `ul`: vector of lower bounds on input variables
@@ -74,8 +76,9 @@ end
 A constructor for building an object of type `LQDynamicData` for the optimization problem 
 ```math
     minimize    \\frac{1}{2} \\sum_{i = 0}^{N-1}(s_i^T Q s_i + 2 u_i^T S^T x_i + u_i^T R u_i) + \\frac{1}{2} s_N^T Qf s_N
-    subject to  s_{i+1} = A s_i + B u_i  for i=0, 1, ..., N-1
-                gl \\le E s_i + F u_i \\le gu for i = 0, 1, ..., N-1
+    subject to  s_{i+1} = A s_i + B u_i  \\forall i=0, 1, ..., N - 1
+                u_i = Kx_i + v_i  \\forall i = 0, 1, ..., N - 1
+                gl \\le E s_i + F u_i \\le gu \\forall i = 0, 1, ..., N-1
                 sl \\le s \\le su
                 ul \\le u \\le uu
                 s_0 = s0
@@ -95,6 +98,7 @@ The following keyward arguments are also accepted
 - `S  = nothing`: objective function matrix for system state and inputs
 - `E  = zeros(0, ns)` : constraint matrix for state variables
 - `F  = zeros(0, nu)` : constraint matrix for input variables
+- `K  = nothing`      : constraint matrix for state elimination
 - `sl = fill(-Inf, ns)`: vector of lower bounds on state variables
 - `su = fill(Inf, ns)` : vector of upper bounds on state variables
 - `ul = fill(-Inf, nu)`: vector of lower bounds on input variables
@@ -208,6 +212,7 @@ Input data is for the problem of the form
 ```math
     minimize    \\frac{1}{2} \\sum_{i = 0}^{N-1}(s_i^T Q s_i + 2 u_i^T S^T x_i + u_i^T R u_i) + \\frac{1}{2} s_N^T Qf s_N
     subject to  s_{i+1} = A s_i + B u_i  for i=0, 1, ..., N-1
+                u_i = Kx_i + v_i  \\forall i = 0, 1, ..., N - 1
                 gl \\le E s_i + F u_i \\le gu for i = 0, 1, ..., N-1            
                 sl \\le s \\le su
                 ul \\le u \\le uu
@@ -225,6 +230,8 @@ If `condense=false`, data is converted to the form
 Resulting `H` and `J` matrices are stored as `QuadraticModels.QPData` within the `LQDynamicModel` struct and 
 variable and constraint limits are stored within `NLPModels.NLPModelMeta`
 
+If `K` is defined, then `u` variables are replaced by `v` variables, and `u` can be queried by functions to be built within `DynamicNLPModels.jl`
+
 ---
 
 If `condense=true`, data is converted to the form 
@@ -236,6 +243,9 @@ If `condense=true`, data is converted to the form
 ```
 
 Resulting `H`, `J`, `h`, and `h0` matrices are stored within `QuadraticModels.QPData` as `H`, `A`, `c`, and `c0` attributes respectively
+
+If `K` is defined, then `u` variables are replaced by `v` variables. The bounds on `u` are transformed into algebraic constraints,
+and `u` can be queried by functions to be built within `DynamicNLPModels.jl`
 """
 function LQDynamicModel(dnlp::LQDynamicData{T,V,M}; condense = false) where {T, V <: AbstractVector{T}, M  <: AbstractMatrix{T}, MK <: Union{Nothing, AbstractMatrix{T}}}
 
