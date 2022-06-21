@@ -430,6 +430,8 @@ function _build_sparse_lq_dynamic_model(dnlp::LQDynamicData{T, V, M, MK}) where 
     J2  = _build_sparse_J2(new_E, F, N)
     J3, lcon3, ucon3  = _build_sparse_J3(K, N, uu, ul)
 
+    println(size(J2))
+
     J   = vcat(J1, J2)
     J   = vcat(J, J3)
     
@@ -1286,7 +1288,7 @@ function _build_sparse_J3(K, N, uu, ul)
     nu = length(ul)
     ns = size(K, 2)
 
-    bool_vec        = (ul .!= -Inf .|| uu != Inf)
+    bool_vec        = (ul .!= -Inf .|| uu .!= Inf)
     num_real_bounds = sum(bool_vec)
 
     J3 = SparseArrays.sparse([],[],eltype(K)[], nu * N, ns * (N + 1) + nu * N)
@@ -1312,55 +1314,4 @@ function _build_sparse_J3(K, N, uu, ul)
     return J3[full_bool_vec, :], lcon3[full_bool_vec], ucon3[full_bool_vec]
 end
 
-
 end # module
-
-
-#=
-
-    # build quadratic term
-    QB  = similar(block_B)
-    BQB = zeros(nu * N, nu * N)
-
-    LinearAlgebra.mul!(QB, block_Q, block_B)
-    LinearAlgebra.mul!(BQB, transpose(block_B), QB)
-    LinearAlgebra.axpy!(1, block_R, BQB)
-    
-    # build linear term 
-    h    = zeros(1, nu * N)
-    s0TAT = zeros(1, size(block_A,1))
-    LinearAlgebra.mul!(s0TAT, transpose(s0), transpose(block_A))
-    LinearAlgebra.mul!(h, s0TAT, QB)
-  
-    # build constant term 
-    QAs = zeros(size(s0TAT,2), size(s0TAT,1))
-    h0  = zeros(1,1)
-    LinearAlgebra.mul!(QAs, block_Q, transpose(s0TAT))
-    LinearAlgebra.mul!(h0, s0TAT, QAs)
-  
-    c0 = h0[1,1] / 2
-  
-    if S != nothing
-        if !iszero(S)
-            block_S = zeros(ns * (N + 1), nu * N)
-
-            for i in 1:N
-                row_range = (1 + ns * (i - 1)):(ns * i)
-                col_range = (1 + nu * (i - 1)):(nu * i)
-
-                block_S[row_range, col_range] = S
-            end        
-
-            BTS      = zeros(nu * N, nu * N)
-            s0T_AT_S = zeros(1, nu * N)
-
-            LinearAlgebra.mul!(BTS, transpose(block_B), block_S)
-
-            LinearAlgebra.axpy!(1, BTS, BQB)
-            LinearAlgebra.axpy!(1, transpose(BTS), BQB)
-
-            LinearAlgebra.mul!(s0T_AT_S, s0TAT, block_S)
-            LinearAlgebra.axpy!(1, s0T_AT_S, h)
-        end
-    end
-    =#
