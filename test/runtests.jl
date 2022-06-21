@@ -174,6 +174,8 @@ u_values = value.(all_variables(model)[(1 + ns * (N + 1)):(ns * (N + 1) + nu * N
 
 @test s_values ≈ get_s(solution_ref_sparse, lq_sparse) atol = 1e-7
 @test u_values ≈ get_u(solution_ref_sparse, lq_sparse) atol = 1e-7
+@test s_values ≈ get_s(solution_ref_condense, lq_condense) atol = 1e-6
+@test u_values ≈ get_u(solution_ref_condense, lq_condense) atol = 1e-7
 
 
 # Test with E and F matrix bounds
@@ -385,3 +387,5 @@ u_values = value.(all_variables(model)[(1 + ns * (N + 1)):(ns * (N + 1) + nu * N
 
 @test s_values ≈ get_s(solution_ref_sparse, lq_sparse) atol = 1e-7
 @test u_values ≈ get_u(solution_ref_sparse, lq_sparse) atol = 1e-7
+@test s_values ≈ get_s(solution_ref_condense, lq_condense) atol = 1e-7
+@test u_values ≈ get_u(solution_ref_condense, lq_condense) atol = 1e-7

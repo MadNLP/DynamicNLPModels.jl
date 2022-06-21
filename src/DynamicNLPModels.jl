@@ -230,7 +230,7 @@ If `condense=false`, data is converted to the form
 Resulting `H` and `J` matrices are stored as `QuadraticModels.QPData` within the `LQDynamicModel` struct and 
 variable and constraint limits are stored within `NLPModels.NLPModelMeta`
 
-If `K` is defined, then `u` variables are replaced by `v` variables, and `u` can be queried by functions to be built within `DynamicNLPModels.jl`
+If `K` is defined, then `u` variables are replaced by `v` variables, and `u` can be queried by `get_u` and `get_s` within `DynamicNLPModels.jl`
 
 ---
 
@@ -245,7 +245,7 @@ If `condense=true`, data is converted to the form
 Resulting `H`, `J`, `h`, and `h0` matrices are stored within `QuadraticModels.QPData` as `H`, `A`, `c`, and `c0` attributes respectively
 
 If `K` is defined, then `u` variables are replaced by `v` variables. The bounds on `u` are transformed into algebraic constraints,
-and `u` can be queried by functions to be built within `DynamicNLPModels.jl`
+and `u` can be queried by `get_u` and `get_s` within `DynamicNLPModels.jl`
 """
 function LQDynamicModel(dnlp::LQDynamicData{T,V,M}; condense = false) where {T, V <: AbstractVector{T}, M  <: AbstractMatrix{T}, MK <: Union{Nothing, AbstractMatrix{T}}}
 
@@ -993,6 +993,85 @@ function _build_condensed_G_blocks(block_A, block_B, block_E, block_F, block_K, 
     return (J = G, lcon = vec(block_gl), ucon = vec(block_gu), As0 = As0)
 end
 
+function _build_condensed_blocks(
+    A, B, K, N
+    )
+
+    nu = size(B, 2)
+    ns = size(A, 2)
+
+    if K == nothing
+        K = zeros(nu, ns)
+    end    
+  
+    # Define block matrices
+    block_B = zeros(ns * (N + 1), nu * N)
+    block_A = zeros(ns * (N + 1), ns)
+    block_K = SparseArrays.sparse([],[], eltype(A)[], nu * N, ns * (N + 1))
+
+    # Add diagonal of Bs and fill Q, R, S, and K block matrices
+    for j in 1:N
+        B_row_range = (j * ns + 1):((j + 1) * ns)
+        B_col_range = ((j - 1) * nu + 1):(j * nu)
+        block_B[B_row_range, B_col_range] = B
+  
+        K_row_range = ((j - 1) * nu + 1):(j * nu)
+        block_K[K_row_range, ((j - 1) * ns + 1):(j * ns)] = K
+    end
+
+    block_A[1:ns, 1:ns] = Matrix(LinearAlgebra.I, ns, ns)
+  
+    A_k = copy(A)
+    BK  = zeros(size(B, 1), size(K, 2))
+    LinearAlgebra.mul!(BK, B, K)
+    LinearAlgebra.axpy!(1, BK, A_k)
+
+    # Define matrices for mul!
+    A_klast  = copy(A_k)
+    A_knext  = copy(A_k)
+    AB_klast = zeros(size(B))
+    AB_k     = zeros(size(B))
+  
+    # Fill the A and B matrices
+    for i in 1:(N - 1)
+        if i == 1
+            block_A[(ns + 1):ns*2, :] = A_k
+            LinearAlgebra.mul!(AB_k, A_k, B)
+            for k in 1:(N-i)
+                row_range = (1 + (k + 1) * ns):((k + 2) * ns)
+                col_range = (1 + (k - 1) * nu):(k * nu)
+                block_B[row_range, col_range] = AB_k
+            end
+            AB_klast = copy(AB_k)
+        else
+            LinearAlgebra.mul!(AB_k, A_k, AB_klast)
+            LinearAlgebra.mul!(A_knext, A_k, A_klast)
+            block_A[(ns * i + 1):ns * (i + 1),:] = A_knext
+  
+            for k in 1:(N-i)
+                row_range = (1 + (k + i) * ns):((k + i + 1) * ns)
+                col_range = (1 + (k - 1) * nu):(k * nu)
+                block_B[row_range, col_range] = AB_k
+            end
+  
+            AB_klast = copy(AB_k)
+            A_klast  = copy(A_knext)
+        end
+    end
+
+    LinearAlgebra.mul!(A_knext, A_k, A_klast)
+
+    block_A[(ns * N + 1):ns * (N + 1), :] = A_knext
+  
+    return (A = block_A, B = block_B, K = block_K)
+end
+
+"""
+    get_u(solution_ref, lqdm::LQDynamicModel) -> u <: vector
+
+Query the solution `u` from the solver. If `K = nothing`, the solution for `u` is queried from `solution_ref.solution`
+If `K <: AbstractMatrix`, `solution_ref.solution` returns `v`, and `get_u` solves for `u` using the `K` matrix. 
+"""
 function get_u(
     solver_status, 
     lqdm::LQDynamicModel{T, V, M1, M2, M3, MK}
@@ -1023,8 +1102,31 @@ function get_u(
 
             u[start_v:end_v] = Ks
         end
-
         return u
+    else
+        dnlp = lqdm.dynamic_data
+        condensed_blocks = _build_condensed_blocks(dnlp.A, dnlp.B, dnlp.K, dnlp.N)
+        block_A = condensed_blocks.A
+        block_B = condensed_blocks.B
+        block_K = condensed_blocks.K
+
+        v = solver_status.solution
+
+        As0 = zeros(T, size(block_A, 1), 1)
+        Bv  = zeros(T, size(block_B, 1), 1)
+
+        LinearAlgebra.mul!(As0, block_A, dnlp.s0)
+        LinearAlgebra.mul!(Bv, block_B, v)
+        LinearAlgebra.axpy!(1, As0, Bv)
+
+        Ks = zeros(T, size(block_K, 1), 1)
+
+        LinearAlgebra.mul!(Ks, block_K, Bv)
+
+        u = copy(v)
+        LinearAlgebra.axpy!(1, Ks, u)
+
+        return vec(u)
     end
 end
 
@@ -1042,10 +1144,17 @@ function get_u(
         u = solution[(ns * (N + 1)+1):end]
         return u
     else
-        return solver_stats.solution
+        return solver_status.solution
     end
 end
 
+"""
+    get_s(solution_ref, lqdm::LQDynamicModel) -> s <: vector
+
+Query the solution `s` from the solver. If `lqdm.condense == false`, the solution is queried directly from `solution_ref.solution`
+If `lqdm.condense == true`, then `solution_ref.solution` returns `u` (if `K = nothing`) or `v` (if `K <: AbstactMatrix`), and `s` is found form
+transforming `u` or `v` into `s` using `A`, `B`, and `K` matrices.
+"""
 function get_s(
     solver_status, 
     lqdm::LQDynamicModel{T, V, M1, M2, M3, MK}
@@ -1058,6 +1167,22 @@ function get_s(
 
         s = solution[1:(ns * (N + 1))]
         return s
+    else
+        dnlp = lqdm.dynamic_data
+        condensed_blocks = _build_condensed_blocks(dnlp.A, dnlp.B, dnlp.K, dnlp.N)
+        block_A = condensed_blocks.A
+        block_B = condensed_blocks.B
+
+        v = solver_status.solution
+
+        As0 = zeros(T, size(block_A, 1), 1)
+        Bv  = zeros(T, size(block_B, 1), 1)
+
+        LinearAlgebra.mul!(As0, block_A, dnlp.s0)
+        LinearAlgebra.mul!(Bv, block_B, v)
+        LinearAlgebra.axpy!(1, As0, Bv)
+
+        return vec(Bv)
     end
 end
 
