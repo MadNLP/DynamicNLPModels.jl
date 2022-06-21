@@ -299,7 +299,7 @@ solution_ref_condense_from_data = madnlp(lq_condense_from_data, max_iter=100)
 nu = 2 # number of inputs
 
 # generate random Q, R, A, and B matrices
-Random.seed!(10)
+Random.seed!(3)
 R_rand   = Random.rand(nu,nu)
 R    = R_rand * transpose(R_rand) + I
 
