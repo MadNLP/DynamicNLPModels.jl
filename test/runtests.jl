@@ -341,8 +341,8 @@ solution_ref_condense_from_data = madnlp(lq_condense_from_data, max_iter=100)
 @test objective_value(model) ≈ solution_ref_sparse_from_data.objective atol = 1e-7
 @test objective_value(model) ≈ solution_ref_condense_from_data.objective atol = 1e-5
 
-@test solution_ref_sparse.solution[(ns * (N + 1) + 1):(ns * (N + 1) + nu*N)] ≈ solution_ref_condense.solution atol =  1e-6
-@test solution_ref_sparse_from_data.solution[(ns * (N + 1) + 1):(ns * (N + 1) + nu*N)] ≈ solution_ref_condense_from_data.solution atol =  1e-6
+@test solution_ref_sparse.solution[(ns * (N + 1) + 1):(ns * (N + 1) + nu*N)] ≈ solution_ref_condense.solution atol =  1e-5
+@test solution_ref_sparse_from_data.solution[(ns * (N + 1) + 1):(ns * (N + 1) + nu*N)] ≈ solution_ref_condense_from_data.solution atol =  1e-5
 
 
 
@@ -367,5 +367,5 @@ solution_ref_condense_from_data = madnlp(lq_condense_from_data, max_iter=100)
 @test objective_value(model) ≈ solution_ref_sparse_from_data.objective atol = 1e-7
 @test objective_value(model) ≈ solution_ref_condense_from_data.objective atol = 1e-5
 
-@test solution_ref_sparse.solution[(ns * (N + 1) + 1):(ns * (N + 1) + nu*N)] ≈ solution_ref_condense.solution atol =  1e-6
-@test solution_ref_sparse_from_data.solution[(ns * (N + 1) + 1):(ns * (N + 1) + nu*N)] ≈ solution_ref_condense_from_data.solution atol =  1e-6
+@test solution_ref_sparse.solution[(ns * (N + 1) + 1):(ns * (N + 1) + nu*N)] ≈ solution_ref_condense.solution atol =  1e-5
+@test solution_ref_sparse_from_data.solution[(ns * (N + 1) + 1):(ns * (N + 1) + nu*N)] ≈ solution_ref_condense_from_data.solution atol =  1e-5

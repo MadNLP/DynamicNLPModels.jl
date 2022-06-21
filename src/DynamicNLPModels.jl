@@ -530,7 +530,7 @@ function _build_condensed_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) where 
     c  = H_blocks.c
     c0 = H_blocks.c0
 
-    G_blocks = _build_condensed_G_blocks(block_A, block_B, block_E, block_F, block_K, block_gl, block_gu, s0, N, K)
+    G_blocks = _build_condensed_G_blocks(block_A, block_B, block_E, block_F, block_K, block_gl, block_gu, s0, N)
 
     J1   = G_blocks.J
     lcon = G_blocks.lcon
@@ -656,7 +656,7 @@ function _build_condensed_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) where 
     c  = H_blocks.c
     c0 = H_blocks.c0
 
-    G_blocks = _build_condensed_G_blocks(block_A, block_B, block_E, block_F, block_K, block_gl, block_gu, s0, N, K)
+    G_blocks = _build_condensed_G_blocks(block_A, block_B, block_E, block_F, block_K, block_gl, block_gu, s0, N)
 
     J1   = G_blocks.J
     lcon = G_blocks.lcon
@@ -971,25 +971,8 @@ function _build_condensed_H_blocks(block_Q, block_R, block_A, block_B, block_S, 
 end
 
 
-function _build_condensed_G_blocks(block_A, block_B, block_E, block_F, block_K, block_gl, block_gu, s0, N, K::MK) where MK <: Nothing
-  
-    G = zeros(size(block_F))
-  
-    As0  = zeros(size(block_A, 1), 1)
-    EAs0 = zeros(size(block_E, 1), 1)
 
-    LinearAlgebra.mul!(G, block_E, block_B)
-    LinearAlgebra.axpy!(1, block_F, G)
-
-    LinearAlgebra.mul!(As0, block_A, s0)
-    LinearAlgebra.mul!(EAs0, block_E, As0)
-    LinearAlgebra.axpy!(-1, EAs0, block_gl)
-    LinearAlgebra.axpy!(-1, EAs0, block_gu)
-  
-    return (J = G, lcon = vec(block_gl), ucon = vec(block_gu), As0 = As0)
-end
-
-function _build_condensed_G_blocks(block_A, block_B, block_E, block_F, block_K, block_gl, block_gu, s0, N, K::MK) where MK <: AbstractMatrix
+function _build_condensed_G_blocks(block_A, block_B, block_E, block_F, block_K, block_gl, block_gu, s0, N)
   
     G = zeros(size(block_F))
   
