@@ -1077,7 +1077,7 @@ function get_u(
     lqdm::LQDynamicModel{T, V, M1, M2, M3, MK}
     ) where {T, V <: AbstractVector{T}, M1 <: AbstractMatrix{T}, M2 <: AbstractMatrix{T}, M3 <: AbstractMatrix{T}, MK <: AbstractMatrix{T}}
 
-    if lqdm.condense == false
+    if !lqdm.condense
         solution = solver_status.solution
         ns       = lqdm.dynamic_data.ns
         nu       = lqdm.dynamic_data.nu
@@ -1135,7 +1135,7 @@ function get_u(
     lqdm::LQDynamicModel{T, V, M1, M2, M3, MK}
     ) where {T, V <: AbstractVector{T}, M1 <: AbstractMatrix{T}, M2 <: AbstractMatrix{T}, M3 <: AbstractMatrix{T}, MK <: Nothing}
 
-    if lqdm.condense == false
+    if !lqdm.condense
         solution = solver_status.solution
         ns       = lqdm.dynamic_data.ns
         nu       = lqdm.dynamic_data.nu
@@ -1160,7 +1160,7 @@ function get_s(
     lqdm::LQDynamicModel{T, V, M1, M2, M3, MK}
     ) where {T, V <: AbstractVector{T}, M1 <: AbstractMatrix{T}, M2 <: AbstractMatrix{T}, M3 <: AbstractMatrix{T}, MK <: Union{Nothing, AbstractMatrix}}
 
-    if lqdm.condense == false
+    if !lqdm.condense
         solution = solver_status.solution
         ns       = lqdm.dynamic_data.ns
         N        = lqdm.dynamic_data.N
