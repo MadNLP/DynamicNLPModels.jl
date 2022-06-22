@@ -253,10 +253,10 @@ mutable struct DenseLQDynamicModel{T, V, M1, M2, M3, M4, MK} <:  AbstractDynamic
 end
 
 """
-    LQDynamicModel(dnlp::LQDynamicData; condense=false)      -> SparseLQDynamicModel/DenseLQDynamicModel
-    LQDynamicModel(s0, A, B, Q, R, N; condense = false, ...) -> SparseLQDynamicModel/DenseLQDynamicModel
-A constructor for building a `SparseLQDynamicModel <: QuadraticModels.AbstractQuadraticModel` (if condense = false)
-or a `DenseLQDynamicModel <: QuadraticModels.AbstractQuadraticModel` (if condense = true) from `LQDynamicData`
+    LQDynamicModel(dnlp::LQDynamicData; dense=false)      -> SparseLQDynamicModel/DenseLQDynamicModel
+    LQDynamicModel(s0, A, B, Q, R, N; dense = false, ...) -> SparseLQDynamicModel/DenseLQDynamicModel
+A constructor for building a `SparseLQDynamicModel <: QuadraticModels.AbstractQuadraticModel` (if dense = false)
+or a `DenseLQDynamicModel <: QuadraticModels.AbstractQuadraticModel` (if dense = true) from `LQDynamicData`
 Input data is for the problem of the form 
 ```math
     minimize    \\frac{1}{2} \\sum_{i = 0}^{N-1}(s_i^T Q s_i + 2 u_i^T S^T x_i + u_i^T R u_i) + \\frac{1}{2} s_N^T Qf s_N
@@ -269,7 +269,7 @@ Input data is for the problem of the form
 ```
 ---
 
-If `condense=false`, data is converted to the form 
+If `dense=false`, data is converted to the form 
 
 ```math
     minimize    \\frac{1}{2} z^T H z 
@@ -283,7 +283,7 @@ If `K` is defined, then `u` variables are replaced by `v` variables, and `u` can
 
 ---
 
-If `condense=true`, data is converted to the form 
+If `dense=true`, data is converted to the form 
 
 ```math
     minimize    \\frac{1}{2} u^T H u + h^T u + h0 
@@ -296,12 +296,12 @@ Resulting `H`, `J`, `h`, and `h0` matrices are stored within `QuadraticModels.QP
 If `K` is defined, then `u` variables are replaced by `v` variables. The bounds on `u` are transformed into algebraic constraints,
 and `u` can be queried by `get_u` and `get_s` within `DynamicNLPModels.jl`
 """
-function LQDynamicModel(dnlp::LQDynamicData{T,V,M}; condense = false) where {T, V <: AbstractVector{T}, M  <: AbstractMatrix{T}, MK <: Union{Nothing, AbstractMatrix{T}}}
+function LQDynamicModel(dnlp::LQDynamicData{T,V,M}; dense = false) where {T, V <: AbstractVector{T}, M  <: AbstractMatrix{T}, MK <: Union{Nothing, AbstractMatrix{T}}}
 
-    if !condense
+    if !dense
         _build_sparse_lq_dynamic_model(dnlp)
     else
-        _build_condensed_lq_dynamic_model(dnlp)
+        _build_dense_lq_dynamic_model(dnlp)
     end
 
 
@@ -325,12 +325,12 @@ function LQDynamicModel(
     uu::V = (similar(s0,size(R, 1)) .=  Inf),
     gl::V = fill(-Inf, size(E, 1)),
     gu::V = fill(Inf, size(F, 1)),
-    condense=false
+    dense=false
 ) where {T, V <: AbstractVector{T}, M <: AbstractMatrix{T}, MK <: Union{Nothing, AbstractMatrix{T}}}
 
     dnlp = LQDynamicData(s0, A, B, Q, R, N; Qf = Qf, S = S, E = E, F = F, K = K, sl = sl, su = su, ul = ul, uu = uu, gl = gl, gu = gu)
     
-    LQDynamicModel(dnlp; condense=condense)
+    LQDynamicModel(dnlp; dense=dense)
 
 end
 
@@ -534,7 +534,7 @@ function _build_sparse_lq_dynamic_model(dnlp::LQDynamicData{T, V, M, MK}) where 
 end
 
 
-function _build_condensed_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) where {T, V <: AbstractVector{T}, M <: AbstractMatrix{T}, MK <: Nothing}
+function _build_dense_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) where {T, V <: AbstractVector{T}, M <: AbstractMatrix{T}, MK <: Nothing}
     s0 = dnlp.s0
     A  = dnlp.A
     B  = dnlp.B
@@ -558,25 +558,25 @@ function _build_condensed_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) where 
     gu = dnlp.gu
 
 
-    condensed_blocks = _build_condensed_blocks(s0, Q, R, A, B, E, F, N, gu, gl, K; Qf = Qf, S = S)
-    block_A  = condensed_blocks.A
-    block_B  = condensed_blocks.B
-    block_Q  = condensed_blocks.Q
-    block_R  = condensed_blocks.R
-    block_E  = condensed_blocks.E
-    block_F  = condensed_blocks.F
-    block_S  = condensed_blocks.S
-    block_K  = condensed_blocks.K
-    block_gl = condensed_blocks.gl
-    block_gu = condensed_blocks.gu
+    dense_blocks = _build_block_matrices(s0, Q, R, A, B, E, F, N, gu, gl, K; Qf = Qf, S = S)
+    block_A  = dense_blocks.A
+    block_B  = dense_blocks.B
+    block_Q  = dense_blocks.Q
+    block_R  = dense_blocks.R
+    block_E  = dense_blocks.E
+    block_F  = dense_blocks.F
+    block_S  = dense_blocks.S
+    block_K  = dense_blocks.K
+    block_gl = dense_blocks.gl
+    block_gu = dense_blocks.gu
 
-    H_blocks = _build_condensed_H_blocks(block_Q, block_R, block_A, block_B, block_S, block_K, s0, N, K)
+    H_blocks = _build_H_blocks(block_Q, block_R, block_A, block_B, block_S, block_K, s0, N, K)
 
     H  = H_blocks.H
     c  = H_blocks.c
     c0 = H_blocks.c0
 
-    G_blocks = _build_condensed_G_blocks(block_A, block_B, block_E, block_F, block_K, block_gl, block_gu, s0, N)
+    G_blocks = _build_G_blocks(block_A, block_B, block_E, block_F, block_K, block_gl, block_gu, s0, N)
 
     J1   = G_blocks.J
     lcon = G_blocks.lcon
@@ -656,11 +656,11 @@ function _build_condensed_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) where 
         J
         ),
         dnlp,
-        condensed_blocks
+        dense_blocks
     )
 end
 
-function _build_condensed_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) where {T, V <: AbstractVector{T}, M <: AbstractMatrix{T}, MK <: AbstractMatrix{T}}
+function _build_dense_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) where {T, V <: AbstractVector{T}, M <: AbstractMatrix{T}, MK <: AbstractMatrix{T}}
     s0 = dnlp.s0
     A  = dnlp.A
     B  = dnlp.B
@@ -684,25 +684,25 @@ function _build_condensed_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) where 
     gu = dnlp.gu
 
 
-    condensed_blocks = _build_condensed_blocks(s0, Q, R, A, B, E, F, N, gu, gl, K; Qf = Qf, S = S)
-    block_A  = condensed_blocks.A
-    block_B  = condensed_blocks.B
-    block_Q  = condensed_blocks.Q
-    block_R  = condensed_blocks.R
-    block_E  = condensed_blocks.E
-    block_F  = condensed_blocks.F
-    block_S  = condensed_blocks.S
-    block_K  = condensed_blocks.K
-    block_gl = condensed_blocks.gl
-    block_gu = condensed_blocks.gu
+    dense_blocks = _build_block_matrices(s0, Q, R, A, B, E, F, N, gu, gl, K; Qf = Qf, S = S)
+    block_A  = dense_blocks.A
+    block_B  = dense_blocks.B
+    block_Q  = dense_blocks.Q
+    block_R  = dense_blocks.R
+    block_E  = dense_blocks.E
+    block_F  = dense_blocks.F
+    block_S  = dense_blocks.S
+    block_K  = dense_blocks.K
+    block_gl = dense_blocks.gl
+    block_gu = dense_blocks.gu
 
-    H_blocks = _build_condensed_H_blocks(block_Q, block_R, block_A, block_B, block_S, block_K, s0, N, K)
+    H_blocks = _build_H_blocks(block_Q, block_R, block_A, block_B, block_S, block_K, s0, N, K)
 
     H  = H_blocks.H
     c  = H_blocks.c
     c0 = H_blocks.c0
 
-    G_blocks = _build_condensed_G_blocks(block_A, block_B, block_E, block_F, block_K, block_gl, block_gu, s0, N)
+    G_blocks = _build_G_blocks(block_A, block_B, block_E, block_F, block_K, block_gl, block_gu, s0, N)
 
     J1   = G_blocks.J
     lcon = G_blocks.lcon
@@ -811,12 +811,12 @@ function _build_condensed_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) where 
         J
         ),
         dnlp,
-        condensed_blocks
+        dense_blocks
     )
 end
 
 
-function _build_condensed_blocks(
+function _build_block_matrices(
     s0, Q, R, A, B, E, F, N, gu, gl, K;
     Qf = Q, 
     S = zeros(size(Q, 1), size(R, 1))
@@ -932,7 +932,7 @@ function _build_condensed_blocks(
     )
 end
 
-function _build_condensed_H_blocks(block_Q, block_R, block_A, block_B, block_S, block_K, s0, N, K::MK) where MK <: Nothing
+function _build_H_blocks(block_Q, block_R, block_A, block_B, block_S, block_K, s0, N, K::MK) where MK <: Nothing
     As0      = zeros(size(block_A, 1), 1)
     QB       = zeros(size(block_Q, 1), size(block_B, 2))
     STB      = zeros(size(block_S, 2), size(block_B, 2))
@@ -962,7 +962,7 @@ function _build_condensed_H_blocks(block_Q, block_R, block_A, block_B, block_S, 
     return (H = B_Q_B, c = h, c0 = h0 / 2)
 end
 
-function _build_condensed_H_blocks(block_Q, block_R, block_A, block_B, block_S, block_K, s0, N, K::MK) where MK <: AbstractMatrix
+function _build_H_blocks(block_Q, block_R, block_A, block_B, block_S, block_K, s0, N, K::MK) where MK <: AbstractMatrix
 
     As0      = zeros(size(block_A, 1), 1)
     RK       = zeros(size(block_R, 1), size(block_K, 2))
@@ -1029,7 +1029,7 @@ end
 
 
 
-function _build_condensed_G_blocks(block_A, block_B, block_E, block_F, block_K, block_gl, block_gu, s0, N)
+function _build_G_blocks(block_A, block_B, block_E, block_F, block_K, block_gl, block_gu, s0, N)
   
     G = zeros(size(block_F))
   
@@ -1051,10 +1051,12 @@ function _build_condensed_G_blocks(block_A, block_B, block_E, block_F, block_K, 
 end
 
 """
-    get_u(solution_ref, lqdm::LQDynamicModel) -> u <: vector
+    get_u(solution_ref, lqdm::SparseLQDynamicModel) -> u <: vector
+    get_u(solution_ref, lqdm::DenseLQDynamicModel) -> u <: vector
 
 Query the solution `u` from the solver. If `K = nothing`, the solution for `u` is queried from `solution_ref.solution`
-If `K <: AbstractMatrix`, `solution_ref.solution` returns `v`, and `get_u` solves for `u` using the `K` matrix. 
+
+If `K <: AbstractMatrix`, `solution_ref.solution` returns `v`, and `get_u` solves for `u` using the `K` matrix (and the `A` and `B` matrices if `lqdm <: DenseLQDynamicModel`)
 """
 function get_u(
     solver_status, 
@@ -1143,8 +1145,8 @@ end
     get_s(solution_ref, lqdm::SparseLQDynamicModel) -> s <: vector
     get_s(solution_ref, lqdm::DenseLQDynamicModel) -> s <: vector
 
-Query the solution `s` from the solver. If `lqdm.condense == false`, the solution is queried directly from `solution_ref.solution`
-If `lqdm.condense == true`, then `solution_ref.solution` returns `u` (if `K = nothing`) or `v` (if `K <: AbstactMatrix`), and `s` is found form
+Query the solution `s` from the solver. If `lqdm <: SparseLQDynamicModel`, the solution is queried directly from `solution_ref.solution`
+If `lqdm <: DenseLQDynamicModel`, then `solution_ref.solution` returns `u` (if `K = nothing`) or `v` (if `K <: AbstactMatrix`), and `s` is found form
 transforming `u` or `v` into `s` using `A`, `B`, and `K` matrices.
 """
 function get_s(
