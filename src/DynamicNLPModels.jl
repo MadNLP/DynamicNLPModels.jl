@@ -6,7 +6,7 @@ import LinearAlgebra
 import SparseArrays
 import SparseArrays: SparseMatrixCSC
 
-export LQDynamicData, LQDynamicModel, _build_condensed_blocks
+export LQDynamicData, LQDynamicModel, get_u, get_s
 
 abstract type AbstractLQDynData{T,V} end
 """
@@ -230,7 +230,7 @@ If `condense=false`, data is converted to the form
 Resulting `H` and `J` matrices are stored as `QuadraticModels.QPData` within the `LQDynamicModel` struct and 
 variable and constraint limits are stored within `NLPModels.NLPModelMeta`
 
-If `K` is defined, then `u` variables are replaced by `v` variables, and `u` can be queried by functions to be built within `DynamicNLPModels.jl`
+If `K` is defined, then `u` variables are replaced by `v` variables, and `u` can be queried by `get_u` and `get_s` within `DynamicNLPModels.jl`
 
 ---
 
@@ -245,7 +245,7 @@ If `condense=true`, data is converted to the form
 Resulting `H`, `J`, `h`, and `h0` matrices are stored within `QuadraticModels.QPData` as `H`, `A`, `c`, and `c0` attributes respectively
 
 If `K` is defined, then `u` variables are replaced by `v` variables. The bounds on `u` are transformed into algebraic constraints,
-and `u` can be queried by functions to be built within `DynamicNLPModels.jl`
+and `u` can be queried by `get_u` and `get_s` within `DynamicNLPModels.jl`
 """
 function LQDynamicModel(dnlp::LQDynamicData{T,V,M}; condense = false) where {T, V <: AbstractVector{T}, M  <: AbstractMatrix{T}, MK <: Union{Nothing, AbstractMatrix{T}}}
 
@@ -991,6 +991,87 @@ function _build_condensed_G_blocks(block_A, block_B, block_E, block_F, block_K, 
     LinearAlgebra.axpy!(-1, EAs0, block_gu)
   
     return (J = G, lcon = vec(block_gl), ucon = vec(block_gu), As0 = As0)
+end
+
+"""
+    get_u(solution_ref, lqdm::LQDynamicModel) -> u <: vector
+
+Query the solution `u` from the solver. If `K = nothing`, the solution for `u` is queried from `solution_ref.solution`
+"""
+function get_u(
+    solver_status, 
+    lqdm::LQDynamicModel{T, V, M1, M2, M3, MK}
+    ) where {T, V <: AbstractVector{T}, M1 <: AbstractMatrix{T}, M2 <: AbstractMatrix{T}, M3 <: AbstractMatrix{T}, MK <: AbstractMatrix{T}}
+
+    if !lqdm.condense
+        solution = solver_status.solution
+        ns       = lqdm.dynamic_data.ns
+        nu       = lqdm.dynamic_data.nu
+        N        = lqdm.dynamic_data.N
+        K        = lqdm.dynamic_data.K
+
+        u = zeros(T, nu * N)
+
+        for i in 1:N
+            start_v = (i - 1) * nu + 1
+            end_v   = i * nu
+            start_s = (i - 1) * ns + 1
+            end_s   = i * ns
+
+            Ks = zeros(T, size(K, 1), 1)
+
+            s = solution[start_s:end_s]
+            v = solution[(ns * (N + 1) + start_v):(ns * (N + 1) + end_v)]
+
+            LinearAlgebra.mul!(Ks, K, s)
+            LinearAlgebra.axpy!(1, v, Ks)
+
+            u[start_v:end_v] = Ks
+        end
+        return u
+    else
+        error("`get_u` is not yet implemented for condensed formulation and `K <: AbstractMatrix`")
+    end
+end
+
+function get_u(
+    solver_status, 
+    lqdm::LQDynamicModel{T, V, M1, M2, M3, MK}
+    ) where {T, V <: AbstractVector{T}, M1 <: AbstractMatrix{T}, M2 <: AbstractMatrix{T}, M3 <: AbstractMatrix{T}, MK <: Nothing}
+
+    if !lqdm.condense
+        solution = solver_status.solution
+        ns       = lqdm.dynamic_data.ns
+        nu       = lqdm.dynamic_data.nu
+        N        = lqdm.dynamic_data.N
+
+        u = solution[(ns * (N + 1)+1):end]
+        return u
+    else
+        return solver_status.solution
+    end
+end
+
+"""
+    get_s(solution_ref, lqdm::LQDynamicModel) -> s <: vector
+
+Query the solution `s` from the solver. If `lqdm.condense == false`, the solution is queried directly from `solution_ref.solution`
+"""
+function get_s(
+    solver_status, 
+    lqdm::LQDynamicModel{T, V, M1, M2, M3, MK}
+    ) where {T, V <: AbstractVector{T}, M1 <: AbstractMatrix{T}, M2 <: AbstractMatrix{T}, M3 <: AbstractMatrix{T}, MK <: Union{Nothing, AbstractMatrix}}
+
+    if !lqdm.condense
+        solution = solver_status.solution
+        ns       = lqdm.dynamic_data.ns
+        N        = lqdm.dynamic_data.N
+
+        s = solution[1:(ns * (N + 1))]
+        return s
+    else
+        error("`get_s` is not yet implemented for condensed formulation")
+    end
 end
 
 for field in fieldnames(LQDynamicData)

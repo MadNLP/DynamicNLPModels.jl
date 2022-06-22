@@ -43,7 +43,10 @@ function build_QP_JuMP_model(
 
     @variable(model, s[NS, 0:N])     # define states 
     @variable(model, u[NU, 0:(N-1)]) # define inputs
-    @variable(model, v[NU, 0:(N-1)]) 
+
+    if !iszero(K)
+        @variable(model, v[NU, 0:(N-1)]) 
+    end
 
 
 
@@ -96,8 +99,10 @@ function build_QP_JuMP_model(
     @constraint(model, [t in 0:(N - 1), s1 in NS], s[s1, t + 1] == sum(A[s1, s2] * s[s2, t] for s2 in NS) + sum(B[s1, u1] * u[u1, t] for u1 in NU) )
     
     # Constraints for Kx + v = u
-    for u1 in NU
-        @constraint(model, [t in 0:(N - 1)], u[u1, t] == v[u1, t] + sum( K[u1, s1] * s[s1,t]  for s1 in NS))
+    if !iszero(K)
+        for u1 in NU
+            @constraint(model, [t in 0:(N - 1)], u[u1, t] == v[u1, t] + sum( K[u1, s1] * s[s1,t]  for s1 in NS))
+        end
     end
 
     # Add E, F constraints
