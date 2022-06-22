@@ -435,13 +435,98 @@ set_gl!(lq_dense, 3, rand_val)
 @test get_gl(lq_dense) == gltest
 
 
-# Test non-default vector/matrix types
+# Test non-default vector/matrix on GenericArrays
 s0 = randn(Float32,2)
 A = randn(Float32,2,2)
 B = randn(Float32,2,2)
 Q = randn(Float32,2,2)
 R = randn(Float32,2,2)
+S = randn(Float32,2,2)
+K = randn(Float32,2,2)
+E = randn(Float32,2,2)
+F = randn(Float32,2,2)
+gl = randn(Float32,2)
+gu = gl .+ 2
+sl = s0 .- 1
+su = s0 .+ 1
+ul = randn(Float32,2)
+uu = ul .+ 2
+
+s0 = Test.GenericArray(s0)
+A = Test.GenericArray(A)
+B = Test.GenericArray(B)
+Q = Test.GenericArray(Q)
+R = Test.GenericArray(R)
+S = Test.GenericArray(S)
+K = Test.GenericArray(K)
+E = Test.GenericArray(E)
+F = Test.GenericArray(F)
+gl = Test.GenericArray(gl)
+gu = Test.GenericArray(gu)
+sl = Test.GenericArray(sl)
+su = Test.GenericArray(su)
+ul = Test.GenericArray(ul)
+uu = Test.GenericArray(uu)
+
+@test LQDynamicModel(s0, A, B, Q, R, 10; S = S, E = E, F = F, gl = gl, gu = gu, ul = ul, uu = uu, sl = sl, su = su,  dense=true) isa DenseLQDynamicModel{Float32, GenericArray{Float32, 1}, GenericArray{Float32, 2}, GenericArray{Float32, 2}, GenericArray{Float32, 2}, SparseMatrixCSC{Float32, Int64}, Nothing}
+@test LQDynamicModel(s0, A, B, Q, R, 10; K = K, S = S, E = E, F = F, gl = gl, gu = gu, ul = ul, uu = uu, sl = sl, su = su,  dense=true) isa DenseLQDynamicModel{Float32, GenericArray{Float32, 1}, GenericArray{Float32, 2}, GenericArray{Float32, 2}, GenericArray{Float32, 2}, SparseMatrixCSC{Float32, Int64}, GenericArray{Float32, 2}}
+@test LQDynamicModel(s0, A, B, Q, R, 10; S = S, E = E, F = F, gl = gl, gu = gu, ul = ul, uu = uu, sl = sl, su = su,  dense=false) isa SparseLQDynamicModel{Float32, GenericArray{Float32, 1}, SparseMatrixCSC{Float32, Int64}, SparseMatrixCSC{Float32, Int64}, GenericArray{Float32, 2}, Nothing}
+@test LQDynamicModel(s0, A, B, Q, R, 10; K = K, S = S, E = E, F = F, gl = gl, gu = gu, ul = ul, uu = uu, sl = sl, su = su,  dense=false) isa SparseLQDynamicModel{Float32, GenericArray{Float32, 1}, SparseMatrixCSC{Float32, Int64}, SparseMatrixCSC{Float32, Int64}, GenericArray{Float32, 2}, GenericArray{Float32, 2}}
 
 
-@test LQDynamicModel(s0,A,B,Q,R,10) isa SparseLQDynamicModel{Float32, Vector{Float32}, SparseArrays.SparseMatrixCSC{Float32, Int64}, SparseArrays.SparseMatrixCSC{Float32, Int64}, Matrix{Float32}}
-@test LQDynamicModel(s0,A,B,Q,R,10,dense=true) isa DenseLQDynamicModel{Float32, Vector{Float32}, Matrix{Float32}, Matrix{Float32}, Matrix{Float32}, SparseMatrixCSC{Float32, Int64}}
+# Test with CUDA Array type
+if CUDA.has_cuda_gpu()
+    A = randn(2,2)
+    B = randn(2,2)
+    Q = randn(2,2)
+    R = randn(2,2)
+    K = randn(2,2)
+    E = randn(2,2)
+    F = randn(2,2)
+    S = randn(2,2)
+    gu = randn(2)
+    gl = gu .- 2
+    uu = randn(2)
+    ul = uu .- 2
+    su = randn(2)
+    sl = su .- 2
+    s0 = su .- 1
+
+    s0c = CuArray{Float64}(undef, size(s0))
+    Ac  = CuArray{Float64}(undef, size(A))
+    Bc  = CuArray{Float64}(undef, size(B))
+    Qc  = CuArray{Float64}(undef, size(Q))
+    Rc  = CuArray{Float64}(undef, size(R))
+    Kc  = CuArray{Float64}(undef, size(K))
+    Sc   = CuArray{Float64}(undef, size(S))
+    Ec  = CuArray{Float64}(undef, size(E))
+    Fc  = CuArray{Float64}(undef, size(F))
+    glc = CuArray{Float64}(undef, size(gl))
+    guc = CuArray{Float64}(undef, size(gu))
+    ulc = CuArray{Float64}(undef, size(ul))
+    uuc = CuArray{Float64}(undef, size(uu))
+    slc = CuArray{Float64}(undef, size(sl))
+    suc = CuArray{Float64}(undef, size(su))
+
+    copyto!(Ac, A)
+    copyto!(Bc, B)
+    copyto!(Qc, Q)
+    copyto!(Rc, R)
+    copyto!(s0c, s0)
+    copyto!(Kc, K)
+    copyto!(Sc, S)
+    copyto!(Ec, E)
+    copyto!(Fc, F)
+    copyto!(glc, gl)
+    copyto!(guc, gu)
+    copyto!(ulc, ul)
+    copyto!(uuc, uu)
+    copyto!(slc, sl)
+    copyto!(suc, su)
+
+    @test LQDynamicModel(s0c,Ac,Bc,Qc,Rc,10, dense=false) isa SparseLQDynamicModel{Float64, CuArray{Float64, 1, CUDA.Mem.DeviceBuffer}, SparseMatrixCSC{Float64, Int64}, SparseMatrixCSC{Float64, Int64}, CuArray{Float64, 2, CUDA.Mem.DeviceBuffer}, Nothing}
+    @test LQDynamicModel(s0c,Ac,Bc,Qc,Rc,10; K = Kc, S = Sc, E = Ec, F = Fc, gl = glc, gu = guc, ul = ulc, uu = uuc, sl = slc, su = suc,  dense=false) isa SparseLQDynamicModel{Float64, CuArray{Float64, 1, CUDA.Mem.DeviceBuffer}, SparseMatrixCSC{Float64, Int64}, SparseMatrixCSC{Float64, Int64}, CuArray{Float64, 2, CUDA.Mem.DeviceBuffer}, CuArray{Float64, 2, CUDA.Mem.DeviceBuffer}}
+
+    @test LQDynamicModel(s0c,Ac,Bc,Qc,Rc,10, dense=true) isa DenseLQDynamicModel{Float64, CuArray{Float64, 1, CUDA.Mem.DeviceBuffer}, CuArray{Float64, 2, CUDA.Mem.DeviceBuffer}, CuArray{Float64, 2, CUDA.Mem.DeviceBuffer}, CuArray{Float64, 2, CUDA.Mem.DeviceBuffer}, SparseMatrixCSC{Float64, Int64}, Nothing}
+    @test LQDynamicModel(s0c,Ac,Bc,Qc,Rc,10; K = Kc, S = Sc, E = Ec, F = Fc, gl = glc, gu = guc, ul = ulc, uu = uuc, sl = slc, su = suc,  dense=true) isa DenseLQDynamicModel{Float64, CuArray{Float64, 1, CUDA.Mem.DeviceBuffer}, CuArray{Float64, 2, CUDA.Mem.DeviceBuffer}, CuArray{Float64, 2, CUDA.Mem.DeviceBuffer}, CuArray{Float64, 2, CUDA.Mem.DeviceBuffer}, SparseMatrixCSC{Float64, Int64}, CuArray{Float64, 2, CUDA.Mem.DeviceBuffer}}
+end
