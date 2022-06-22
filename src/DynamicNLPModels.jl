@@ -203,7 +203,7 @@ mutable struct SparseLQDynamicModel{T, V, M1, M2, M3, MK} <:  AbstractDynamicMod
   dynamic_data::LQDynamicData{T, V, M3, MK}
 end
 
-mutable struct block_matrices{T, M1, M2}
+struct Block_Matrices{T, M1, M2}
     A::M1
     B::M1
     Q::M2
@@ -216,7 +216,7 @@ mutable struct block_matrices{T, M1, M2}
     gu::M1
 end
 
-function block_matrices(
+function Block_Matrices(
     A::M1,
     B::M1,
     Q::M2,
@@ -227,9 +227,9 @@ function block_matrices(
     F::M1,
     gl::M1,
     gu::M1
-    ) where {T, M1 <: AbstractMatrix{T}, M2 <: AbstractMatrix{T}}
+) where {T, M1 <: AbstractMatrix{T}, M2 <: AbstractMatrix{T}}
 
-    block_matrices{T, M1, M2}(
+    Block_Matrices{T, M1, M2}(
         A,
         B,
         Q,
@@ -249,7 +249,7 @@ mutable struct DenseLQDynamicModel{T, V, M1, M2, M3, M4, MK} <:  AbstractDynamic
     counters::NLPModels.Counters
     data::QuadraticModels.QPData{T, V, M1, M2}
     dynamic_data::LQDynamicData{T, V, M3, MK}
-    blocks::block_matrices{T, M3, M4}
+    blocks::Block_Matrices{T, M3, M4}
 end
 
 """
@@ -307,7 +307,6 @@ function LQDynamicModel(dnlp::LQDynamicData{T,V,M}; condense = false) where {T, 
 
 end
 
-
 function LQDynamicModel(
     s0::V,
     A::M,
@@ -327,7 +326,7 @@ function LQDynamicModel(
     gl::V = fill(-Inf, size(E, 1)),
     gu::V = fill(Inf, size(F, 1)),
     condense=false
-    ) where {T, V <: AbstractVector{T}, M <: AbstractMatrix{T}, MK <: Union{Nothing, AbstractMatrix{T}}}
+) where {T, V <: AbstractVector{T}, M <: AbstractMatrix{T}, MK <: Union{Nothing, AbstractMatrix{T}}}
 
     dnlp = LQDynamicData(s0, A, B, Q, R, N; Qf = Qf, S = S, E = E, F = F, K = K, sl = sl, su = su, ul = ul, uu = uu, gl = gl, gu = gu)
     
@@ -919,7 +918,7 @@ function _build_condensed_blocks(
     block_A[(ns * N + 1):ns * (N + 1), :] = A_knext
     block_Q[(ns * N + 1):((N + 1) * ns), (N * ns + 1):((N + 1) * ns)] = Qf
 
-    block_matrices(
+    Block_Matrices(
         block_A, 
         block_B, 
         block_Q, 
@@ -1232,59 +1231,59 @@ end
 
 
 function fill_structure!(S::SparseMatrixCSC, rows, cols)
-  count = 1
-  @inbounds for col = 1:size(S, 2), k = S.colptr[col]:(S.colptr[col + 1] - 1)
-    rows[count] = S.rowval[k]
-    cols[count] = col
-    count += 1
-  end
+    count = 1
+    @inbounds for col = 1:size(S, 2), k = S.colptr[col]:(S.colptr[col + 1] - 1)
+        rows[count] = S.rowval[k]
+        cols[count] = col
+        count += 1
+    end
 end
 
 function fill_coord!(S::SparseMatrixCSC, vals, obj_weight)
-  count = 1
-  @inbounds for col = 1:size(S, 2), k = S.colptr[col]:(S.colptr[col + 1] - 1)
-    vals[count] = obj_weight * S.nzval[k]
-    count += 1
-  end
+    count = 1
+    @inbounds for col = 1:size(S, 2), k = S.colptr[col]:(S.colptr[col + 1] - 1)
+        vals[count] = obj_weight * S.nzval[k]
+        count += 1
+    end
 end
 
 function NLPModels.hess_structure!(
-  qp::SparseLQDynamicModel{T, V, M1, M2, M3},
-  rows::AbstractVector{<:Integer},
-  cols::AbstractVector{<:Integer},
+    qp::SparseLQDynamicModel{T, V, M1, M2, M3},
+    rows::AbstractVector{<:Integer},
+    cols::AbstractVector{<:Integer},
 ) where {T, V, M1 <: SparseMatrixCSC, M2 <: SparseMatrixCSC, M3<: AbstractMatrix}
-  fill_structure!(qp.data.H, rows, cols)
-  return rows, cols
+    fill_structure!(qp.data.H, rows, cols)
+    return rows, cols
 end
 
   
 function NLPModels.hess_structure!(
-  qp::DenseLQDynamicModel{T, V, M1, M2, M3},
-  rows::AbstractVector{<:Integer},
-  cols::AbstractVector{<:Integer},
+    qp::DenseLQDynamicModel{T, V, M1, M2, M3},
+    rows::AbstractVector{<:Integer},
+    cols::AbstractVector{<:Integer},
 ) where {T, V, M1 <: Matrix, M2<: Matrix, M3<: Matrix}
-  count = 1
-  for j = 1:(qp.meta.nvar)
-    for i = j:(qp.meta.nvar)
-      rows[count] = i
-      cols[count] = j
-      count += 1
+    count = 1
+    for j = 1:(qp.meta.nvar)
+        for i = j:(qp.meta.nvar)
+            rows[count] = i
+            cols[count] = j
+            count += 1
+        end
     end
-  end
-  return rows, cols
+    return rows, cols
 end
 
 
 
 function NLPModels.hess_coord!(
-  qp::SparseLQDynamicModel{T, V, M1, M2, M3},
-  x::AbstractVector{T},
-  vals::AbstractVector{T};
-  obj_weight::Real = one(eltype(x)),
+    qp::SparseLQDynamicModel{T, V, M1, M2, M3},
+    x::AbstractVector{T},
+    vals::AbstractVector{T};
+    obj_weight::Real = one(eltype(x)),
 ) where {T, V, M1 <: SparseMatrixCSC, M2 <: SparseMatrixCSC, M3 <: Matrix}
-  NLPModels.increment!(qp, :neval_hess)
-  fill_coord!(qp.data.H, vals, obj_weight)
-  return vals
+    NLPModels.increment!(qp, :neval_hess)
+    fill_coord!(qp.data.H, vals, obj_weight)
+    return vals
 end
 
 function NLPModels.hess_coord!(
@@ -1305,30 +1304,30 @@ function NLPModels.hess_coord!(
   end
 
 NLPModels.hess_coord!(
-  qp::SparseLQDynamicModel,
-  x::AbstractVector,
-  y::AbstractVector,
-  vals::AbstractVector;
-  obj_weight::Real = one(eltype(x)),
+    qp::SparseLQDynamicModel,
+    x::AbstractVector,
+    y::AbstractVector,
+    vals::AbstractVector;
+    obj_weight::Real = one(eltype(x)),
 ) = NLPModels.hess_coord!(qp, x, vals, obj_weight = obj_weight)
 
 NLPModels.hess_coord!(
-  qp::DenseLQDynamicModel,
-  x::AbstractVector,
-  y::AbstractVector,
-  vals::AbstractVector;
-  obj_weight::Real = one(eltype(x)),
+    qp::DenseLQDynamicModel,
+    x::AbstractVector,
+    y::AbstractVector,
+    vals::AbstractVector;
+    obj_weight::Real = one(eltype(x)),
 ) = NLPModels.hess_coord!(qp, x, vals, obj_weight = obj_weight)
 
 
 
 function NLPModels.jac_structure!(
-  qp::SparseLQDynamicModel{T, V, M1, M2, M3},
-  rows::AbstractVector{<:Integer},
-  cols::AbstractVector{<:Integer},
+    qp::SparseLQDynamicModel{T, V, M1, M2, M3},
+    rows::AbstractVector{<:Integer},
+    cols::AbstractVector{<:Integer},
 ) where {T, V, M1 <: SparseMatrixCSC, M2 <: SparseMatrixCSC, M3<: AbstractMatrix}
-  fill_structure!(qp.data.A, rows, cols)
-  return rows, cols
+    fill_structure!(qp.data.A, rows, cols)
+    return rows, cols
 end
 
 
@@ -1349,13 +1348,13 @@ function NLPModels.jac_structure!(
 end
 
 function NLPModels.jac_coord!(
-  qp::SparseLQDynamicModel{T, V, M1, M2, M3},
-  x::AbstractVector,
-  vals::AbstractVector,
+    qp::SparseLQDynamicModel{T, V, M1, M2, M3},
+    x::AbstractVector,
+    vals::AbstractVector,
 ) where {T, V, M1 <: SparseMatrixCSC, M2 <: SparseMatrixCSC, M3 <: AbstractMatrix}
-  NLPModels.increment!(qp, :neval_jac)
-  fill_coord!(qp.data.A, vals, one(T))
-  return vals
+    NLPModels.increment!(qp, :neval_jac)
+    fill_coord!(qp.data.A, vals, one(T))
+    return vals
 end
 
 
