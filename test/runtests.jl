@@ -175,6 +175,7 @@ u_values = value.(all_variables(model)[(1 + ns * (N + 1)):(ns * (N + 1) + nu * N
 
 @test s_values ≈ get_s(solution_ref_sparse, lq_sparse) atol = 1e-7
 @test u_values ≈ get_u(solution_ref_sparse, lq_sparse) atol = 1e-7
+@test s_values ≈ get_s(solution_ref_condense, lq_condense) atol = 1e-6
 @test u_values ≈ get_u(solution_ref_condense, lq_condense) atol = 1e-7
 
 
@@ -387,3 +388,48 @@ u_values = value.(all_variables(model)[(1 + ns * (N + 1)):(ns * (N + 1) + nu * N
 
 @test s_values ≈ get_s(solution_ref_sparse, lq_sparse) atol = 1e-7
 @test u_values ≈ get_u(solution_ref_sparse, lq_sparse) atol = 1e-7
+@test s_values ≈ get_s(solution_ref_condense, lq_condense) atol = 1e-7
+@test u_values ≈ get_u(solution_ref_condense, lq_condense) atol = 1e-7
+
+
+
+# Test get_* and set_* functions
+
+dnlp        = LQDynamicData(s0, A, B, Q, R, N; sl = sl, ul = ul, su = su, uu = uu, E = E, F = F, gl = gl, gu = gu, K = K, S = S)
+lq_sparse   = LQDynamicModel(dnlp; condense=false)
+lq_condense = LQDynamicModel(dnlp; condense=true)
+
+@test get_A(dnlp) == A
+@test get_A(lq_sparse) == A
+@test get_A(lq_condense) == A
+
+rand_val = rand()
+Qtest = copy(Q)
+
+Qtest[1, 2] = rand_val
+set_Q!(dnlp, 1,2, rand_val)
+@test get_Q(dnlp) == Qtest
+
+Qtest[1, 1] = rand_val
+set_Q!(lq_sparse, 1, 1, rand_val)
+@test get_Q(lq_sparse) == Qtest
+
+Qtest[2, 1] = rand_val
+set_Q!(lq_condense, 2, 1, rand_val)
+@test get_Q(lq_condense) == Qtest
+
+
+rand_val = rand()
+gltest = copy(gl)
+
+gltest[1] = rand_val
+set_gl!(dnlp, 1, rand_val)
+@test get_gl(dnlp) == gltest
+
+gltest[2] = rand_val 
+set_gl!(lq_sparse, 2, rand_val)
+@test get_gl(lq_sparse) == gltest
+
+gltest[3] = rand_val
+set_gl!(lq_condense, 3, rand_val)
+@test get_gl(lq_condense) == gltest

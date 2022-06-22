@@ -196,18 +196,67 @@ end
 
 abstract type AbstractDynamicModel{T,V} <: QuadraticModels.AbstractQuadraticModel{T, V} end
 
-mutable struct LQDynamicModel{T, V, M1, M2, M3, MK} <:  AbstractDynamicModel{T,V} 
+mutable struct SparseLQDynamicModel{T, V, M1, M2, M3, MK} <:  AbstractDynamicModel{T,V} 
   meta::NLPModels.NLPModelMeta{T, V}
   counters::NLPModels.Counters
   data::QuadraticModels.QPData{T, V, M1, M2}
   dynamic_data::LQDynamicData{T, V, M3, MK}
-  condense::Bool
+end
+
+mutable struct block_matrices{T, M1, M2}
+    A::M1
+    B::M1
+    Q::M2
+    R::M2
+    S::M2
+    K::M2
+    E::M1
+    F::M1
+    gl::M1
+    gu::M1
+end
+
+function block_matrices(
+    A::M1,
+    B::M1,
+    Q::M2,
+    R::M2,
+    S::M2,
+    K::M2,
+    E::M1,
+    F::M1,
+    gl::M1,
+    gu::M1
+    ) where {T, M1 <: AbstractMatrix{T}, M2 <: AbstractMatrix{T}}
+
+    block_matrices{T, M1, M2}(
+        A,
+        B,
+        Q,
+        R,
+        S,
+        K,
+        E,
+        F,
+        gl,
+        gu
+    )
+end
+
+
+mutable struct DenseLQDynamicModel{T, V, M1, M2, M3, M4, MK} <:  AbstractDynamicModel{T,V} 
+    meta::NLPModels.NLPModelMeta{T, V}
+    counters::NLPModels.Counters
+    data::QuadraticModels.QPData{T, V, M1, M2}
+    dynamic_data::LQDynamicData{T, V, M3, MK}
+    blocks::block_matrices{T, M3, M4}
 end
 
 """
-    LQDynamicModel(dnlp::LQDynamicData; condense=false)      -> LQdynamicModel
-    LQDynamicModel(s0, A, B, Q, R, N; condense = false, ...) -> LQDynamicModel
-A constructor for building a `LQDynamicModel <: QuadraticModels.AbstractQuadraticModel` from `LQDynamicData`
+    LQDynamicModel(dnlp::LQDynamicData; condense=false)      -> SparseLQDynamicModel/DenseLQDynamicModel
+    LQDynamicModel(s0, A, B, Q, R, N; condense = false, ...) -> SparseLQDynamicModel/DenseLQDynamicModel
+A constructor for building a `SparseLQDynamicModel <: QuadraticModels.AbstractQuadraticModel` (if condense = false)
+or a `DenseLQDynamicModel <: QuadraticModels.AbstractQuadraticModel` (if condense = true) from `LQDynamicData`
 Input data is for the problem of the form 
 ```math
     minimize    \\frac{1}{2} \\sum_{i = 0}^{N-1}(s_i^T Q s_i + 2 u_i^T S^T x_i + u_i^T R u_i) + \\frac{1}{2} s_N^T Qf s_N
@@ -227,7 +276,7 @@ If `condense=false`, data is converted to the form
     subject to  lcon \\le Jz \\le ucon
                 lvar \\le z \\le uvar
 ```
-Resulting `H` and `J` matrices are stored as `QuadraticModels.QPData` within the `LQDynamicModel` struct and 
+Resulting `H` and `J` matrices are stored as `QuadraticModels.QPData` within the `SparseLQDynamicModel` struct and 
 variable and constraint limits are stored within `NLPModels.NLPModelMeta`
 
 If `K` is defined, then `u` variables are replaced by `v` variables, and `u` can be queried by `get_u` and `get_s` within `DynamicNLPModels.jl`
@@ -249,7 +298,7 @@ and `u` can be queried by `get_u` and `get_s` within `DynamicNLPModels.jl`
 """
 function LQDynamicModel(dnlp::LQDynamicData{T,V,M}; condense = false) where {T, V <: AbstractVector{T}, M  <: AbstractMatrix{T}, MK <: Union{Nothing, AbstractMatrix{T}}}
 
-    if condense==false
+    if !condense
         _build_sparse_lq_dynamic_model(dnlp)
     else
         _build_condensed_lq_dynamic_model(dnlp)
@@ -349,7 +398,7 @@ function _build_sparse_lq_dynamic_model(dnlp::LQDynamicData{T, V, M, MK}) where 
     
 
 
-    LQDynamicModel(
+    SparseLQDynamicModel(
         NLPModels.NLPModelMeta(
         nvar,
         lvar = lvar,
@@ -369,8 +418,7 @@ function _build_sparse_lq_dynamic_model(dnlp::LQDynamicData{T, V, M, MK}) where 
         H,
         J
         ),
-        dnlp,
-        false
+        dnlp
     )
 
 end
@@ -462,7 +510,7 @@ function _build_sparse_lq_dynamic_model(dnlp::LQDynamicData{T, V, M, MK}) where 
     c0 = 0.0
     c  = zeros(nvar)
 
-    LQDynamicModel(
+    SparseLQDynamicModel(
         NLPModels.NLPModelMeta(
         nvar,
         lvar = lvar,
@@ -482,8 +530,7 @@ function _build_sparse_lq_dynamic_model(dnlp::LQDynamicData{T, V, M, MK}) where 
         H,
         J
         ),
-        dnlp,
-        false
+        dnlp
     )
 end
 
@@ -589,7 +636,7 @@ function _build_condensed_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) where 
     ncon = size(J, 1)
 
 
-    LQDynamicModel(
+    DenseLQDynamicModel(
         NLPModels.NLPModelMeta(
         nvar,
         lvar = lvar,
@@ -610,7 +657,7 @@ function _build_condensed_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) where 
         J
         ),
         dnlp,
-        true
+        condensed_blocks
     )
 end
 
@@ -746,7 +793,7 @@ function _build_condensed_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) where 
     ncon = size(J, 1)
 
 
-    LQDynamicModel(
+    DenseLQDynamicModel(
         NLPModels.NLPModelMeta(
         nvar,
         ncon = ncon,
@@ -765,7 +812,7 @@ function _build_condensed_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) where 
         J
         ),
         dnlp,
-        true
+        condensed_blocks
     )
 end
 
@@ -871,8 +918,19 @@ function _build_condensed_blocks(
 
     block_A[(ns * N + 1):ns * (N + 1), :] = A_knext
     block_Q[(ns * N + 1):((N + 1) * ns), (N * ns + 1):((N + 1) * ns)] = Qf
-  
-    return (A = block_A, B = block_B, Q = block_Q, R = block_R, S = block_S, K = block_K, E = block_E, F = block_F, gl = block_gl, gu = block_gu)
+
+    block_matrices(
+        block_A, 
+        block_B, 
+        block_Q, 
+        block_R,
+        block_S,
+        block_K,
+        block_E,
+        block_F,
+        block_gl,
+        block_gu
+    )
 end
 
 function _build_condensed_H_blocks(block_Q, block_R, block_A, block_B, block_S, block_K, s0, N, K::MK) where MK <: Nothing
@@ -997,125 +1055,180 @@ end
     get_u(solution_ref, lqdm::LQDynamicModel) -> u <: vector
 
 Query the solution `u` from the solver. If `K = nothing`, the solution for `u` is queried from `solution_ref.solution`
+If `K <: AbstractMatrix`, `solution_ref.solution` returns `v`, and `get_u` solves for `u` using the `K` matrix. 
 """
 function get_u(
     solver_status, 
-    lqdm::LQDynamicModel{T, V, M1, M2, M3, MK}
+    lqdm::SparseLQDynamicModel{T, V, M1, M2, M3, MK}
     ) where {T, V <: AbstractVector{T}, M1 <: AbstractMatrix{T}, M2 <: AbstractMatrix{T}, M3 <: AbstractMatrix{T}, MK <: AbstractMatrix{T}}
 
-    if !lqdm.condense
-        solution = solver_status.solution
-        ns       = lqdm.dynamic_data.ns
-        nu       = lqdm.dynamic_data.nu
-        N        = lqdm.dynamic_data.N
-        K        = lqdm.dynamic_data.K
+    solution = solver_status.solution
+    ns       = lqdm.dynamic_data.ns
+    nu       = lqdm.dynamic_data.nu
+    N        = lqdm.dynamic_data.N
+    K        = lqdm.dynamic_data.K
 
-        u = zeros(T, nu * N)
+    u = zeros(T, nu * N)
 
-        for i in 1:N
-            start_v = (i - 1) * nu + 1
-            end_v   = i * nu
-            start_s = (i - 1) * ns + 1
-            end_s   = i * ns
+    for i in 1:N
+        start_v = (i - 1) * nu + 1
+        end_v   = i * nu
+        start_s = (i - 1) * ns + 1
+        end_s   = i * ns
 
-            Ks = zeros(T, size(K, 1), 1)
+        Ks = zeros(T, size(K, 1), 1)
 
-            s = solution[start_s:end_s]
-            v = solution[(ns * (N + 1) + start_v):(ns * (N + 1) + end_v)]
+        s = solution[start_s:end_s]
+        v = solution[(ns * (N + 1) + start_v):(ns * (N + 1) + end_v)]
 
-            LinearAlgebra.mul!(Ks, K, s)
-            LinearAlgebra.axpy!(1, v, Ks)
+        LinearAlgebra.mul!(Ks, K, s)
+        LinearAlgebra.axpy!(1, v, Ks)
 
-            u[start_v:end_v] = Ks
-        end
-        return u
-    else
-        error("`get_u` is not yet implemented for condensed formulation and `K <: AbstractMatrix`")
+        u[start_v:end_v] = Ks
     end
+    return u
 end
 
 function get_u(
     solver_status, 
-    lqdm::LQDynamicModel{T, V, M1, M2, M3, MK}
+    lqdm::DenseLQDynamicModel{T, V, M1, M2, M3, M4, MK}
+    ) where {T, V <: AbstractVector{T}, M1 <: AbstractMatrix{T}, M2 <: AbstractMatrix{T}, M3 <: AbstractMatrix{T}, M4 <: AbstractMatrix{T}, MK <: AbstractMatrix{T}}
+
+    dnlp = lqdm.dynamic_data
+    block_A = lqdm.blocks.A
+    block_B = lqdm.blocks.B
+    block_K = lqdm.blocks.K
+
+    v = solver_status.solution
+
+    As0 = zeros(T, size(block_A, 1), 1)
+    Bv  = zeros(T, size(block_B, 1), 1)
+
+    LinearAlgebra.mul!(As0, block_A, dnlp.s0)
+    LinearAlgebra.mul!(Bv, block_B, v)
+    LinearAlgebra.axpy!(1, As0, Bv)
+
+    Ks = zeros(T, size(block_K, 1), 1)
+
+    LinearAlgebra.mul!(Ks, block_K, Bv)
+
+    u = copy(v)
+    LinearAlgebra.axpy!(1, Ks, u)
+
+    return vec(u)
+end
+
+function get_u(
+    solver_status, 
+    lqdm::SparseLQDynamicModel{T, V, M1, M2, M3, MK}
     ) where {T, V <: AbstractVector{T}, M1 <: AbstractMatrix{T}, M2 <: AbstractMatrix{T}, M3 <: AbstractMatrix{T}, MK <: Nothing}
 
-    if !lqdm.condense
-        solution = solver_status.solution
-        ns       = lqdm.dynamic_data.ns
-        nu       = lqdm.dynamic_data.nu
-        N        = lqdm.dynamic_data.N
+    solution = solver_status.solution
+    ns       = lqdm.dynamic_data.ns
+    nu       = lqdm.dynamic_data.nu
+    N        = lqdm.dynamic_data.N
 
-        u = solution[(ns * (N + 1)+1):end]
-        return u
-    else
-        return solver_status.solution
-    end
+    u = solution[(ns * (N + 1)+1):end]
+    return u
+end
+
+function get_u(
+    solver_status, 
+    lqdm::DenseLQDynamicModel{T, V, M1, M2, M3, M4, MK}
+    ) where {T, V <: AbstractVector{T}, M1 <: AbstractMatrix{T}, M2 <: AbstractMatrix{T}, M3 <: AbstractMatrix{T}, M4 <: AbstractMatrix{T}, MK <: Nothing}
+
+    return copy(solver_status.solution)
 end
 
 """
-    get_s(solution_ref, lqdm::LQDynamicModel) -> s <: vector
+    get_s(solution_ref, lqdm::SparseLQDynamicModel) -> s <: vector
+    get_s(solution_ref, lqdm::DenseLQDynamicModel) -> s <: vector
 
 Query the solution `s` from the solver. If `lqdm.condense == false`, the solution is queried directly from `solution_ref.solution`
+If `lqdm.condense == true`, then `solution_ref.solution` returns `u` (if `K = nothing`) or `v` (if `K <: AbstactMatrix`), and `s` is found form
+transforming `u` or `v` into `s` using `A`, `B`, and `K` matrices.
 """
 function get_s(
     solver_status, 
-    lqdm::LQDynamicModel{T, V, M1, M2, M3, MK}
+    lqdm::SparseLQDynamicModel{T, V, M1, M2, M3, MK}
     ) where {T, V <: AbstractVector{T}, M1 <: AbstractMatrix{T}, M2 <: AbstractMatrix{T}, M3 <: AbstractMatrix{T}, MK <: Union{Nothing, AbstractMatrix}}
 
-    if !lqdm.condense
-        solution = solver_status.solution
-        ns       = lqdm.dynamic_data.ns
-        N        = lqdm.dynamic_data.N
+    solution = solver_status.solution
+    ns       = lqdm.dynamic_data.ns
+    N        = lqdm.dynamic_data.N
 
-        s = solution[1:(ns * (N + 1))]
-        return s
-    else
-        error("`get_s` is not yet implemented for condensed formulation")
-    end
+    s = solution[1:(ns * (N + 1))]
+    return s
 end
+function get_s(
+    solver_status,
+    lqdm::DenseLQDynamicModel{T,V, M1, M2, M3, M4, MK}
+    ) where {T, V <: AbstractVector{T}, M1 <: AbstractMatrix{T}, M2 <: AbstractMatrix{T}, M3 <: AbstractMatrix{T}, M4 <: AbstractMatrix{T}, MK <: Union{Nothing, AbstractMatrix}}
+
+    dnlp = lqdm.dynamic_data
+    block_A = lqdm.blocks.A
+    block_B = lqdm.blocks.B
+
+    v = solver_status.solution
+
+    As0 = zeros(T, size(block_A, 1), 1)
+    Bv  = zeros(T, size(block_B, 1), 1)
+
+    LinearAlgebra.mul!(As0, block_A, dnlp.s0)
+    LinearAlgebra.mul!(Bv, block_B, v)
+    LinearAlgebra.axpy!(1, As0, Bv)
+
+    return vec(Bv)
+end
+
 
 for field in fieldnames(LQDynamicData)
     method = Symbol("get_", field)
     @eval begin
         @doc """
             $($method)(LQDynamicData)
-            $($method)(LQDynamicModel)
-        Return the value $($(QuoteNode(field))) from LQDynamicData or LQDynamicModel.dynamic_data
+            $($method)(SparseLQDynamicModel)
+            $($method)(DenseLQDynamicModel)
+        Return the value $($(QuoteNode(field))) from LQDynamicData or SparseLQDynamicModel.dynamic_data or DenseLQDynamicModel.dynamic_data
         """
         $method(dyn_data::LQDynamicData) = getproperty(dyn_data, $(QuoteNode(field)))
     end
-    @eval $method(dyn_model::LQDynamicModel) = $method(dyn_model.dynamic_data)
+    @eval $method(dyn_model::SparseLQDynamicModel) = $method(dyn_model.dynamic_data)
+    @eval $method(dyn_model::DenseLQDynamicModel)  = $method(dyn_model.dynamic_data)
     @eval export $method
 end
 
-for field in [:A, :B, :Q, :R, :Qf]
+for field in [:A, :B, :Q, :R, :Qf, :E, :F, :S, :K]
     method = Symbol("set_", field, "!")
     @eval begin
         @doc """
             $($method)(LQDynamicData, row, col, val)
-            $($method)(LQDynamicModel, row, col, val)
-        Set the value of entry $($(QuoteNode(field)))[row, col] to val for LQDynamicData or LQDynamicModel.dynamic_data 
+            $($method)(SparseLQDynamicModel, row, col, val)
+            $($method)(DenseLQDynamicModel, row, col, val)
+        Set the value of entry $($(QuoteNode(field)))[row, col] to val for LQDynamicData, SparseLQDynamicModel.dynamic_data, or DenseLQDynamicModel.dynamic_data
         """
         $method(dyn_data::LQDynamicData, row, col, val) = (dyn_data.$field[row, col] = val)
     end
-    @eval $method(dyn_model::LQDynamicModel, row, col, val) = (dyn_model.dynamic_data.$field[row,col]=val)
+    @eval $method(dyn_model::SparseLQDynamicModel, row, col, val) = (dyn_model.dynamic_data.$field[row, col] = val)
+    @eval $method(dyn_model::DenseLQDynamicModel, row, col, val)  = (dyn_model.dynamic_data.$field[row, col] = val)
     @eval export $method
 end
 
-for field in [:s0, :sl, :su, :ul, :uu]
+for field in [:s0, :sl, :su, :ul, :uu, :gl, :gu]
     method = Symbol("set_", field, "!")
     @eval begin
         @doc """
             $($method)(LQDynamicData, index, val)
-            $($method)(LQDynamicModel, index, val)
-        Set the value of entry $($(QuoteNode(field)))[index] to val for LQDynamicData or LQDynamicModel.dynamic_data 
+            $($method)(SparseLQDynamicModel, index, val)
+            $($method)(DenseLQDynamicModel, index, val)
+        Set the value of entry $($(QuoteNode(field)))[index] to val for LQDynamicData, SparseLQDynamicModel.dynamic_data, or DenseLQDynamicModel.dynamic_data
         """
         $method(dyn_data::LQDynamicData, index, val) = (dyn_data.$field[index] = val)
     end
-    @eval $method(dyn_model::LQDynamicModel, index, val) = (dyn_model.dynamic_data.$field[index]=val)
+    @eval $method(dyn_model::SparseLQDynamicModel, index, val) = (dyn_model.dynamic_data.$field[index] = val)
+    @eval $method(dyn_model::DenseLQDynamicModel, index, val)  = (dyn_model.dynamic_data.$field[index] = val)
     @eval export $method
 end
-
 
 
 function fill_structure!(S::SparseMatrixCSC, rows, cols)
@@ -1136,7 +1249,7 @@ function fill_coord!(S::SparseMatrixCSC, vals, obj_weight)
 end
 
 function NLPModels.hess_structure!(
-  qp::LQDynamicModel{T, V, M1, M2, M3},
+  qp::SparseLQDynamicModel{T, V, M1, M2, M3},
   rows::AbstractVector{<:Integer},
   cols::AbstractVector{<:Integer},
 ) where {T, V, M1 <: SparseMatrixCSC, M2 <: SparseMatrixCSC, M3<: AbstractMatrix}
@@ -1144,8 +1257,9 @@ function NLPModels.hess_structure!(
   return rows, cols
 end
 
+  
 function NLPModels.hess_structure!(
-  qp::LQDynamicModel{T, V, M1, M2, M3},
+  qp::DenseLQDynamicModel{T, V, M1, M2, M3},
   rows::AbstractVector{<:Integer},
   cols::AbstractVector{<:Integer},
 ) where {T, V, M1 <: Matrix, M2<: Matrix, M3<: Matrix}
@@ -1161,8 +1275,9 @@ function NLPModels.hess_structure!(
 end
 
 
+
 function NLPModels.hess_coord!(
-  qp::LQDynamicModel{T, V, M1, M2, M3},
+  qp::SparseLQDynamicModel{T, V, M1, M2, M3},
   x::AbstractVector{T},
   vals::AbstractVector{T};
   obj_weight::Real = one(eltype(x)),
@@ -1173,32 +1288,42 @@ function NLPModels.hess_coord!(
 end
 
 function NLPModels.hess_coord!(
-  qp::LQDynamicModel{T, V, M1, M2, M3},
-  x::AbstractVector{T},
-  vals::AbstractVector{T};
-  obj_weight::Real = one(eltype(x)),
-) where {T, V, M1 <: Matrix, M2 <: Matrix, M3 <: Matrix}
-  NLPModels.increment!(qp, :neval_hess)
-  count = 1
-  for j = 1:(qp.meta.nvar)
-    for i = j:(qp.meta.nvar)
-      vals[count] = obj_weight * qp.data.H[i, j]
-      count += 1
+    qp::DenseLQDynamicModel{T, V, M1, M2, M3},
+    x::AbstractVector{T},
+    vals::AbstractVector{T};
+    obj_weight::Real = one(eltype(x)),
+  ) where {T, V, M1 <: Matrix, M2 <: Matrix, M3 <: Matrix}
+    NLPModels.increment!(qp, :neval_hess)
+    count = 1
+    for j = 1:(qp.meta.nvar)
+      for i = j:(qp.meta.nvar)
+        vals[count] = obj_weight * qp.data.H[i, j]
+        count += 1
+      end
     end
+    return vals
   end
-  return vals
-end
 
 NLPModels.hess_coord!(
-  qp::LQDynamicModel,
+  qp::SparseLQDynamicModel,
   x::AbstractVector,
   y::AbstractVector,
   vals::AbstractVector;
   obj_weight::Real = one(eltype(x)),
 ) = NLPModels.hess_coord!(qp, x, vals, obj_weight = obj_weight)
 
+NLPModels.hess_coord!(
+  qp::DenseLQDynamicModel,
+  x::AbstractVector,
+  y::AbstractVector,
+  vals::AbstractVector;
+  obj_weight::Real = one(eltype(x)),
+) = NLPModels.hess_coord!(qp, x, vals, obj_weight = obj_weight)
+
+
+
 function NLPModels.jac_structure!(
-  qp::LQDynamicModel{T, V, M1, M2, M3},
+  qp::SparseLQDynamicModel{T, V, M1, M2, M3},
   rows::AbstractVector{<:Integer},
   cols::AbstractVector{<:Integer},
 ) where {T, V, M1 <: SparseMatrixCSC, M2 <: SparseMatrixCSC, M3<: AbstractMatrix}
@@ -1206,24 +1331,25 @@ function NLPModels.jac_structure!(
   return rows, cols
 end
 
+
 function NLPModels.jac_structure!(
-  qp::LQDynamicModel{T, V, M1, M2, M3},
-  rows::AbstractVector{<:Integer},
-  cols::AbstractVector{<:Integer},
-) where {T, V, M1<: Matrix, M2 <: Matrix, M3 <: Matrix}
-  count = 1
-  for j = 1:(qp.meta.nvar)
-    for i = 1:(qp.meta.ncon)
-      rows[count] = i
-      cols[count] = j
-      count += 1
+    qp::DenseLQDynamicModel{T, V, M1, M2, M3},
+    rows::AbstractVector{<:Integer},
+    cols::AbstractVector{<:Integer},
+  ) where {T, V, M1<: Matrix, M2 <: Matrix, M3 <: Matrix}
+    count = 1
+    for j = 1:(qp.meta.nvar)
+      for i = 1:(qp.meta.ncon)
+        rows[count] = i
+        cols[count] = j
+        count += 1
+      end
     end
-  end
-  return rows, cols
+    return rows, cols
 end
 
 function NLPModels.jac_coord!(
-  qp::LQDynamicModel{T, V, M1, M2, M3},
+  qp::SparseLQDynamicModel{T, V, M1, M2, M3},
   x::AbstractVector,
   vals::AbstractVector,
 ) where {T, V, M1 <: SparseMatrixCSC, M2 <: SparseMatrixCSC, M3 <: AbstractMatrix}
@@ -1232,20 +1358,21 @@ function NLPModels.jac_coord!(
   return vals
 end
 
+
 function NLPModels.jac_coord!(
-  qp::LQDynamicModel{T, V, M1, M2, M3},
-  x::AbstractVector,
-  vals::AbstractVector,
-) where {T, V, M1 <: Matrix, M2 <: Matrix, M3 <: Matrix}
-  NLPModels.increment!(qp, :neval_jac)
-  count = 1
-  for j = 1:(qp.meta.nvar)
-    for i = 1:(qp.meta.ncon)
-      vals[count] = qp.data.A[i, j]
-      count += 1
+    qp::DenseLQDynamicModel{T, V, M1, M2, M3},
+    x::AbstractVector,
+    vals::AbstractVector,
+    ) where {T, V, M1 <: Matrix, M2 <: Matrix, M3 <: Matrix}
+    NLPModels.increment!(qp, :neval_jac)
+    count = 1
+    for j = 1:(qp.meta.nvar)
+      for i = 1:(qp.meta.ncon)
+        vals[count] = qp.data.A[i, j]
+        count += 1
+      end
     end
-  end
-  return vals
+    return vals
 end
 
 
