@@ -1,4 +1,4 @@
-using Test, DynamicNLPModels, MadNLP, Random, JuMP, LinearAlgebra
+using Test, DynamicNLPModels, MadNLP, Random, JuMP, LinearAlgebra, SparseArrays
 include("sparse_lq_test.jl")
 
 N  = 3 # number of time steps
@@ -433,3 +433,15 @@ set_gl!(lq_sparse, 2, rand_val)
 gltest[3] = rand_val
 set_gl!(lq_dense, 3, rand_val)
 @test get_gl(lq_dense) == gltest
+
+
+# Test non-default vector/matrix types
+s0 = randn(Float32,2)
+A = randn(Float32,2,2)
+B = randn(Float32,2,2)
+Q = randn(Float32,2,2)
+R = randn(Float32,2,2)
+
+
+@test LQDynamicModel(s0,A,B,Q,R,10) isa SparseLQDynamicModel{Float32, Vector{Float32}, SparseArrays.SparseMatrixCSC{Float32, Int64}, SparseArrays.SparseMatrixCSC{Float32, Int64}, Matrix{Float32}}
+@test LQDynamicModel(s0,A,B,Q,R,10,dense=true) isa DenseLQDynamicModel{Float32, Vector{Float32}, Matrix{Float32}, Matrix{Float32}, Matrix{Float32}, SparseMatrixCSC{Float32, Int64}}
