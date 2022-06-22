@@ -1,4 +1,4 @@
-using Test, DynamicNLPModels, MadNLP, Random, JuMP, LinearAlgebra, SparseArrays
+using Test, DynamicNLPModels, MadNLP, Random, JuMP, LinearAlgebra, SparseArrays, CUDA
 include("sparse_lq_test.jl")
 
 N  = 3 # number of time steps
