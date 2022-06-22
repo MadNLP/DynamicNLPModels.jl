@@ -494,8 +494,8 @@ function _build_sparse_lq_dynamic_model(dnlp::LQDynamicData{T, V, M, MK}) where 
     lvar[1:ns] .= s0
     uvar[1:ns] .= s0
 
-    ucon  = (similar(Q, ns * N + N * length(gl)) .= 0)
-    lcon  = (similar(Q, ns * N + N * length(gl)) .= 0)
+    ucon  = (similar(Q, ns * N + N * length(gl) + length(lcon3)) .= 0)
+    lcon  = (similar(Q, ns * N + N * length(gl) + length(lcon3)) .= 0)
 
     ncon  = size(J, 1)
     nnzj = length(J.rowval)
@@ -509,8 +509,12 @@ function _build_sparse_lq_dynamic_model(dnlp::LQDynamicData{T, V, M, MK}) where 
         ucon[(ns * N + 1 + (i -1) * length(gl)):(ns * N + i * length(gl))] .= gu
     end
 
-    lcon = vcat(lcon, lcon3)
-    ucon = vcat(ucon, ucon3)
+    if length(lcon3) > 0
+        lcon[(1 + ns * N + N * length(gl)):end] .= lcon3
+        ucon[(1 + ns * N + N * length(gl)):end] .= ucon3
+    end
+
+
 
     c0 = eltype(Q)(0.0)
     c  = (similar(Q, nvar) .= 0)
@@ -585,10 +589,10 @@ function _build_dense_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) where {T, 
 
     G_blocks = _build_G_blocks(block_A, block_B, block_E, block_F, block_K, block_gl, block_gu, s0, N)
 
-    J1   = G_blocks.J
-    lcon = G_blocks.lcon
-    ucon = G_blocks.ucon
-    As0  = G_blocks.As0
+    J1    = G_blocks.J
+    lcon1 = G_blocks.lcon
+    ucon1 = G_blocks.ucon
+    As0   = G_blocks.As0
 
     lvar = (similar(Q, nu * N) .= 0)
     uvar = (similar(Q, nu * N) .= 0)
@@ -631,8 +635,16 @@ function _build_dense_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) where {T, 
     LinearAlgebra.axpy!(-1, As0_bounds, ucon2)
     LinearAlgebra.axpy!(-1, As0_bounds, lcon2)
 
-    lcon = vcat(lcon, vec(lcon2))
-    ucon = vcat(ucon, vec(ucon2))
+    lcon = (similar(Q, (length(lcon1) + length(lcon2))) .= 0)
+    ucon = (similar(Q, (length(ucon1) + length(ucon2))) .= 0)
+    
+    lcon[1:length(lcon1)] .= lcon1
+    ucon[1:length(ucon1)] .= ucon1
+
+    if length(lcon2) > 0
+        lcon[(1 + length(lcon1)):end] .= lcon2
+        ucon[(1 + length(ucon1)):end] .= ucon2
+    end
 
     J = vcat(J1, J2)
 
@@ -858,6 +870,10 @@ function _build_block_matrices(
     block_gl = (similar(Q, (nE1 * N, 1)) .= 0)
     block_gu = (similar(Q, (nE1 * N, 1)) .= 0)
   
+    println(typeof(block_E))
+    println(typeof(Q))
+    println(typeof((similar(Q, (nE1 * N, nE2 * (N + 1))) .= 0)))
+
     # Build E, F, and d (gl and gu) blocks
     for i in 1:N
         block_E[((i - 1) * nE1 + 1):(i * nE1), ((i - 1) * nE2 + 1):(i * nE2)] = E
@@ -865,6 +881,8 @@ function _build_block_matrices(
         block_gl[((i - 1) * nE1  + 1):(i * nE1)]  = gl
         block_gu[((i - 1) * nE1  + 1):(i * nE1)]  = gu
     end
+
+    println(typeof(block_E))
   
     # Add diagonal of Bs and fill Q, R, S, and K block matrices
     for j in 1:N
