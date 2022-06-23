@@ -141,7 +141,7 @@ function LQDynamicData(
         error("Number of columns of B are not equal to the number of inputs")
     end
     if length(s0) != size(Q, 1)
-        error("size of Q is not consistent with length of x0")
+        error("size of Q is not consistent with length of s0")
     end
 
     if !(sl  <= su)
@@ -151,7 +151,7 @@ function LQDynamicData(
         error("lower bound(s) on u is > upper bound(s)")
     end
     if !(s0 >= sl) || !(s0 <= su)
-        error("x0 is not within the given upper and lower bounds")
+        error("s0 is not within the given upper and lower bounds")
     end
 
     if size(E, 1) != size(F, 1)
@@ -315,9 +315,9 @@ function LQDynamicModel(
     R::M,
     N;
     Qf::M = Q, 
-    S::M  = (similar(s0, size(Q, 1), size(R, 1)) .= 0),
-    E::M  = (similar(s0, 0, length(s0)) .= 0),
-    F::M  = (similar(s0, 0, size(R, 1)) .= 0),
+    S::M  = (similar(Q, size(Q, 1), size(R, 1)) .= 0),
+    E::M  = (similar(Q, 0, length(s0)) .= 0),
+    F::M  = (similar(Q, 0, size(R, 1)) .= 0),
     K::MK = nothing,
     sl::V = (similar(s0) .= -Inf),
     su::V = (similar(s0) .=  Inf),
@@ -367,21 +367,21 @@ function _build_sparse_lq_dynamic_model(dnlp::LQDynamicData{T, V, M, MK}) where 
 
     J = vcat(J1, J2)
 
-    c0  = eltype(Q)(0.0)
+    c0  = zero(eltype(s0))
 
     
     nvar = ns * (N + 1) + nu * N
-    c  = similar(Q, nvar); fill!(c, 0)
+    c  = similar(s0, nvar); fill!(c, 0)
     
-    lvar  = similar(Q, nvar); fill!(lvar, 0)
-    uvar  = similar(Q, nvar); fill!(uvar, 0)
+    lvar  = similar(s0, nvar); fill!(lvar, 0)
+    uvar  = similar(s0, nvar); fill!(uvar, 0)
 
     lvar[1:ns] .= s0
     uvar[1:ns] .= s0
 
 
-    lcon  = similar(Q, ns * N + N * length(gl)); fill!(lcon, 0)
-    ucon  = similar(Q, ns * N + N * length(gl)); fill!(ucon, 0)
+    lcon  = similar(s0, ns * N + N * length(gl)); fill!(lcon, 0)
+    ucon  = similar(s0, ns * N + N * length(gl)); fill!(ucon, 0)
 
     ncon  = size(J, 1)
     nnzj = length(J.rowval)
@@ -405,7 +405,7 @@ function _build_sparse_lq_dynamic_model(dnlp::LQDynamicData{T, V, M, MK}) where 
     SparseLQDynamicModel(
         NLPModels.NLPModelMeta(
         nvar,
-        x0   = (similar(Q, nvar) .= 0),#zeros(eltype(Q), nvar),
+        x0   = (similar(s0, nvar) .= 0),
         lvar = lvar,
         uvar = uvar, 
         ncon = ncon,
@@ -494,14 +494,14 @@ function _build_sparse_lq_dynamic_model(dnlp::LQDynamicData{T, V, M, MK}) where 
 
     nvar = ns * (N + 1) + nu * N
     
-    lvar  = similar(Q, nvar); fill!(lvar, -Inf)
-    uvar  = similar(Q, nvar); fill!(uvar, Inf)
+    lvar  = similar(s0, nvar); fill!(lvar, -Inf)
+    uvar  = similar(s0, nvar); fill!(uvar, Inf)
 
     lvar[1:ns] .= s0
     uvar[1:ns] .= s0
 
-    lcon  = similar(Q, ns * N + N * length(gl) + length(lcon3)); fill!(lcon, 0)
-    ucon  = similar(Q, ns * N + N * length(gl) + length(lcon3)); fill!(ucon, 0)
+    lcon  = similar(s0, ns * N + N * length(gl) + length(lcon3)); fill!(lcon, 0)
+    ucon  = similar(s0, ns * N + N * length(gl) + length(lcon3)); fill!(ucon, 0)
 
     ncon  = size(J, 1)
     nnzj = length(J.rowval)
@@ -522,13 +522,13 @@ function _build_sparse_lq_dynamic_model(dnlp::LQDynamicData{T, V, M, MK}) where 
 
 
 
-    c0 = eltype(Q)(0.0)
-    c  = similar(Q, nvar); fill!(c, 0)
+    c0 = zero(eltype(s0))
+    c  = similar(s0, nvar); fill!(c, 0)
 
     SparseLQDynamicModel(
         NLPModels.NLPModelMeta(
         nvar,
-        x0   = (similar(Q, nvar) .= 0),
+        x0   = (similar(s0, nvar) .= 0),
         lvar = lvar,
         uvar = uvar, 
         ncon = ncon,
@@ -599,8 +599,8 @@ function _build_dense_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) where {T, 
     ucon1 = G_blocks.ucon
     As0   = G_blocks.As0
 
-    lvar = similar(Q, nu * N); fill!(lvar, -Inf)
-    uvar = similar(Q, nu * N); fill!(uvar, Inf)
+    lvar = similar(s0, nu * N); fill!(lvar, -Inf)
+    uvar = similar(s0, nu * N); fill!(uvar, Inf)
 
     for i in 1:(N)
         lvar[((i - 1) * nu + 1):(i * nu)] = ul
@@ -640,8 +640,8 @@ function _build_dense_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) where {T, 
     LinearAlgebra.axpy!(-1, As0_bounds, ucon2)
     LinearAlgebra.axpy!(-1, As0_bounds, lcon2)
 
-    lcon = similar(Q, length(lcon1) + length(lcon2)); fill!(lcon, 0)
-    ucon = similar(Q, length(ucon1) + length(ucon2)); fill!(ucon, 0)
+    lcon = similar(s0, length(lcon1) + length(lcon2)); fill!(lcon, 0)
+    ucon = similar(s0, length(ucon1) + length(ucon2)); fill!(ucon, 0)
     
     lcon[1:length(lcon1)] .= lcon1
     ucon[1:length(ucon1)] .= ucon1
@@ -668,7 +668,7 @@ function _build_dense_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) where {T, 
     DenseLQDynamicModel(
         NLPModels.NLPModelMeta(
         nvar,
-        x0   = (similar(Q, nvar) .= 0),
+        x0   = (similar(s0, nvar) .= 0),
         lvar = lvar,
         uvar = uvar, 
         ncon = ncon,
@@ -827,8 +827,8 @@ function _build_dense_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) where {T, 
         J[(size(J1, 1) + size(J2, 1) + 1):(size(J1, 1) + size(J2, 1) + size(J3, 1)), :] .= J3
     end
 
-    lcon = similar(Q, size(J, 1)); fill!(lcon, 0)
-    ucon = similar(Q, size(J, 1)); fill!(ucon, 0)
+    lcon = similar(s0, size(J, 1)); fill!(lcon, 0)
+    ucon = similar(s0, size(J, 1)); fill!(ucon, 0)
 
     lcon[1:length(lcon1)] .= lcon1
     ucon[1:length(ucon1)] .= ucon1
@@ -855,7 +855,7 @@ function _build_dense_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) where {T, 
     DenseLQDynamicModel(
         NLPModels.NLPModelMeta(
         nvar,
-        x0   = (similar(Q, nvar) .= 0),
+        x0   = (similar(s0, nvar) .= 0),
         ncon = ncon,
         lcon = lcon,
         ucon = ucon,
@@ -1196,7 +1196,7 @@ function get_u(
     nu       = lqdm.dynamic_data.nu
     N        = lqdm.dynamic_data.N
 
-    u = solution[(ns * (N + 1)+1):end]
+    u = solution[(ns * (N + 1) + 1):end]
     return u
 end
 
@@ -1563,8 +1563,8 @@ function _build_sparse_J3(K, N, uu, ul)
 
     full_bool_vec = fill(true, nu * N)
 
-    lcon3 = similar(K, nu * N); fill!(lcon3, 0)
-    ucon3 = similar(K, nu * N); fill!(ucon3, 0)
+    lcon3 = similar(ul, nu * N); fill!(lcon3, 0)
+    ucon3 = similar(ul, nu * N); fill!(ucon3, 0)
 
     for i in 1:N
         row_range   = (nu * (i - 1) + 1):(nu * i)
