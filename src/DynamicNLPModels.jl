@@ -612,7 +612,7 @@ function _build_dense_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) where {T, 
     num_real_bounds = sum(bool_vec)
 
     J2         = similar(Q, num_real_bounds * N, nu * N); fill!(J2, 0)
-    As0_bounds = similar(Q, num_real_bounds * N, 1); fill!(As0_bounds, 0)
+    As0_bounds = similar(s0, num_real_bounds * N); fill!(As0_bounds, 0)
 
     if num_real_bounds == length(sl)
         J2        .= block_B[(1 + ns):end,:]
@@ -621,15 +621,15 @@ function _build_dense_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) where {T, 
         for i in 1:N
             row_range = (1 + (i - 1) * num_real_bounds):(i * num_real_bounds)
             J2[row_range, :] .= block_B[(1 + ns * i): (ns * (i + 1)), :][bool_vec, :]
-            As0_bounds[row_range, :] .= As0[(1 + ns * i):(ns * (i + 1)), :][bool_vec, :]
+            As0_bounds[row_range] .= As0[(1 + ns * i):(ns * (i + 1)), :][bool_vec, :]
         end
 
         sl = sl[bool_vec]
         su = su[bool_vec]
     end
 
-    lcon2 = similar(Q, size(J2, 1), 1); fill!(lcon2, 0)
-    ucon2 = similar(Q, size(J2, 1), 1); fill!(ucon2, 0)
+    lcon2 = similar(s0, size(J2, 1)); fill!(lcon2, 0)
+    ucon2 = similar(s0, size(J2, 1)); fill!(ucon2, 0)
 
 
     for i in 1:N
@@ -795,11 +795,11 @@ function _build_dense_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) where {T, 
         uu = uu[bool_vec_u]
     end
 
-    lcon2 = similar(Q, size(J2, 1), 1); fill!(lcon2, 0)
-    ucon2 = similar(Q, size(J2, 1), 1); fill!(ucon2, 0)
+    lcon2 = similar(s0, size(J2, 1)); fill!(lcon2, 0)
+    ucon2 = similar(s0, size(J2, 1)); fill!(ucon2, 0)
 
-    lcon3 = similar(Q, size(J3, 1), 1); fill!(lcon3, 0)
-    ucon3 = similar(Q, size(J3, 1), 1); fill!(ucon3, 0)
+    lcon3 = similar(s0, size(J3, 1)); fill!(lcon3, 0)
+    ucon3 = similar(s0, size(J3, 1)); fill!(ucon3, 0)
 
     for i in 1:N
         lcon2[((i - 1) * length(su) + 1):(i * length(su)),1] = sl
