@@ -99,7 +99,6 @@ function dense_blocks_to_CUDA(db::Block_Matrices)
     Block_Matrices(A, B, db.Q, db.R, db.S, db.K, E, F, gl, gu)
 end
     
-
 function meta_to_CUDA(meta::NLPModels.NLPModelMeta)
     x0   = CuVector{Float64}(undef, length(meta.x0))
     lvar = CuVector{Float64}(undef, length(meta.lvar))
@@ -213,7 +212,5 @@ dense_options_cuda = Dict{Symbol, Any}(
     :linear_solver=> MadNLPLapackGPU,
     :max_iter=> 200
 )
-
-MadNLP.optimize!(lqdm_CUDA; linear_solver = MadNLPLapackGPU)
 
 ips_d = MadNLP.InteriorPointSolver(lqdm_CUDA, option_dict=dense_options_cuda)
