@@ -658,7 +658,7 @@ function _build_dense_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) where {T, 
         for i in 1:N
             row_range = (1 + (i - 1) * num_real_bounds):(i * num_real_bounds)
             J2[row_range, :] .= block_B[(1 + ns * i): (ns * (i + 1)), :][bool_vec, :]
-            As0_bounds[row_range] .= As0[(1 + ns * i):(ns * (i + 1)), :][bool_vec, :]
+            As0_bounds[row_range] .= As0[(1 + ns * i):(ns * (i + 1))][bool_vec]
         end
 
         sl = sl[bool_vec]
@@ -791,7 +791,7 @@ function _build_dense_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) where {T, 
         for i in 1:N
             row_range = (1 + (i - 1) * num_real_bounds):(i * num_real_bounds)
             J2[row_range, :] .= block_B[(1 + ns * i): (ns * (i + 1)), :][bool_vec_s, :]
-            As0_bounds[row_range] .= As0[(1 + ns * i):(ns * (i + 1)), :][bool_vec_s, :]
+            As0_bounds[row_range] .= As0[(1 + ns * i):(ns * (i + 1))][bool_vec_s]
         end
 
         sl = sl[bool_vec_s]
