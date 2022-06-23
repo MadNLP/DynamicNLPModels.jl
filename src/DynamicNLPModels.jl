@@ -6,7 +6,7 @@ import LinearAlgebra
 import SparseArrays
 import SparseArrays: SparseMatrixCSC
 
-export LQDynamicData, SparseLQDynamicModel, DenseLQDynamicModel, get_u, get_s
+export LQDynamicData, SparseLQDynamicModel, DenseLQDynamicModel, get_u, get_s, Block_Matrices
 
 abstract type AbstractLQDynData{T,V} end
 """
