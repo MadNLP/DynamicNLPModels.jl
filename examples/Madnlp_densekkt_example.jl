@@ -1,4 +1,5 @@
-using DynamicNLPModels, NLPModels, Random, LinearAlgebra, MadNLP, QuadraticModels, MadNLPGPU
+using Revise
+using DynamicNLPModels, NLPModels, Random, LinearAlgebra, MadNLP, QuadraticModels, MadNLPGPU, CUDA
 
 function model_to_CUDA(lqdm::DenseLQDynamicModel)
     meta         = lqdm.meta
@@ -55,7 +56,6 @@ function dynamic_data_to_CUDA(dnlp::LQDynamicData)
     LinearAlgebra.copyto!(slc, dnlp.sl)
     LinearAlgebra.copyto!(suc, dnlp.su)
 
-    println(typeof(s0c))
 
     LQDynamicData(s0c, Ac, Bc, Qc, Rc, dnlp.N; Qf = Qfc, S = Sc,  
     E = Ec, F = Fc, K = Kc, sl = slc, su = suc, ul = ulc, uu = uuc, gl = glc, gu = guc
@@ -186,31 +186,17 @@ lq_sparse   = SparseLQDynamicModel(dnlp)
 lq_dense = DenseLQDynamicModel(dnlp)
 
 
-dense_options = Dict{Symbol, Any}(
-    :kkt_system => MadNLP.DENSE_KKT_SYSTEM,
-    :linear_solver=> MadNLPLapackCPU,
-    :max_iter=> 200
-)
-
-ipd = MadNLP.InteriorPointSolver(lq_dense, option_dict=dense_options)
-sol_ref_dense = MadNLP.optimize!(ipd)
-
-
-sparse_options = Dict{Symbol, Any}(
-    :kkt_system => MadNLP.SPARSE_KKT_SYSTEM,
-    :linear_solver=>MadNLPLapackCPU
-)
-
-ips = MadNLP.InteriorPointSolver(lq_sparse, option_dict=sparse_options)
-
-sol_ref_sparse = MadNLP.optimize!(ips)
-
 lqdm_CUDA = model_to_CUDA(lq_dense)
 
-dense_options_cuda = Dict{Symbol, Any}(
-    :kkt_system => MadNLP.DENSE_KKT_SYSTEM,
-    :linear_solver=> MadNLPLapackGPU,
-    :max_iter=> 200
+madnlp_options = Dict{Symbol, Any}(
+        :kkt_system=>MadNLP.DENSE_KKT_SYSTEM,
+        :linear_solver=>MadNLPLapackGPU,
+        :print_level=>MadNLP.ERROR,
 )
 
-ips_d = MadNLP.InteriorPointSolver(lqdm_CUDA, option_dict=dense_options_cuda)
+
+TKKTGPU = MadNLP.DenseKKTSystem{Float64, CuVector{Float64}, CuMatrix{Float64}}
+opt = MadNLP.Options(; madnlp_options...)
+    # Instantiate Solver with KKT on the GPU
+d_ips = MadNLP.InteriorPointSolver{TKKTGPU}(lqdm_CUDA, opt; option_linear_solver=copy(madnlp_options))
+MadNLP.optimize!(d_ips)

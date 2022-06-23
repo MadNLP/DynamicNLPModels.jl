@@ -144,20 +144,20 @@ function LQDynamicData(
         error("size of Q is not consistent with length of s0")
     end
 
-    if !(sl  <= su)
+    if sum(sl .>= su) > 0
         error("lower bound(s) on x is > upper bound(s)")
     end
-    if !(ul <= uu)
+    if sum(ul .>= sl) > 0
         error("lower bound(s) on u is > upper bound(s)")
     end
-    if !(s0 >= sl) || !(s0 <= su)
+    if sum(s0 .<= sl) > 0 || sum(s0 .>= su) > 0
         error("s0 is not within the given upper and lower bounds")
     end
 
     if size(E, 1) != size(F, 1)
         error("E and F have different numbers of rows")
     end
-    if !(gl <= gu)
+    if sum(gl .>= gu) > 0
         error("lower bound(s) on Es + Fu is > upper bound(s)")
     end
     if size(E, 2) != size(Q, 1)
