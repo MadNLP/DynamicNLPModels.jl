@@ -46,11 +46,11 @@ K = rand(nu, ns)
 # Test with no bounds
 model     = build_QP_JuMP_model(Q,R,A,B, N;s0=s0)
 dnlp      = LQDynamicData(s0, A, B, Q, R, N)
-lq_sparse = LQDynamicModel(dnlp; dense=false)
-lq_dense  = LQDynamicModel(dnlp; dense=true)
+lq_sparse = SparseLQDynamicModel(dnlp)
+lq_dense  = DenseLQDynamicModel(dnlp)
 
-lq_sparse_from_data = LQDynamicModel(s0, A, B, Q, R, N; dense=false)
-lq_dense_from_data  = LQDynamicModel(s0, A, B, Q, R, N; dense=true)
+lq_sparse_from_data = SparseLQDynamicModel(s0, A, B, Q, R, N)
+lq_dense_from_data  = DenseLQDynamicModel(s0, A, B, Q, R, N)
 
 optimize!(model)
 solution_ref_sparse           = madnlp(lq_sparse, max_iter=100) 
@@ -71,11 +71,11 @@ solution_ref_dense_from_data  = madnlp(lq_dense_from_data, max_iter=100)
 # Test with lower bounds
 model     = build_QP_JuMP_model(Q,R,A,B, N;s0=s0, sl = sl, ul = ul)
 dnlp      = LQDynamicData(s0, A, B, Q, R, N;  sl = sl, ul=ul)
-lq_sparse = LQDynamicModel(dnlp; dense=false)
-lq_dense  = LQDynamicModel(dnlp; dense=true)
+lq_sparse = SparseLQDynamicModel(dnlp)
+lq_dense  = DenseLQDynamicModel(dnlp)
 
-lq_sparse_from_data = LQDynamicModel(s0, A, B, Q, R, N; sl = sl, ul = ul, dense=false)
-lq_dense_from_data  = LQDynamicModel(s0, A, B, Q, R, N; sl = sl, ul = ul, dense=true)
+lq_sparse_from_data = SparseLQDynamicModel(s0, A, B, Q, R, N; sl = sl, ul = ul)
+lq_dense_from_data  = DenseLQDynamicModel(s0, A, B, Q, R, N; sl = sl, ul = ul)
 
 optimize!(model)
 solution_ref_sparse           = madnlp(lq_sparse, max_iter=100) 
@@ -96,11 +96,11 @@ solution_ref_dense_from_data  = madnlp(lq_dense_from_data, max_iter=100)
 # Test with upper bounds
 model     = build_QP_JuMP_model(Q,R,A,B, N;s0=s0, su = su, uu = uu)
 dnlp      = LQDynamicData(s0, A, B, Q, R, N; su = su, uu = uu)
-lq_sparse = LQDynamicModel(dnlp; dense=false)
-lq_dense  = LQDynamicModel(dnlp; dense=true)
+lq_sparse = SparseLQDynamicModel(dnlp)
+lq_dense  = DenseLQDynamicModel(dnlp)
 
-lq_sparse_from_data = LQDynamicModel(s0, A, B, Q, R, N; su = su, uu = uu, dense=false)
-lq_dense_from_data  = LQDynamicModel(s0, A, B, Q, R, N; su = su, uu = uu, dense=true)
+lq_sparse_from_data = SparseLQDynamicModel(s0, A, B, Q, R, N; su = su, uu = uu)
+lq_dense_from_data  = DenseLQDynamicModel(s0, A, B, Q, R, N; su = su, uu = uu)
 
 optimize!(model)
 solution_ref_sparse           = madnlp(lq_sparse, max_iter=100) 
@@ -121,11 +121,11 @@ solution_ref_dense_from_data  = madnlp(lq_dense_from_data, max_iter=100)
 # Test with upper and lower bounds
 model     = build_QP_JuMP_model(Q,R,A,B, N;s0=s0, sl = sl, ul = ul, su = su, uu = uu)
 dnlp      = LQDynamicData(s0, A, B, Q, R, N; sl = sl, ul = ul, su = su, uu = uu)
-lq_sparse = LQDynamicModel(dnlp; dense=false)
-lq_dense  = LQDynamicModel(dnlp; dense=true)
+lq_sparse = SparseLQDynamicModel(dnlp)
+lq_dense  = DenseLQDynamicModel(dnlp)
 
-lq_sparse_from_data = LQDynamicModel(s0, A, B, Q, R, N; sl=sl, ul=ul, su = su, uu = uu, dense=false)
-lq_dense_from_data  = LQDynamicModel(s0, A, B, Q, R, N; sl=sl, ul=ul, su = su, uu = uu, dense=true)
+lq_sparse_from_data = SparseLQDynamicModel(s0, A, B, Q, R, N; sl=sl, ul=ul, su = su, uu = uu)
+lq_dense_from_data  = DenseLQDynamicModel(s0, A, B, Q, R, N; sl=sl, ul=ul, su = su, uu = uu)
 
 optimize!(model)
 solution_ref_sparse           = madnlp(lq_sparse, max_iter=100) 
@@ -147,11 +147,11 @@ solution_ref_dense_from_data  = madnlp(lq_dense_from_data, max_iter=100)
 # Test with Qf matrix
 model     = build_QP_JuMP_model(Q,R,A,B, N;s0=s0, sl = sl, ul = ul, su = su, uu = uu, Qf=Qf)
 dnlp      = LQDynamicData(s0, A, B, Q, R, N; sl = sl, ul = ul, su = su, uu = uu, Qf = Qf)
-lq_sparse = LQDynamicModel(dnlp; dense=false)
-lq_dense  = LQDynamicModel(dnlp; dense=true)
+lq_sparse = SparseLQDynamicModel(dnlp)
+lq_dense  = DenseLQDynamicModel(dnlp)
 
-lq_sparse_from_data = LQDynamicModel(s0, A, B, Q, R, N; sl = sl, ul = ul, su = su, uu = uu, Qf = Qf, dense=false)
-lq_dense_from_data  = LQDynamicModel(s0, A, B, Q, R, N; sl = sl, ul = ul, su = su, uu = uu, Qf = Qf, dense=true)
+lq_sparse_from_data = SparseLQDynamicModel(s0, A, B, Q, R, N; sl = sl, ul = ul, su = su, uu = uu, Qf = Qf)
+lq_dense_from_data  = DenseLQDynamicModel(s0, A, B, Q, R, N; sl = sl, ul = ul, su = su, uu = uu, Qf = Qf)
 
 optimize!(model)
 solution_ref_sparse           = madnlp(lq_sparse, max_iter=100) 
@@ -182,11 +182,11 @@ u_values = value.(all_variables(model)[(1 + ns * (N + 1)):(ns * (N + 1) + nu * N
 # Test with E and F matrix bounds
 model     = build_QP_JuMP_model(Q,R,A,B, N;s0=s0, sl = sl, ul = ul, su = su, uu = uu, E = E, F = F, gl = gl, gu = gu)
 dnlp      = LQDynamicData(s0, A, B, Q, R, N; sl = sl, ul = ul, su = su, uu = uu, E = E, F = F, gl = gl, gu = gu)
-lq_sparse = LQDynamicModel(dnlp; dense=false)
-lq_dense  = LQDynamicModel(dnlp; dense=true)
+lq_sparse = SparseLQDynamicModel(dnlp)
+lq_dense  = DenseLQDynamicModel(dnlp)
 
-lq_sparse_from_data = LQDynamicModel(s0, A, B, Q, R, N; sl = sl, ul = ul, su = su, uu = uu, E = E, F = F, gl = gl, gu = gu, dense=false)
-lq_dense_from_data  = LQDynamicModel(s0, A, B, Q, R, N; sl = sl, ul = ul, su = su, uu = uu, E = E, F = F, gl = gl, gu = gu, dense=true)
+lq_sparse_from_data = SparseLQDynamicModel(s0, A, B, Q, R, N; sl = sl, ul = ul, su = su, uu = uu, E = E, F = F, gl = gl, gu = gu)
+lq_dense_from_data  = DenseLQDynamicModel(s0, A, B, Q, R, N; sl = sl, ul = ul, su = su, uu = uu, E = E, F = F, gl = gl, gu = gu)
 
 optimize!(model)
 solution_ref_sparse           = madnlp(lq_sparse, max_iter=100) 
@@ -206,11 +206,11 @@ solution_ref_dense_from_data  = madnlp(lq_dense_from_data, max_iter=100)
 # Test edge case where one state is unbounded, other(s) is bounded
 model     = build_QP_JuMP_model(Q,R,A,B, N;s0=s0, sl = sl_with_inf, ul = ul, su = su_with_inf, uu = uu, E = E, F = F, gl = gl, gu = gu)
 dnlp      = LQDynamicData(s0, A, B, Q, R, N; sl = sl_with_inf, ul = ul, su = su_with_inf, uu = uu, E = E, F = F, gl = gl, gu = gu)
-lq_sparse = LQDynamicModel(dnlp; dense=false)
-lq_dense  = LQDynamicModel(dnlp; dense=true)
+lq_sparse = SparseLQDynamicModel(dnlp)
+lq_dense  = DenseLQDynamicModel(dnlp)
 
-lq_sparse_from_data = LQDynamicModel(s0, A, B, Q, R, N; sl = sl_with_inf, ul = ul, su = su_with_inf, uu = uu, E = E, F = F, gl = gl, gu = gu, dense=false)
-lq_dense_from_data  = LQDynamicModel(s0, A, B, Q, R, N; sl = sl_with_inf, ul = ul, su = su_with_inf, uu = uu, E = E, F = F, gl = gl, gu = gu, dense=true)
+lq_sparse_from_data = SparseLQDynamicModel(s0, A, B, Q, R, N; sl = sl_with_inf, ul = ul, su = su_with_inf, uu = uu, E = E, F = F, gl = gl, gu = gu)
+lq_dense_from_data  = DenseLQDynamicModel(s0, A, B, Q, R, N; sl = sl_with_inf, ul = ul, su = su_with_inf, uu = uu, E = E, F = F, gl = gl, gu = gu)
 
 optimize!(model)
 solution_ref_sparse           = madnlp(lq_sparse, max_iter=100) 
@@ -232,11 +232,11 @@ solution_ref_dense_from_data  = madnlp(lq_dense_from_data, max_iter=100)
 # Test S matrix case
 model     = build_QP_JuMP_model(Q,R,A,B, N;s0=s0, sl = sl, ul = ul, su = su, uu = uu, E = E, F = F, gl = gl, gu = gu, S = S)
 dnlp      = LQDynamicData(s0, A, B, Q, R, N; sl = sl, ul = ul, su = su, uu = uu, E = E, F = F, gl = gl, gu = gu, S = S)
-lq_sparse = LQDynamicModel(dnlp; dense=false)
-lq_dense  = LQDynamicModel(dnlp; dense=true)
+lq_sparse = SparseLQDynamicModel(dnlp)
+lq_dense  = DenseLQDynamicModel(dnlp)
 
-lq_sparse_from_data = LQDynamicModel(s0, A, B, Q, R, N; sl = sl, ul = ul, su = su, uu = uu, E = E, F = F, gl = gl, gu = gu, S = S, dense=false)
-lq_dense_from_data  = LQDynamicModel(s0, A, B, Q, R, N; sl = sl, ul = ul, su = su, uu = uu, E = E, F = F, gl = gl, gu = gu, S = S, dense=true)
+lq_sparse_from_data = SparseLQDynamicModel(s0, A, B, Q, R, N; sl = sl, ul = ul, su = su, uu = uu, E = E, F = F, gl = gl, gu = gu, S = S)
+lq_dense_from_data  = DenseLQDynamicModel(s0, A, B, Q, R, N; sl = sl, ul = ul, su = su, uu = uu, E = E, F = F, gl = gl, gu = gu, S = S)
 
 optimize!(model)
 
@@ -258,11 +258,11 @@ solution_ref_dense_from_data  = madnlp(lq_dense_from_data, max_iter=100)
 # Test K matrix case without S
 model     = build_QP_JuMP_model(Q,R,A,B, N;s0=s0, sl = sl, ul = ul, su = su, uu = uu, E = E, F = F, gl = gl, gu = gu, K = K)
 dnlp      = LQDynamicData(s0, A, B, Q, R, N; sl = sl, ul = ul, su = su, uu = uu, E = E, F = F, gl = gl, gu = gu, K = K)
-lq_sparse = LQDynamicModel(dnlp; dense=false)
-lq_dense  = LQDynamicModel(dnlp; dense=true)
+lq_sparse = SparseLQDynamicModel(dnlp)
+lq_dense  = DenseLQDynamicModel(dnlp)
 
-lq_sparse_from_data = LQDynamicModel(s0, A, B, Q, R, N; sl = sl, ul = ul, su = su, uu = uu, E = E, F = F, gl = gl, gu = gu, K = K, dense=false)
-lq_dense_from_data  = LQDynamicModel(s0, A, B, Q, R, N; sl = sl, ul = ul, su = su, uu = uu, E = E, F = F, gl = gl, gu = gu, K = K, dense=true)
+lq_sparse_from_data = SparseLQDynamicModel(s0, A, B, Q, R, N; sl = sl, ul = ul, su = su, uu = uu, E = E, F = F, gl = gl, gu = gu, K = K)
+lq_dense_from_data  = DenseLQDynamicModel(s0, A, B, Q, R, N; sl = sl, ul = ul, su = su, uu = uu, E = E, F = F, gl = gl, gu = gu, K = K)
 
 optimize!(model)
 solution_ref_sparse           = madnlp(lq_sparse, max_iter=100) 
@@ -283,11 +283,11 @@ solution_ref_dense_from_data  = madnlp(lq_dense_from_data, max_iter=100)
 # Test K matrix case with S
 model     = build_QP_JuMP_model(Q,R,A,B, N;s0=s0, sl = sl, ul = ul, su = su, uu = uu, E = E, F = F, gl = gl, gu = gu, K = K, S = S)
 dnlp      = LQDynamicData(s0, A, B, Q, R, N; sl = sl, ul = ul, su = su, uu = uu, E = E, F = F, gl = gl, gu = gu, K = K, S = S)
-lq_sparse = LQDynamicModel(dnlp; dense=false)
-lq_dense  = LQDynamicModel(dnlp; dense=true)
+lq_sparse = SparseLQDynamicModel(dnlp)
+lq_dense  = DenseLQDynamicModel(dnlp)
 
-lq_sparse_from_data = LQDynamicModel(s0, A, B, Q, R, N; sl = sl, ul = ul, su = su, uu = uu, E = E, F = F, gl = gl, gu = gu, K = K, S = S, dense=false)
-lq_dense_from_data  = LQDynamicModel(s0, A, B, Q, R, N; sl = sl, ul = ul, su = su, uu = uu, E = E, F = F, gl = gl, gu = gu, K = K, S = S, dense=true)
+lq_sparse_from_data = SparseLQDynamicModel(s0, A, B, Q, R, N; sl = sl, ul = ul, su = su, uu = uu, E = E, F = F, gl = gl, gu = gu, K = K, S = S)
+lq_dense_from_data  = DenseLQDynamicModel(s0, A, B, Q, R, N; sl = sl, ul = ul, su = su, uu = uu, E = E, F = F, gl = gl, gu = gu, K = K, S = S)
 
 optimize!(model)
 solution_ref_sparse           = madnlp(lq_sparse, max_iter=100) 
@@ -334,11 +334,11 @@ K = rand(nu, ns)
 
 model     = build_QP_JuMP_model(Q,R,A,B, N;s0=s0, sl = sl, ul = ul_with_inf, su = su, uu = uu_with_inf, E = E, F = F, gl = gl, gu = gu, K = K, S = S)
 dnlp      = LQDynamicData(s0, A, B, Q, R, N; sl = sl, ul = ul_with_inf, su = su, uu = uu_with_inf, E = E, F = F, gl = gl, gu = gu, K = K, S = S)
-lq_sparse = LQDynamicModel(dnlp; dense=false)
-lq_dense  = LQDynamicModel(dnlp; dense=true)
+lq_sparse = SparseLQDynamicModel(dnlp)
+lq_dense  = DenseLQDynamicModel(dnlp)
 
-lq_sparse_from_data = LQDynamicModel(s0, A, B, Q, R, N; sl = sl, ul = ul_with_inf, su = su, uu = uu_with_inf, E = E, F = F, gl = gl, gu = gu, K = K, S = S, dense=false)
-lq_dense_from_data  = LQDynamicModel(s0, A, B, Q, R, N; sl = sl, ul = ul_with_inf, su = su, uu = uu_with_inf, E = E, F = F, gl = gl, gu = gu, K = K, S = S, dense=true)
+lq_sparse_from_data = SparseLQDynamicModel(s0, A, B, Q, R, N; sl = sl, ul = ul_with_inf, su = su, uu = uu_with_inf, E = E, F = F, gl = gl, gu = gu, K = K, S = S)
+lq_dense_from_data  = DenseLQDynamicModel(s0, A, B, Q, R, N; sl = sl, ul = ul_with_inf, su = su, uu = uu_with_inf, E = E, F = F, gl = gl, gu = gu, K = K, S = S)
 
 optimize!(model)
 solution_ref_sparse           = madnlp(lq_sparse, max_iter=100) 
@@ -360,11 +360,11 @@ solution_ref_dense_from_data  = madnlp(lq_dense_from_data, max_iter=100)
 # Test K with no bounds
 model     = build_QP_JuMP_model(Q,R,A,B, N;s0=s0, E = E, F = F, gl = gl, gu = gu, K = K)
 dnlp      = LQDynamicData(s0, A, B, Q, R, N; E = E, F = F, gl = gl, gu = gu, K = K)
-lq_sparse = LQDynamicModel(dnlp; dense=false)
-lq_dense  = LQDynamicModel(dnlp; dense=true)
+lq_sparse = SparseLQDynamicModel(dnlp)
+lq_dense  = DenseLQDynamicModel(dnlp)
 
-lq_sparse_from_data = LQDynamicModel(s0, A, B, Q, R, N; E = E, F = F, gl = gl, gu = gu, K = K, dense=false)
-lq_dense_from_data  = LQDynamicModel(s0, A, B, Q, R, N; E = E, F = F, gl = gl, gu = gu, K = K, dense=true)
+lq_sparse_from_data = SparseLQDynamicModel(s0, A, B, Q, R, N; E = E, F = F, gl = gl, gu = gu, K = K)
+lq_dense_from_data  = DenseLQDynamicModel(s0, A, B, Q, R, N; E = E, F = F, gl = gl, gu = gu, K = K)
 
 optimize!(model)
 solution_ref_sparse           = madnlp(lq_sparse, max_iter=100) 
@@ -396,8 +396,8 @@ u_values = value.(all_variables(model)[(1 + ns * (N + 1)):(ns * (N + 1) + nu * N
 # Test get_* and set_* functions
 
 dnlp      = LQDynamicData(s0, A, B, Q, R, N; sl = sl, ul = ul, su = su, uu = uu, E = E, F = F, gl = gl, gu = gu, K = K, S = S)
-lq_sparse = LQDynamicModel(dnlp; dense=false)
-lq_dense  = LQDynamicModel(dnlp; dense=true)
+lq_sparse = SparseLQDynamicModel(dnlp)
+lq_dense  = DenseLQDynamicModel(dnlp)
 
 @test get_A(dnlp) == A
 @test get_A(lq_sparse) == A
@@ -468,13 +468,13 @@ su = Test.GenericArray(su)
 ul = Test.GenericArray(ul)
 uu = Test.GenericArray(uu)
 
-@test (LQDynamicModel(s0, A, B, Q, R, 10; S = S, E = E, F = F, gl = gl, gu = gu, ul = ul, uu = uu, sl = sl, su = su,  dense=true) isa 
+@test (DenseLQDynamicModel(s0, A, B, Q, R, 10; S = S, E = E, F = F, gl = gl, gu = gu, ul = ul, uu = uu, sl = sl, su = su) isa 
     DenseLQDynamicModel{Float32, GenericArray{Float32, 1}, GenericArray{Float32, 2}, GenericArray{Float32, 2}, GenericArray{Float32, 2}, SparseMatrixCSC{Float32, Int64}, Nothing})
-@test (LQDynamicModel(s0, A, B, Q, R, 10; K = K, S = S, E = E, F = F, gl = gl, gu = gu, ul = ul, uu = uu, sl = sl, su = su,  dense=true) isa 
+@test (DenseLQDynamicModel(s0, A, B, Q, R, 10; K = K, S = S, E = E, F = F, gl = gl, gu = gu, ul = ul, uu = uu, sl = sl, su = su) isa 
     DenseLQDynamicModel{Float32, GenericArray{Float32, 1}, GenericArray{Float32, 2}, GenericArray{Float32, 2}, GenericArray{Float32, 2}, SparseMatrixCSC{Float32, Int64}, GenericArray{Float32, 2}})
-@test (LQDynamicModel(s0, A, B, Q, R, 10; S = S, E = E, F = F, gl = gl, gu = gu, ul = ul, uu = uu, sl = sl, su = su,  dense=false) isa 
+@test (SparseLQDynamicModel(s0, A, B, Q, R, 10; S = S, E = E, F = F, gl = gl, gu = gu, ul = ul, uu = uu, sl = sl, su = su) isa 
     SparseLQDynamicModel{Float32, GenericArray{Float32, 1}, SparseMatrixCSC{Float32, Int64}, SparseMatrixCSC{Float32, Int64}, GenericArray{Float32, 2}, Nothing})
-@test (LQDynamicModel(s0, A, B, Q, R, 10; K = K, S = S, E = E, F = F, gl = gl, gu = gu, ul = ul, uu = uu, sl = sl, su = su,  dense=false) isa 
+@test (SparseLQDynamicModel(s0, A, B, Q, R, 10; K = K, S = S, E = E, F = F, gl = gl, gu = gu, ul = ul, uu = uu, sl = sl, su = su) isa 
     SparseLQDynamicModel{Float32, GenericArray{Float32, 1}, SparseMatrixCSC{Float32, Int64}, SparseMatrixCSC{Float32, Int64}, GenericArray{Float32, 2}, GenericArray{Float32, 2}})
 
 
@@ -528,17 +528,17 @@ if CUDA.has_cuda_gpu()
     LinearAlgebra.copyto!(slc, sl)
     LinearAlgebra.copyto!(suc, su)
 
-    @test (LQDynamicModel(s0c,Ac,Bc,Qc,Rc,10, dense=false) isa SparseLQDynamicModel{Float64, CuArray{Float64, 1, CUDA.Mem.DeviceBuffer}, 
+    @test (SparseLQDynamicModel(s0c,Ac,Bc,Qc,Rc,10) isa SparseLQDynamicModel{Float64, CuArray{Float64, 1, CUDA.Mem.DeviceBuffer}, 
         SparseMatrixCSC{Float64, Int64}, SparseMatrixCSC{Float64, Int64}, CuArray{Float64, 2, CUDA.Mem.DeviceBuffer}, Nothing})
 
-    @test (LQDynamicModel(s0c,Ac,Bc,Qc,Rc,10; K = Kc, S = Sc, E = Ec, F = Fc, gl = glc, gu = guc, ul = ulc, uu = uuc, sl = slc, su = suc,  dense=false) isa
+    @test (SparseLQDynamicModel(s0c,Ac,Bc,Qc,Rc,10; K = Kc, S = Sc, E = Ec, F = Fc, gl = glc, gu = guc, ul = ulc, uu = uuc, sl = slc, su = suc) isa
         SparseLQDynamicModel{Float64, CuArray{Float64, 1, CUDA.Mem.DeviceBuffer}, SparseMatrixCSC{Float64, Int64}, SparseMatrixCSC{Float64, Int64}, 
         CuArray{Float64, 2, CUDA.Mem.DeviceBuffer}, CuArray{Float64, 2, CUDA.Mem.DeviceBuffer}})
 
-    @test (LQDynamicModel(s0c,Ac,Bc,Qc,Rc,10, dense=true) isa DenseLQDynamicModel{Float64, CuArray{Float64, 1, CUDA.Mem.DeviceBuffer}, CuArray{Float64, 2, CUDA.Mem.DeviceBuffer}, 
+    @test (DenseLQDynamicModel(s0c,Ac,Bc,Qc,Rc,10) isa DenseLQDynamicModel{Float64, CuArray{Float64, 1, CUDA.Mem.DeviceBuffer}, CuArray{Float64, 2, CUDA.Mem.DeviceBuffer}, 
         CuArray{Float64, 2, CUDA.Mem.DeviceBuffer}, CuArray{Float64, 2, CUDA.Mem.DeviceBuffer}, SparseMatrixCSC{Float64, Int64}, Nothing})
         
-    @test (LQDynamicModel(s0c,Ac,Bc,Qc,Rc,10; K = Kc, S = Sc, E = Ec, F = Fc, gl = glc, gu = guc, ul = ulc, uu = uuc, sl = slc, su = suc,  dense=true) isa 
+    @test (DenseLQDynamicModel(s0c,Ac,Bc,Qc,Rc,10; K = Kc, S = Sc, E = Ec, F = Fc, gl = glc, gu = guc, ul = ulc, uu = uuc, sl = slc, su = suc) isa 
         DenseLQDynamicModel{Float64, CuArray{Float64, 1, CUDA.Mem.DeviceBuffer}, CuArray{Float64, 2, CUDA.Mem.DeviceBuffer}, CuArray{Float64, 2, CUDA.Mem.DeviceBuffer}, 
         CuArray{Float64, 2, CUDA.Mem.DeviceBuffer}, SparseMatrixCSC{Float64, Int64}, CuArray{Float64, 2, CUDA.Mem.DeviceBuffer}})
 end

@@ -6,7 +6,7 @@ import LinearAlgebra
 import SparseArrays
 import SparseArrays: SparseMatrixCSC
 
-export LQDynamicData, LQDynamicModel, get_u, get_s, SparseLQDynamicModel, DenseLQDynamicModel
+export LQDynamicData, SparseLQDynamicModel, DenseLQDynamicModel, get_u, get_s
 
 abstract type AbstractLQDynData{T,V} end
 """
@@ -253,10 +253,9 @@ mutable struct DenseLQDynamicModel{T, V, M1, M2, M3, M4, MK} <:  AbstractDynamic
 end
 
 """
-    LQDynamicModel(dnlp::LQDynamicData; dense=false)      -> SparseLQDynamicModel/DenseLQDynamicModel
-    LQDynamicModel(s0, A, B, Q, R, N; dense = false, ...) -> SparseLQDynamicModel/DenseLQDynamicModel
-A constructor for building a `SparseLQDynamicModel <: QuadraticModels.AbstractQuadraticModel` (if dense = false)
-or a `DenseLQDynamicModel <: QuadraticModels.AbstractQuadraticModel` (if dense = true) from `LQDynamicData`
+    SparseLQDynamicModel(dnlp::LQDynamicData)    -> SparseLQDynamicModel
+    SparseLQDynamicModel(s0, A, B, Q, R, N; ...) -> SparseLQDynamicModel
+A constructor for building a `SparseLQDynamicModel <: QuadraticModels.AbstractQuadraticModel`
 Input data is for the problem of the form 
 ```math
     minimize    \\frac{1}{2} \\sum_{i = 0}^{N-1}(s_i^T Q s_i + 2 u_i^T S^T x_i + u_i^T R u_i) + \\frac{1}{2} s_N^T Qf s_N
@@ -269,7 +268,7 @@ Input data is for the problem of the form
 ```
 ---
 
-If `dense=false`, data is converted to the form 
+Data is converted to the form 
 
 ```math
     minimize    \\frac{1}{2} z^T H z 
@@ -280,33 +279,12 @@ Resulting `H` and `J` matrices are stored as `QuadraticModels.QPData` within the
 variable and constraint limits are stored within `NLPModels.NLPModelMeta`
 
 If `K` is defined, then `u` variables are replaced by `v` variables, and `u` can be queried by `get_u` and `get_s` within `DynamicNLPModels.jl`
-
----
-
-If `dense=true`, data is converted to the form 
-
-```math
-    minimize    \\frac{1}{2} u^T H u + h^T u + h0 
-    subject to  Jz \\le g
-                ul \\le u \\le uu
-```
-
-Resulting `H`, `J`, `h`, and `h0` matrices are stored within `QuadraticModels.QPData` as `H`, `A`, `c`, and `c0` attributes respectively
-
-If `K` is defined, then `u` variables are replaced by `v` variables. The bounds on `u` are transformed into algebraic constraints,
-and `u` can be queried by `get_u` and `get_s` within `DynamicNLPModels.jl`
 """
-function LQDynamicModel(dnlp::LQDynamicData{T,V,M}; dense = false) where {T, V <: AbstractVector{T}, M  <: AbstractMatrix{T}, MK <: Union{Nothing, AbstractMatrix{T}}}
-
-    if !dense
+function SparseLQDynamicModel(dnlp::LQDynamicData{T,V,M}) where {T, V <: AbstractVector{T}, M  <: AbstractMatrix{T}, MK <: Union{Nothing, AbstractMatrix{T}}}
         _build_sparse_lq_dynamic_model(dnlp)
-    else
-        _build_dense_lq_dynamic_model(dnlp)
-    end
-
 end
 
-function LQDynamicModel(
+function SparseLQDynamicModel(
     s0::V,
     A::M,
     B::M,
@@ -332,8 +310,70 @@ function LQDynamicModel(
         Qf = Qf, S = S, E = E, F = F, K = K, 
         sl = sl, su = su, ul = ul, uu = uu, gl = gl, gu = gu)
     
-    LQDynamicModel(dnlp; dense=dense)
+    SparseLQDynamicModel(dnlp)
+end
 
+"""
+    DenseLQDynamicModel(dnlp::LQDynamicData)    -> DenseLQDynamicModel
+    DenseLQDynamicModel(s0, A, B, Q, R, N; ...) -> DenseLQDynamicModel
+A constructor for building a `DenseLQDynamicModel <: QuadraticModels.AbstractQuadraticModel`
+
+Input data is for the problem of the form 
+```math
+    minimize    \\frac{1}{2} \\sum_{i = 0}^{N-1}(s_i^T Q s_i + 2 u_i^T S^T x_i + u_i^T R u_i) + \\frac{1}{2} s_N^T Qf s_N
+    subject to  s_{i+1} = A s_i + B u_i  for i=0, 1, ..., N-1
+                u_i = Kx_i + v_i  \\forall i = 0, 1, ..., N - 1
+                gl \\le E s_i + F u_i \\le gu for i = 0, 1, ..., N-1            
+                sl \\le s \\le su
+                ul \\le u \\le uu
+                s_0 = s0
+```
+---
+
+Data is converted to the form 
+
+```math
+    minimize    \\frac{1}{2} u^T H u + h^T u + h0 
+    subject to  Jz \\le g
+                ul \\le u \\le uu
+```
+
+Resulting `H`, `J`, `h`, and `h0` matrices are stored within `QuadraticModels.QPData` as `H`, `A`, `c`, and `c0` attributes respectively
+
+If `K` is defined, then `u` variables are replaced by `v` variables. The bounds on `u` are transformed into algebraic constraints,
+and `u` can be queried by `get_u` and `get_s` within `DynamicNLPModels.jl`
+"""
+function DenseLQDynamicModel(dnlp::LQDynamicData{T,V,M}) where {T, V <: AbstractVector{T}, M  <: AbstractMatrix{T}, MK <: Union{Nothing, AbstractMatrix{T}}}
+    _build_dense_lq_dynamic_model(dnlp)
+end
+
+function DenseLQDynamicModel(
+    s0::V,
+    A::M,
+    B::M,
+    Q::M,
+    R::M,
+    N;
+    Qf::M = Q, 
+    S::M  = (similar(Q, size(Q, 1), size(R, 1)) .= 0),
+    E::M  = (similar(Q, 0, length(s0)) .= 0),
+    F::M  = (similar(Q, 0, size(R, 1)) .= 0),
+    K::MK = nothing,
+    sl::V = (similar(s0) .= -Inf),
+    su::V = (similar(s0) .=  Inf),
+    ul::V = (similar(s0, size(R, 1)) .= -Inf),
+    uu::V = (similar(s0, size(R, 1)) .=  Inf),
+    gl::V = (similar(s0, size(E, 1)) .= -Inf), 
+    gu::V = (similar(s0, size(F, 1)) .= Inf), 
+    dense=false
+) where {T, V <: AbstractVector{T}, M <: AbstractMatrix{T}, MK <: Union{Nothing, AbstractMatrix{T}}}
+
+    dnlp = LQDynamicData(
+        s0, A, B, Q, R, N; 
+        Qf = Qf, S = S, E = E, F = F, K = K, 
+        sl = sl, su = su, ul = ul, uu = uu, gl = gl, gu = gu)
+    
+    DenseLQDynamicModel(dnlp)
 end
 
 function _build_sparse_lq_dynamic_model(dnlp::LQDynamicData{T, V, M, MK}) where {T, V <: AbstractVector{T}, M  <: AbstractMatrix{T}, MK <: Nothing}
@@ -399,8 +439,6 @@ function _build_sparse_lq_dynamic_model(dnlp::LQDynamicData{T, V, M, MK}) where 
         uvar[((N + 1) * ns + (j - 1) * nu + 1):((N + 1) * ns + j * nu)] .= uu
     end
     
-
-
     SparseLQDynamicModel(
         NLPModels.NLPModelMeta(
         nvar,
