@@ -304,7 +304,6 @@ function LQDynamicModel(dnlp::LQDynamicData{T,V,M}; dense = false) where {T, V <
         _build_dense_lq_dynamic_model(dnlp)
     end
 
-
 end
 
 function LQDynamicModel(
@@ -663,7 +662,7 @@ function _build_dense_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) where {T, 
     ncon = size(J, 1)
 
     c = similar(s0, nvar)
-    c .= H_blocks.c[1,:]
+    c .= H_blocks.c
 
     DenseLQDynamicModel(
         NLPModels.NLPModelMeta(
@@ -744,7 +743,7 @@ function _build_dense_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) where {T, 
     num_real_bounds   = sum(bool_vec_s)
 
     J2         = similar(Q, num_real_bounds * N, nu * N); fill!(J2, 0)
-    As0_bounds = similar(Q, num_real_bounds * N, 1); fill!(As0_bounds, 0)
+    As0_bounds = similar(s0, num_real_bounds * N); fill!(As0_bounds, 0)
 
 
     if num_real_bounds == length(sl)
@@ -754,7 +753,7 @@ function _build_dense_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) where {T, 
         for i in 1:N
             row_range = (1 + (i - 1) * num_real_bounds):(i * num_real_bounds)
             J2[row_range, :] .= block_B[(1 + ns * i): (ns * (i + 1)), :][bool_vec_s, :]
-            As0_bounds[row_range, :] .= As0[(1 + ns * i):(ns * (i + 1)), :][bool_vec_s, :]
+            As0_bounds[row_range] .= As0[(1 + ns * i):(ns * (i + 1)), :][bool_vec_s, :]
         end
 
         sl = sl[bool_vec_s]
@@ -766,7 +765,7 @@ function _build_dense_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) where {T, 
     num_real_bounds = sum(bool_vec_u)
 
     KBI  = similar(Q, nu * N, nu * N)
-    KAs0 = similar(Q, nu * N, 1)
+    KAs0 = similar(s0, nu * N)
 
     I_mat = similar(Q, nu * N, nu * N); fill!(I_mat, 0)
 
@@ -779,7 +778,7 @@ function _build_dense_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) where {T, 
     LinearAlgebra.mul!(KAs0, block_K, As0)
 
     J3          = similar(Q, num_real_bounds * N, nu * N); fill!(J3, 0)
-    KAs0_bounds = similar(Q, num_real_bounds * N, 1); fill!(KAs0_bounds, 0)
+    KAs0_bounds = similar(s0, num_real_bounds * N); fill!(KAs0_bounds, 0)
 
     if num_real_bounds == length(ul)
         J3 .= KBI
@@ -788,7 +787,7 @@ function _build_dense_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) where {T, 
         for i in 1:N
             row_range   = (1 + (i - 1) * num_real_bounds):(i * num_real_bounds)
             J3[row_range, :] .= KBI[(1 + nu * (i - 1)):(nu * i), :][bool_vec_u, :]
-            KAs0_bounds[row_range, :]      .= KAs0[(1 + nu * (i - 1)):(nu * i), 1][bool_vec_u,1]
+            KAs0_bounds[row_range]      .= KAs0[(1 + nu * (i - 1)):(nu * i)][bool_vec_u]
         end
 
         ul = ul[bool_vec_u]
@@ -850,7 +849,7 @@ function _build_dense_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) where {T, 
     ncon = size(J, 1)
 
     c = similar(s0, nvar)
-    c .= H_blocks.c[1,:]
+    c .= H_blocks.c
 
     DenseLQDynamicModel(
         NLPModels.NLPModelMeta(
@@ -997,7 +996,7 @@ function _build_block_matrices(
 end
 
 function _build_H_blocks(block_Q, block_R, block_A::M, block_B::M, block_S, block_K, s0, N, K::MK) where {T, M <: AbstractMatrix{T}, MK <: Nothing}
-    As0      = similar(block_A, size(block_A, 1), 1)
+    As0      = similar(s0, size(block_A, 1))
     QB       = similar(block_A, size(block_Q, 1), size(block_B, 2))
     STB      = similar(block_A, size(block_S, 2), size(block_B, 2))
     B_Q_B    = similar(block_A, size(block_B, 2), size(block_B, 2))
@@ -1013,9 +1012,9 @@ function _build_H_blocks(block_Q, block_R, block_A::M, block_B::M, block_S, bloc
     LinearAlgebra.axpy!(1, STB', B_Q_B)
 
     # Define linear term so that c = h
-    h = similar(block_A, 1, size(block_B, 2))
+    h = similar(s0, size(block_B, 2))
     LinearAlgebra.axpy!(1, block_S, QB)
-    LinearAlgebra.mul!(h, As0', QB)
+    LinearAlgebra.mul!(h, QB', As0)
 
     # Define linear term so that c0 = h0
     h0   = similar(block_A, 1,1)
@@ -1028,7 +1027,7 @@ end
 
 function _build_H_blocks(block_Q, block_R, block_A, block_B, block_S, block_K, s0, N, K::MK) where {T, MK <: AbstractMatrix{T}}
 
-    As0      = similar(block_A, size(block_A, 1), 1)
+    As0      = similar(s0, size(block_A, 1))
     RK       = similar(block_A, size(block_R, 1), size(block_K, 2))
     RKB      = similar(block_A, size(block_R, 1), size(block_B, 2))
     SK       = similar(block_A, size(block_S, 1), size(block_K, 2))
@@ -1064,10 +1063,10 @@ function _build_H_blocks(block_Q, block_R, block_A, block_B, block_S, block_K, s
     LinearAlgebra.axpy!(1, STB', B_Q_B)
 
     # Define linear term so that c = h
-    h = similar(block_A, 1, size(block_B, 2))
+    h = similar(s0, size(block_B, 2))
     LinearAlgebra.axpy!(1, block_S, QB)
     LinearAlgebra.axpy!(1, RK', QB)
-    LinearAlgebra.mul!(h, As0', QB)
+    LinearAlgebra.mul!(h, QB', As0)
 
     # Define constant term sot hat c0 = h0
     hR_term = similar(block_A, 1, 1) # = s0^T A^T K^T R K A s0
@@ -1097,8 +1096,8 @@ function _build_G_blocks(block_A, block_B, block_E, block_F, block_K, block_gl, 
   
     G = similar(block_A, size(block_F, 1), size(block_F, 2))
   
-    As0  = similar(block_A, size(block_A, 1), 1)
-    EAs0 = similar(block_A, size(block_E, 1), 1)
+    As0  = similar(s0, size(block_A, 1))
+    EAs0 = similar(s0, size(block_E, 1))
     FK   = similar(block_A, size(block_F, 1), size(block_K, 2))
 
     block_E_mul = similar(block_E)
@@ -1169,14 +1168,14 @@ function get_u(
 
     v = solver_status.solution
 
-    As0 = zeros(T, size(block_A, 1), 1)
-    Bv  = zeros(T, size(block_B, 1), 1)
+    As0 = zeros(T, size(block_A, 1))
+    Bv  = zeros(T, size(block_B, 1))
 
     LinearAlgebra.mul!(As0, block_A, dnlp.s0)
     LinearAlgebra.mul!(Bv, block_B, v)
     LinearAlgebra.axpy!(1, As0, Bv)
 
-    Ks = zeros(T, size(block_K, 1), 1)
+    Ks = zeros(T, size(block_K, 1))
 
     LinearAlgebra.mul!(Ks, block_K, Bv)
 
@@ -1239,8 +1238,8 @@ function get_s(
 
     v = solver_status.solution
 
-    As0 = zeros(T, size(block_A, 1), 1)
-    Bv  = zeros(T, size(block_B, 1), 1)
+    As0 = zeros(T, size(block_A, 1))
+    Bv  = zeros(T, size(block_B, 1))
 
     LinearAlgebra.mul!(As0, block_A, dnlp.s0)
     LinearAlgebra.mul!(Bv, block_B, v)
