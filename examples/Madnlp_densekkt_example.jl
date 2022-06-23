@@ -129,6 +129,21 @@ function meta_to_CUDA(meta::NLPModels.NLPModelMeta)
 end
 
 
+function MadNLP.jac_dense!(nlp::DenseLQDynamicModel{T, V, M1, M2, M3}, x, jac) where {T, V, M1<: Matrix, M2 <: Matrix, M3 <: Matrix}
+    NLPModels.increment!(nlp, :neval_jac)
+    J = nlp.data.A
+    
+    jac .= J
+end
+
+function MadNLP.hess_dense!(nlp::DenseLQDynamicModel{T, V, M1, M2, M3}, x, w1l, hess; obj_weight = 1.0) where {T, V, M1<: Matrix, M2 <: Matrix, M3 <: Matrix}
+    NLPModels.increment!(nlp, :neval_hess)
+    H = nlp.data.H
+
+    hess .= H
+end
+
+
 N  = 3 # number of time steps
 ns = 2 # number of states
 nu = 1 # number of inputs
@@ -164,19 +179,6 @@ S = rand(ns, nu)
 K = rand(nu, ns)
 
 
-function MadNLP.jac_dense!(nlp::DenseLQDynamicModel{T, V, M1, M2, M3}, x, jac) where {T, V, M1<: Matrix, M2 <: Matrix, M3 <: Matrix}
-    NLPModels.increment!(nlp, :neval_jac)
-    J = nlp.data.A
-    
-    jac .= J
-end
-
-function MadNLP.hess_dense!(nlp::DenseLQDynamicModel{T, V, M1, M2, M3}, x, w1l, hess; obj_weight = 1.0) where {T, V, M1<: Matrix, M2 <: Matrix, M3 <: Matrix}
-    NLPModels.increment!(nlp, :neval_hess)
-    H = nlp.data.H
-
-    hess .= H
-end
 
 
 # Test with upper and lower bounds
@@ -214,4 +216,4 @@ dense_options_cuda = Dict{Symbol, Any}(
 
 MadNLP.optimize!(lqdm_CUDA; linear_solver = MadNLPLapackGPU)
 
-#ipdc = MadNLP.InteriorPointSolver(dnlpCUDA, option_dict=dense_options_cuda)
+ips_d = MadNLP.InteriorPointSolver(lqdm_CUDA, option_dict=dense_options_cuda)
