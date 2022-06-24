@@ -147,7 +147,7 @@ function LQDynamicData(
     if sum(sl .>= su) > 0
         error("lower bound(s) on x is > upper bound(s)")
     end
-    if sum(ul .>= sl) > 0
+    if sum(ul .>= uu) > 0
         error("lower bound(s) on u is > upper bound(s)")
     end
     if sum(s0 .<= sl) > 0 || sum(s0 .>= su) > 0
