@@ -301,8 +301,7 @@ function SparseLQDynamicModel(
     ul::V = (similar(s0, size(R, 1)) .= -Inf),
     uu::V = (similar(s0, size(R, 1)) .=  Inf),
     gl::V = (similar(s0, size(E, 1)) .= -Inf), 
-    gu::V = (similar(s0, size(F, 1)) .= Inf), 
-    dense=false
+    gu::V = (similar(s0, size(F, 1)) .= Inf) 
 ) where {T, V <: AbstractVector{T}, M <: AbstractMatrix{T}, MK <: Union{Nothing, AbstractMatrix{T}}}
 
     dnlp = LQDynamicData(
@@ -364,8 +363,7 @@ function DenseLQDynamicModel(
     ul::V = (similar(s0, size(R, 1)) .= -Inf),
     uu::V = (similar(s0, size(R, 1)) .=  Inf),
     gl::V = (similar(s0, size(E, 1)) .= -Inf), 
-    gu::V = (similar(s0, size(F, 1)) .= Inf), 
-    dense=false
+    gu::V = (similar(s0, size(F, 1)) .= Inf)
 ) where {T, V <: AbstractVector{T}, M <: AbstractMatrix{T}, MK <: Union{Nothing, AbstractMatrix{T}}}
 
     dnlp = LQDynamicData(
@@ -696,7 +694,7 @@ function _build_dense_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) where {T, 
 
     nvar = nu * N
     nnzj = size(J, 1) * size(J, 2)
-    nnzh = sum(LinearAlgebra.LowerTriangular(H) .!= 0)
+    nnzh = Int(size(H, 1) * (size(H,1) + 1) / 2)
     ncon = size(J, 1)
 
     c = similar(s0, nvar)
