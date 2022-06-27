@@ -1,7 +1,7 @@
-function build_thinplate(ns, nu, N, dx, dt; d = ones(ns, N + 1).*300, Tbar = 300, dense::Bool = true, sl = -Inf, su = Inf)
-    Q = 1.0Matrix(LinearAlgebra.I, ns, ns)
-    Qf= 1.0Matrix(LinearAlgebra.I, ns, ns)/dt
-    R = 1.0Matrix(LinearAlgebra.I, nu, nu)/10
+function build_thinplate(ns, nu, N, dx, dt; d = fill(300.0, ns, N+1), Tbar = 300.0, dense::Bool = true, sl = -Inf, su = Inf)
+    Q = 1.0 * Matrix(LinearAlgebra.I, ns, ns)
+    Qf= 1.0 * Matrix(LinearAlgebra.I, ns, ns)/dt
+    R = 1.0 * Matrix(LinearAlgebra.I, nu, nu)/10
 
     kappa = 400. # thermal conductivity of copper, W/(m-K)
     rho = 8960. # density of copper, kg/m^3
@@ -50,7 +50,7 @@ function build_thinplate(ns, nu, N, dx, dt; d = ones(ns, N + 1).*300, Tbar = 300
         end
     end
 
-    s0 = fill(Float64(Tbar), ns)
+    s0 = fill(Tbar, ns)
     sl = fill(sl, ns)
     su = fill(su, ns)
 
@@ -74,7 +74,7 @@ function build_thinplate(ns, nu, N, dx, dt; d = ones(ns, N + 1).*300, Tbar = 300
     
     dvec = vec(d)
     Qd  = similar(dvec)
-    dQd = zeros(1,1)
+    dQd = zeros(1)
     LinearAlgebra.mul!(Qd, block_Q, dvec)
     LinearAlgebra.mul!(dQd, dvec', Qd)
 
@@ -87,7 +87,7 @@ function build_thinplate(ns, nu, N, dx, dt; d = ones(ns, N + 1).*300, Tbar = 300
         LinearAlgebra.mul!(As0, block_A, s0)
         dQB = zeros(size(block_B, 2))
         LinearAlgebra.mul!(dQB, block_B', Qd)
-        dQAs0 = zeros(1,1)
+        dQAs0 = zeros(1)
         LinearAlgebra.mul!(dQAs0, Qd', As0)
 
         lqdm.data.c0 += dQd[1,1] / 2

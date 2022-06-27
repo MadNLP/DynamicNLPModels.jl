@@ -1,20 +1,21 @@
-using DynamicNLPModels, NLPModels, Random, LinearAlgebra, MadNLP, QuadraticModels, MadNLPGPU, CUDA, SparseArrays
+using DynamicNLPModels, Random, LinearAlgebra, SparseArrays
+using MadNLP, QuadraticModels, MadNLPGPU, CUDA, NLPModels
+
 include("build_thinplate.jl")
 
-
-function MadNLP.jac_dense!(nlp::DenseLQDynamicModel{T, V, M1, M2, M3}, x, jac) where {T, V, M1<: Matrix, M2 <: Matrix, M3 <: Matrix}
+function MadNLP.jac_dense!(nlp::DenseLQDynamicModel{T, V, M1, M2, M3}, x, jac) where {T, V, M1<: AbstractMatrix, M2 <: AbstractMatrix, M3 <: AbstractMatrix}
     NLPModels.increment!(nlp, :neval_jac)
     J = nlp.data.A
     copyto!(jac, J)
 end
 
-function MadNLP.hess_dense!(nlp::DenseLQDynamicModel{T, V, M1, M2, M3}, x, w1l, hess; obj_weight = 1.0) where {T, V, M1<: Matrix, M2 <: Matrix, M3 <: Matrix}
+function MadNLP.hess_dense!(nlp::DenseLQDynamicModel{T, V, M1, M2, M3}, x, w1l, hess; obj_weight = 1.0) where {T, V, M1<: AbstractMatrix, M2 <: AbstractMatrix, M3 <: AbstractMatrix}
     NLPModels.increment!(nlp, :neval_hess)
     H = nlp.data.H
     copyto!(hess, H)
 end
 
-function convert_to_CUDA!(lqdm::DenseLQDynamicModel)
+function convert_to_cuda(lqdm::DenseLQDynamicModel)
     H = CuArray{Float64}(undef, size(lqdm.data.H))
     J = CuArray{Float64}(undef, size(lqdm.data.A))
 
@@ -22,7 +23,24 @@ function convert_to_CUDA!(lqdm::DenseLQDynamicModel)
     LinearAlgebra.copyto!(J, lqdm.data.A)
 
     lqdm.data.H = H
+
     lqdm.data.A = J
+
+    data = QuadraticModels.QPData(
+        lqdm.data.c0,
+        lqdm.data.c,
+        H,
+        J
+    )
+
+    DenseLQDynamicModel(
+        lqdm.meta,
+        NLPModels.Counters(),
+        data,
+        lqdm.dynamic_data,
+        lqdm.blocks
+    )
+
 end
 
 # Define attributes of 1 D heat transfer model
@@ -30,18 +48,15 @@ N  = 10
 ns = 5
 nu = 5
 
-dfunc = (i,k)->100*sin(2*pi*(4*i/N-12*k/ns)) + 400
-
-d = zeros(ns, N+1)
-
-for i in 1:(N+1)
-    for j in 1:ns
-        d[j,i] = dfunc(i,j)
-    end
+function dfunc(i,j)
+    return 100 * sin(2 * pi * (4 * i / N - 12 * j / ns)) + 400
 end
 
-dx = .1
-dt = .1
+d = [dfunc(i, j) for i in 1:(N + 1), j in 1:ns]
+
+
+dx = 0.1
+dt = 0.1
 
 # Build model for 1 D heat transfer
 lq_dense  = build_thinplate(ns, nu, N, dx, dt; d = d, Tbar = 400., dense = true)
@@ -79,7 +94,8 @@ gpu_options = Dict{Symbol, Any}(
         :hessian_constant=>true,
 )
 
-convert_to_CUDA!(lq_dense)
+
+lq_dense_cuda  = convert_to_cuda(lq_dense)
 
 TKKTGPU = MadNLP.DenseKKTSystem{Float64, CuVector{Float64}, CuMatrix{Float64}}
 opt = MadNLP.Options(; gpu_options...)
