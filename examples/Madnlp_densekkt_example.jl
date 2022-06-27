@@ -1,4 +1,4 @@
-using DynamicNLPModels, NLPModels, Random, LinearAlgebra, MadNLP, QuadraticModels, MadNLPGPU, CUDA
+using DynamicNLPModels, NLPModels, Random, LinearAlgebra, MadNLP, QuadraticModels, MadNLPGPU, CUDA, SparseArrays
 include("build_thinplate.jl")
 
 
@@ -82,6 +82,6 @@ gpu_options = Dict{Symbol, Any}(
 convert_to_CUDA!(lq_dense)
 
 TKKTGPU = MadNLP.DenseKKTSystem{Float64, CuVector{Float64}, CuMatrix{Float64}}
-opt = MadNLP.Options(; madnlp_options...)
-gpu_ips = MadNLP.InteriorPointSolver{TKKTGPU}(lq_dense, opt; option_linear_solver=copy(madnlp_options))
+opt = MadNLP.Options(; gpu_options...)
+gpu_ips = MadNLP.InteriorPointSolver{TKKTGPU}(lq_dense, opt; option_linear_solver=copy(gpu_options))
 sol_ref_gpu = MadNLP.optimize!(gpu_ips)
