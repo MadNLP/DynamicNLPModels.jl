@@ -1,162 +1,5 @@
-Skip to content
-Search or jump to…
-Pull requests
-Issues
-Marketplace
-Explore
- 
-@dlcole3 
-MadNLP
-/
-DynamicNLPModels.jl
-Public
-Code
-Issues
-3
-Pull requests
-Actions
-Projects
-Wiki
-Security
-Insights
-Settings
-DynamicNLPModels.jl/examples/Madnlp_densekkt_example.jl
-@frapac
-frapac fix denseKKT script on the GPU
-Latest commit 2228cbd 2 hours ago
- History
- 2 contributors
-@dlcole3@frapac
-212 lines (174 sloc)  6.37 KB
-
-using Revise
 using DynamicNLPModels, NLPModels, Random, LinearAlgebra, MadNLP, QuadraticModels, MadNLPGPU, CUDA
-
-function model_to_CUDA(lqdm::DenseLQDynamicModel)
-    meta         = lqdm.meta
-    data         = lqdm.data
-    blocks       = lqdm.blocks
-    dynamic_data = lqdm.dynamic_data
-
-    dnlp   = dynamic_data_to_CUDA(dynamic_data)
-    data   = data_to_CUDA(data)
-    dense_blocks = dense_blocks_to_CUDA(blocks)
-    meta   = meta_to_CUDA(meta)
-
-    DenseLQDynamicModel(
-        meta,
-        NLPModels.Counters(),
-        data,
-        dnlp,
-        dense_blocks
-    )
-end
-
-function dynamic_data_to_CUDA(dnlp::LQDynamicData)
-    s0c = CuVector{Float64}(undef, length(dnlp.s0))
-    Ac  = CuArray{Float64}(undef, size(dnlp.A))
-    Bc  = CuArray{Float64}(undef, size(dnlp.B))
-    Qc  = CuArray{Float64}(undef, size(dnlp.Q))
-    Rc  = CuArray{Float64}(undef, size(dnlp.R))
-    Kc  = CuArray{Float64}(undef, size(dnlp.K))
-    Sc  = CuArray{Float64}(undef, size(dnlp.S))
-    Ec  = CuArray{Float64}(undef, size(dnlp.E))
-    Fc  = CuArray{Float64}(undef, size(dnlp.F))
-    Qfc = CuArray{Float64}(undef, size(dnlp.Qf))
-    glc = CuVector{Float64}(undef, length(dnlp.gl))
-    guc = CuVector{Float64}(undef, length(dnlp.gu))
-    ulc = CuVector{Float64}(undef, length(dnlp.ul))
-    uuc = CuVector{Float64}(undef, length(dnlp.uu))
-    slc = CuVector{Float64}(undef, length(dnlp.sl))
-    suc = CuVector{Float64}(undef, length(dnlp.su))
-
-    LinearAlgebra.copyto!(Ac, dnlp.A)
-    LinearAlgebra.copyto!(Bc, dnlp.B)
-    LinearAlgebra.copyto!(Qc, dnlp.Q)
-    LinearAlgebra.copyto!(Rc, dnlp.R)
-    LinearAlgebra.copyto!(s0c, dnlp.s0)
-    LinearAlgebra.copyto!(Kc, dnlp.K)
-    LinearAlgebra.copyto!(Sc, dnlp.S)
-    LinearAlgebra.copyto!(Ec, dnlp.E)
-    LinearAlgebra.copyto!(Fc, dnlp.F)
-    LinearAlgebra.copyto!(Qfc, dnlp.Qf)
-    LinearAlgebra.copyto!(glc, dnlp.gl)
-    LinearAlgebra.copyto!(guc, dnlp.gu)
-    LinearAlgebra.copyto!(ulc, dnlp.ul)
-    LinearAlgebra.copyto!(uuc, dnlp.uu)
-    LinearAlgebra.copyto!(slc, dnlp.sl)
-    LinearAlgebra.copyto!(suc, dnlp.su)
-
-
-    LQDynamicData(s0c, Ac, Bc, Qc, Rc, dnlp.N; Qf = Qfc, S = Sc,
-    E = Ec, F = Fc, K = Kc, sl = slc, su = suc, ul = ulc, uu = uuc, gl = glc, gu = guc
-    )
-end
-
-function data_to_CUDA(data::QuadraticModels.QPData)
-    c = CuVector{Float64}(undef, length(data.c))
-    H = CuArray{Float64}(undef, size(data.H))
-    J = CuArray{Float64}(undef, size(data.A))
-
-    LinearAlgebra.copyto!(c, data.c)
-    LinearAlgebra.copyto!(H, data.H)
-    LinearAlgebra.copyto!(J, data.A)
-
-
-    QuadraticModels.QPData(
-        data.c0,
-        c,
-        H,
-        J
-    )
-end
-
-
-function dense_blocks_to_CUDA(db::Block_Matrices)
-    A  = CuArray{Float64}(undef, size(db.A))
-    B  = CuArray{Float64}(undef, size(db.B))
-    E  = CuArray{Float64}(undef, size(db.E))
-    F  = CuArray{Float64}(undef, size(db.F))
-    gl = CuArray{Float64}(undef, size(db.gl))
-    gu = CuArray{Float64}(undef, size(db.gu))
-
-    LinearAlgebra.copyto!(A, db.A)
-    LinearAlgebra.copyto!(B, db.B)
-    LinearAlgebra.copyto!(E, db.E)
-    LinearAlgebra.copyto!(F, db.F)
-    LinearAlgebra.copyto!(gl, db.gl)
-    LinearAlgebra.copyto!(gu, db.gu)
-
-    Block_Matrices(A, B, db.Q, db.R, db.S, db.K, E, F, gl, gu)
-end
-
-function meta_to_CUDA(meta::NLPModels.NLPModelMeta)
-    x0   = CuVector{Float64}(undef, length(meta.x0))
-    lvar = CuVector{Float64}(undef, length(meta.lvar))
-    uvar = CuVector{Float64}(undef, length(meta.uvar))
-    lcon = CuVector{Float64}(undef, length(meta.lcon))
-    ucon = CuVector{Float64}(undef, length(meta.ucon))
-
-    LinearAlgebra.copyto!(x0, meta.x0)
-    LinearAlgebra.copyto!(lvar, meta.lvar)
-    LinearAlgebra.copyto!(uvar, meta.uvar)
-    LinearAlgebra.copyto!(lcon, meta.lcon)
-    LinearAlgebra.copyto!(ucon, meta.ucon)
-
-    NLPModels.NLPModelMeta(
-        meta.nvar,
-        x0   = x0,
-        lvar = lvar,
-        uvar = uvar,
-        ncon = meta.ncon,
-        lcon = lcon,
-        ucon = ucon,
-        nnzj = meta.nnzj,
-        nnzh = meta.nnzh,
-        lin  = 1:meta.ncon,
-        islp = (meta.ncon == 0);
-    )
-end
+include("build_thinplate.jl")
 
 
 function MadNLP.jac_dense!(nlp::DenseLQDynamicModel{T, V, M1, M2, M3}, x, jac) where {T, V, M1<: Matrix, M2 <: Matrix, M3 <: Matrix}
@@ -171,63 +14,62 @@ function MadNLP.hess_dense!(nlp::DenseLQDynamicModel{T, V, M1, M2, M3}, x, w1l, 
     copyto!(hess, H)
 end
 
+function convert_to_CUDA!(lqdm::DenseLQDynamicModel)
+    H = CuArray{Float64}(undef, size(lqdm.data.H))
+    J = CuArray{Float64}(undef, size(lqdm.data.A))
 
-N  = 3 # number of time steps
-ns = 2 # number of states
-nu = 1 # number of inputs
+    LinearAlgebra.copyto!(H, lqdm.data.H)
+    LinearAlgebra.copyto!(J, lqdm.data.A)
 
-# generate random Q, R, A, and B matrices
-Random.seed!(10)
-Q_rand = Random.rand(ns, ns)
-Q = Q_rand * transpose(Q_rand) + I
-R_rand   = Random.rand(nu,nu)
-R    = R_rand * transpose(R_rand) + I
-
-A_rand = rand(ns, ns)
-A = A_rand * transpose(A_rand) + I
-B = rand(ns, nu)
-
-# generate upper and lower bounds
-sl = rand(ns)
-ul = fill(-15.0, nu)
-su = sl .+ 4
-uu = ul .+ 10
-s0 = sl .+ 2
-
-Qf_rand = Random.rand(ns,ns)
-Qf = Qf_rand * transpose(Qf_rand) + I
-
-E  = rand(3, ns)
-F  = rand(3, nu)
-gl = fill(-5.0, 3)
-gu = fill(15.0, 3)
-
-S = rand(ns, nu)
-
-K = rand(nu, ns)
+    lqdm.data.H = H
+    lqdm.data.A = J
+end
 
 
+N  = 10
+ns = 5
+nu = 5
 
-# Test with upper and lower bounds
-dnlp        = LQDynamicData(s0, A, B, Q, R, N; sl = sl, ul = ul, su = su, uu = uu, K = K, S = S, E = E, F = F, gl = gl, gu = gu, Qf = Qf)
-lq_sparse   = SparseLQDynamicModel(dnlp)
-lq_dense = DenseLQDynamicModel(dnlp)
+dfunc = (i,k)->100*sin(2*pi*(4*i/N-12*k/ns)) + 400
+
+d = zeros(ns, N+1)
+
+for i in 1:(N+1)
+    for j in 1:ns
+        d[j,i] = dfunc(i,j)
+    end
+end
+
+dx = .1
+dt = .1
+lq_dense  = build_thinplate(ns, nu, N, dx, dt; d = d, Tbar = 400., dense = true)
+lq_sparse = build_thinplate(ns, nu, N, dx, dt; d = d, Tbar = 400., dense = false)
+
+# Solve the dense problem
+dense_options = Dict{Symbol, Any}(
+    :kkt_system => MadNLP.DENSE_KKT_SYSTEM,
+    :linear_solver=> MadNLPLapackCPU,
+    :max_iter=> 200
+)
+
+d_ips = MadNLP.InteriorPointSolver(lq_dense, option_dict = dense_options)
+sol_ref_dense = MadNLP.optimize!(d_ips)
 
 
-# FP: there is no need to move all the data on the GPU,
-# MadNLP takes care of everything automatically so just passing lq_dense works.
-#
-# HOWEVER, for performance, we may want to instantiate the Hessian and the Jacobian
-# arrays on the GPU, like you did in lqdm_cuda. But only these two arrays
-# (and not the meta info) as MadNLP is still a CPU-based IPM solver and
-# requires the model's data to be instantiated on the CPU.
-#
-# If the model is implemented entirely on the GPU, we usually use a bridge
-# to pass the data on the CPU to MadNLP.
-#
-# lqdm_CUDA = model_to_CUDA(lq_dense)
+# Solve the sparse problem
+sparse_options = Dict{Symbol, Any}(
+    :kkt_system=>MadNLP.SPARSE_KKT_SYSTEM,
+    :linear_solver=>MadNLPLapackCPU,
+    :print_level=>MadNLP.DEBUG,
+)
 
-madnlp_options = Dict{Symbol, Any}(
+s_ips = MadNLP.InteriorPointSolver(lq_sparse, option_dict = sparse_options)
+sol_ref_sparse = MadNLP.optimize!(s_ips)
+
+
+
+# Solve the dense problem on the GPU
+gpu_options = Dict{Symbol, Any}(
         :kkt_system=>MadNLP.DENSE_KKT_SYSTEM,
         :linear_solver=>MadNLPLapackGPU,
         :print_level=>MadNLP.DEBUG,
@@ -235,21 +77,9 @@ madnlp_options = Dict{Symbol, Any}(
         :hessian_constant=>true,
 )
 
+convert_to_CUDA!(lq_dense)
 
 TKKTGPU = MadNLP.DenseKKTSystem{Float64, CuVector{Float64}, CuMatrix{Float64}}
 opt = MadNLP.Options(; madnlp_options...)
-    # Instantiate Solver with KKT on the GPU
-d_ips = MadNLP.InteriorPointSolver{TKKTGPU}(lq_dense, opt; option_linear_solver=copy(madnlp_options))
-MadNLP.optimize!(d_ips)
-© 2022 GitHub, Inc.
-Terms
-Privacy
-Security
-Status
-Docs
-Contact GitHub
-Pricing
-API
-Training
-Blog
-About
+gpu_ips = MadNLP.InteriorPointSolver{TKKTGPU}(lq_dense, opt; option_linear_solver=copy(madnlp_options))
+sol_ref_gpu = MadNLP.optimize!(gpu_ips)

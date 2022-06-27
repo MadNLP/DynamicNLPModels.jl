@@ -1,7 +1,4 @@
-using Revise
-using DynamicNLPModels
-
-function build_thinplate(ns, nu, N, dx, dt; d = ones(ns, N + 1).*300, Tbar = 300, dense::Bool = true)
+function build_thinplate(ns, nu, N, dx, dt; d = ones(ns, N + 1).*300, Tbar = 300, dense::Bool = true, sl = -Inf, su = Inf)
     Q = 1.0Matrix(LinearAlgebra.I, ns, ns)
     Qf= 1.0Matrix(LinearAlgebra.I, ns, ns)/dt
     R = 1.0Matrix(LinearAlgebra.I, nu, nu)/10
@@ -17,7 +14,24 @@ function build_thinplate(ns, nu, N, dx, dt; d = ones(ns, N + 1).*300, Tbar = 300
 
     conduction_constant =  1 / rho / specificHeat / thick / dx^2
 
-    B = Matrix(LinearAlgebra.I, nu, nu) .* (- dt/(kappa * thick))
+    if ns == nu
+        B = Matrix(LinearAlgebra.I, nu, nu) .* (- dt / (kappa * thick))
+    elseif nu > ns
+        error("number of inputs cannot be greater than number of states")
+    else
+        # Space out the inputs, u, when nu < ns. These end up mostly evenly spaced
+        u_floor   = floor(ns / nu)
+        B = zeros(ns, nu)
+
+        index   = 1
+        for i in 1:ns
+            if index <= nu && i >= index * u_floor
+                B[i, index] = -dt / (kappa * thick)
+                index += 1
+            end
+        end
+    end
+
 
     A = zeros(ns, ns)
 
@@ -37,8 +51,9 @@ function build_thinplate(ns, nu, N, dx, dt; d = ones(ns, N + 1).*300, Tbar = 300
     end
 
     s0 = fill(Float64(Tbar), ns)
-    sl = fill(Float64(200), ns)
-    su = fill(Float64(600), ns)
+    sl = fill(sl, ns)
+    su = fill(su, ns)
+
 
     if dense
         lqdm = DenseLQDynamicModel(s0, A, B, Q, R, N; Qf = Qf, sl = sl, su = su)
@@ -63,7 +78,7 @@ function build_thinplate(ns, nu, N, dx, dt; d = ones(ns, N + 1).*300, Tbar = 300
     LinearAlgebra.mul!(Qd, block_Q, dvec)
     LinearAlgebra.mul!(dQd, dvec', Qd)
 
-
+    # Add c and c0 that result from (x-d)^T Q (x-d) in the objective function
     if dense
         block_A = lqdm.blocks.A
         block_B = lqdm.blocks.B
@@ -85,29 +100,7 @@ function build_thinplate(ns, nu, N, dx, dt; d = ones(ns, N + 1).*300, Tbar = 300
 
         lqdm.data.c0 += dQd[1,1] /2
         lqdm.data.c  += - Qdvec
-        # Misssing something still; will come back to Monday. 
     end
-
 
     return lqdm
 end
-
-N = 10
-ns = 5
-nu = 5
-dfunc = (i,k)->100*sin(2*pi*(4*i/N-12*k/ns)) + 400
-
-d = zeros(ns, N+1)
-
-for i in 1:(N+1)
-    for j in 1:ns
-        d[j,i] = dfunc(i,j)
-    end
-end
-
-dx = .1
-dt = .1
-lqdm  = build_thinplate(ns, nu, N, dx, dt; d = d, Tbar = 300., dense = true)
-lqdms = build_thinplate(ns, nu, N, dx, dt; d = d, Tbar = 300., dense = false)
-
-sol_ref = madnlp(lqdm; linear_solver = MadNLPLapackCPU)
