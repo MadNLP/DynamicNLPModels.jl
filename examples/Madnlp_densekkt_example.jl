@@ -25,7 +25,7 @@ function convert_to_CUDA!(lqdm::DenseLQDynamicModel)
     lqdm.data.A = J
 end
 
-
+# Define attributes of 1 D heat transfer model
 N  = 10
 ns = 5
 nu = 5
@@ -42,6 +42,8 @@ end
 
 dx = .1
 dt = .1
+
+# Build model for 1 D heat transfer
 lq_dense  = build_thinplate(ns, nu, N, dx, dt; d = d, Tbar = 400., dense = true)
 lq_sparse = build_thinplate(ns, nu, N, dx, dt; d = d, Tbar = 400., dense = false)
 
