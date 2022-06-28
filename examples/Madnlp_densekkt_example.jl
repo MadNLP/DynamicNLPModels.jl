@@ -5,6 +5,7 @@ include("build_thinplate.jl")
 
 function MadNLP.jac_dense!(nlp::DenseLQDynamicModel{T, V, M1, M2, M3}, x, jac) where {T, V, M1<: AbstractMatrix, M2 <: AbstractMatrix, M3 <: AbstractMatrix}
     NLPModels.increment!(nlp, :neval_jac)
+    
     J = nlp.data.A
     copyto!(jac, J)
 end
@@ -13,41 +14,6 @@ function MadNLP.hess_dense!(nlp::DenseLQDynamicModel{T, V, M1, M2, M3}, x, w1l, 
     NLPModels.increment!(nlp, :neval_hess)
     H = nlp.data.H
     copyto!(hess, H)
-end
-
-function NLPModels.grad!(lqdm::DenseLQDynamicModel, x::AbstractVector, g::AbstractVector)
-    NLPModels.increment!(lqdm, :neval_grad)
-    mul!(g, lqdm.data.H, x)
-    g .+= lqdm.data.c
-    return g
-  end
-
-function convert_to_cuda(lqdm::DenseLQDynamicModel)
-    H = CuArray{Float64}(undef, size(lqdm.data.H))
-    J = CuArray{Float64}(undef, size(lqdm.data.A))
-
-    LinearAlgebra.copyto!(H, lqdm.data.H)
-    LinearAlgebra.copyto!(J, lqdm.data.A)
-
-    lqdm.data.H = H
-
-    lqdm.data.A = J
-
-    data = QuadraticModels.QPData(
-        lqdm.data.c0,
-        lqdm.data.c,
-        H,
-        J
-    )
-
-    DenseLQDynamicModel(
-        lqdm.meta,
-        NLPModels.Counters(),
-        data,
-        lqdm.dynamic_data,
-        lqdm.blocks
-    )
-
 end
 
 # Define attributes of 1 D heat transfer model
@@ -73,24 +39,25 @@ lq_sparse = build_thinplate(ns, nu, N, dx, dt; d = d, Tbar = 400., dense = false
 dense_options = Dict{Symbol, Any}(
     :kkt_system => MadNLP.DENSE_KKT_SYSTEM,
     :linear_solver=> MadNLPLapackCPU,
-    :max_iter=> 200
+    :max_iter=> 200,
+    :jacobian_constant=>true,
+    :hessian_constant=>true,
 )
 
 d_ips = MadNLP.InteriorPointSolver(lq_dense, option_dict = dense_options)
 sol_ref_dense = MadNLP.optimize!(d_ips)
-
 
 # Solve the sparse problem
 sparse_options = Dict{Symbol, Any}(
     :kkt_system=>MadNLP.SPARSE_KKT_SYSTEM,
     :linear_solver=>MadNLPLapackCPU,
     :print_level=>MadNLP.DEBUG,
+    :jacobian_constant=>true,
+    :hessian_constant=>true,
 )
 
 s_ips = MadNLP.InteriorPointSolver(lq_sparse, option_dict = sparse_options)
 sol_ref_sparse = MadNLP.optimize!(s_ips)
-
-
 
 # Solve the dense problem on the GPU
 gpu_options = Dict{Symbol, Any}(
@@ -101,10 +68,7 @@ gpu_options = Dict{Symbol, Any}(
         :hessian_constant=>true,
 )
 
-
-lq_dense_cuda  = convert_to_cuda(lq_dense)
-
 TKKTGPU = MadNLP.DenseKKTSystem{Float64, CuVector{Float64}, CuMatrix{Float64}}
 opt = MadNLP.Options(; gpu_options...)
-gpu_ips = MadNLP.InteriorPointSolver{TKKTGPU}(lq_dense_cuda, opt; option_linear_solver=copy(gpu_options))
+gpu_ips = MadNLP.InteriorPointSolver{TKKTGPU}(lq_dense, opt; option_linear_solver=copy(gpu_options))
 sol_ref_gpu = MadNLP.optimize!(gpu_ips)
