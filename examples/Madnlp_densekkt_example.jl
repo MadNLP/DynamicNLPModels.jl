@@ -15,6 +15,13 @@ function MadNLP.hess_dense!(nlp::DenseLQDynamicModel{T, V, M1, M2, M3}, x, w1l, 
     copyto!(hess, H)
 end
 
+function NLPModels.grad!(lqdm::DenseLQDynamicModel, x::AbstractVector, g::AbstractVector)
+    NLPModels.increment!(lqdm, :neval_grad)
+    mul!(g, lqdm.data.H, x)
+    g .+= lqdm.data.c
+    return g
+  end
+
 function convert_to_cuda(lqdm::DenseLQDynamicModel)
     H = CuArray{Float64}(undef, size(lqdm.data.H))
     J = CuArray{Float64}(undef, size(lqdm.data.A))
@@ -99,5 +106,5 @@ lq_dense_cuda  = convert_to_cuda(lq_dense)
 
 TKKTGPU = MadNLP.DenseKKTSystem{Float64, CuVector{Float64}, CuMatrix{Float64}}
 opt = MadNLP.Options(; gpu_options...)
-gpu_ips = MadNLP.InteriorPointSolver{TKKTGPU}(lq_dense, opt; option_linear_solver=copy(gpu_options))
+gpu_ips = MadNLP.InteriorPointSolver{TKKTGPU}(lq_dense_cuda, opt; option_linear_solver=copy(gpu_options))
 sol_ref_gpu = MadNLP.optimize!(gpu_ips)
