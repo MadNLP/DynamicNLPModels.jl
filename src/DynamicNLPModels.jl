@@ -144,20 +144,20 @@ function LQDynamicData(
         error("size of Q is not consistent with length of s0")
     end
 
-    if !(sl  <= su)
-        error("lower bound(s) on x is > upper bound(s)")
+    if _cmp_arr(<, sl, su)
+        error("lower bound(s) on s is > upper bound(s)")
     end
-    if !(ul <= uu)
+    if _cmp_arr(<, ul, uu)
         error("lower bound(s) on u is > upper bound(s)")
     end
-    if !(s0 >= sl) || !(s0 <= su)
+    if _cmp_arr(>=, s0, sl) || _cmp_arr(<=, s0, su)
         error("s0 is not within the given upper and lower bounds")
     end
 
     if size(E, 1) != size(F, 1)
         error("E and F have different numbers of rows")
     end
-    if !(gl <= gu)
+    if _cmp_arr(<, gl, gu)
         error("lower bound(s) on Es + Fu is > upper bound(s)")
     end
     if size(E, 2) != size(Q, 1)
@@ -196,14 +196,14 @@ end
 
 abstract type AbstractDynamicModel{T,V} <: QuadraticModels.AbstractQuadraticModel{T, V} end
 
-mutable struct SparseLQDynamicModel{T, V, M1, M2, M3, MK} <:  AbstractDynamicModel{T,V} 
+struct SparseLQDynamicModel{T, V, M1, M2, M3, MK} <:  AbstractDynamicModel{T,V} 
   meta::NLPModels.NLPModelMeta{T, V}
   counters::NLPModels.Counters
   data::QuadraticModels.QPData{T, V, M1, M2}
   dynamic_data::LQDynamicData{T, V, M3, MK}
 end
 
-struct Block_Matrices{T, M1, M2}
+struct DenseLQDynamicBlocks{T, M1, M2}
     A::M1
     B::M1
     Q::M2
@@ -216,7 +216,7 @@ struct Block_Matrices{T, M1, M2}
     gu::M1
 end
 
-function Block_Matrices(
+function DenseLQDynamicBlocks(
     A::M1,
     B::M1,
     Q::M2,
@@ -229,7 +229,7 @@ function Block_Matrices(
     gu::M1
 ) where {T, M1 <: AbstractMatrix{T}, M2 <: AbstractMatrix{T}}
 
-    Block_Matrices{T, M1, M2}(
+    DenseLQDynamicBlocks{T, M1, M2}(
         A,
         B,
         Q,
@@ -244,12 +244,12 @@ function Block_Matrices(
 end
 
 
-mutable struct DenseLQDynamicModel{T, V, M1, M2, M3, M4, MK} <:  AbstractDynamicModel{T,V} 
+struct DenseLQDynamicModel{T, V, M1, M2, M3, M4, M5, MK} <:  AbstractDynamicModel{T,V} 
     meta::NLPModels.NLPModelMeta{T, V}
     counters::NLPModels.Counters
     data::QuadraticModels.QPData{T, V, M1, M2}
     dynamic_data::LQDynamicData{T, V, M3, MK}
-    blocks::Block_Matrices{T, M3, M4}
+    blocks::DenseLQDynamicBlocks{T, M4, M5}
 end
 
 """
@@ -301,8 +301,7 @@ function SparseLQDynamicModel(
     ul::V = (similar(s0, size(R, 1)) .= -Inf),
     uu::V = (similar(s0, size(R, 1)) .=  Inf),
     gl::V = (similar(s0, size(E, 1)) .= -Inf), 
-    gu::V = (similar(s0, size(F, 1)) .= Inf), 
-    dense=false
+    gu::V = (similar(s0, size(F, 1)) .= Inf) 
 ) where {T, V <: AbstractVector{T}, M <: AbstractMatrix{T}, MK <: Union{Nothing, AbstractMatrix{T}}}
 
     dnlp = LQDynamicData(
@@ -364,8 +363,7 @@ function DenseLQDynamicModel(
     ul::V = (similar(s0, size(R, 1)) .= -Inf),
     uu::V = (similar(s0, size(R, 1)) .=  Inf),
     gl::V = (similar(s0, size(E, 1)) .= -Inf), 
-    gu::V = (similar(s0, size(F, 1)) .= Inf), 
-    dense=false
+    gu::V = (similar(s0, size(F, 1)) .= Inf)
 ) where {T, V <: AbstractVector{T}, M <: AbstractMatrix{T}, MK <: Union{Nothing, AbstractMatrix{T}}}
 
     dnlp = LQDynamicData(
@@ -696,7 +694,7 @@ function _build_dense_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) where {T, 
 
     nvar = nu * N
     nnzj = size(J, 1) * size(J, 2)
-    nnzh = sum(LinearAlgebra.LowerTriangular(H) .!= 0)
+    nnzh = floor(Int, size(H, 1) * (size(H,1) + 1) / 2)
     ncon = size(J, 1)
 
     c = similar(s0, nvar)
@@ -1019,7 +1017,7 @@ function _build_block_matrices(
     block_A[(ns * N + 1):ns * (N + 1), :] = A_knext
     block_Q[(ns * N + 1):((N + 1) * ns), (N * ns + 1):((N + 1) * ns)] = Qf
 
-    Block_Matrices(
+    DenseLQDynamicBlocks(
         block_A, 
         block_B, 
         block_Q, 
@@ -1474,6 +1472,8 @@ function NLPModels.jac_coord!(
     return vals
 end
 
+
+
 """ 
     _build_H(Q, R, N; Qf = []) -> H
 
@@ -1616,6 +1616,13 @@ function _build_sparse_J3(K, N, uu, ul)
     end
 
     return J3[full_bool_vec, :], lcon3[full_bool_vec], ucon3[full_bool_vec]
+end
+
+function _cmp_arr(op, A, B)
+    for i = 1:length(A)
+        !op(A[i], B[i]) && return true
+    end
+    return false
 end
 
 end # module
