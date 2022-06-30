@@ -881,7 +881,7 @@ function _build_dense_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) where {T, 
 
     nvar = nu * N
     nnzj = size(J, 1) * size(J, 2)
-    nnzh = sum(LinearAlgebra.LowerTriangular(H) .!= 0)
+    nnzh = floor(Int, size(H, 1) * (size(H,1) + 1) / 2)
     ncon = size(J, 1)
 
     c = similar(s0, nvar)
