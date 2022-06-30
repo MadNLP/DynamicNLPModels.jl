@@ -47,6 +47,8 @@ Attributes include:
 
 see also `LQDynamicData(s0, A, B, Q, R, N; ...)`
 """
+
+
 struct LQDynamicData{T, V, M, MK} <: AbstractLQDynData{T,V}
     s0::V
     A::M
@@ -115,9 +117,9 @@ function LQDynamicData(
     N;
 
     Qf::M = Q, 
-    S::M  = (similar(Q, size(Q, 1), size(R, 1)) .= 0),
-    E::M  = (similar(Q, 0, length(s0)) .= 0),
-    F::M  = (similar(Q, 0, size(R, 1)) .= 0),
+    S::M  = (similar(Q, size(Q, 1), size(R, 1)) .= 0.0),
+    E::M  = (similar(Q, 0, length(s0)) .= 0.0),
+    F::M  = (similar(Q, 0, size(R, 1)) .= 0.0),
     K::MK = nothing,
 
     sl::V = (similar(s0) .= -Inf),
@@ -292,9 +294,9 @@ function SparseLQDynamicModel(
     R::M,
     N;
     Qf::M = Q, 
-    S::M  = (similar(Q, size(Q, 1), size(R, 1)) .= 0),
-    E::M  = (similar(Q, 0, length(s0)) .= 0),
-    F::M  = (similar(Q, 0, size(R, 1)) .= 0),
+    S::M  = (similar(Q, size(Q, 1), size(R, 1)) .= 0.0),
+    E::M  = (similar(Q, 0, length(s0)) .= 0.0),
+    F::M  = (similar(Q, 0, size(R, 1)) .= 0.0),
     K::MK = nothing,
     sl::V = (similar(s0) .= -Inf),
     su::V = (similar(s0) .=  Inf),
@@ -354,9 +356,9 @@ function DenseLQDynamicModel(
     R::M,
     N;
     Qf::M = Q, 
-    S::M  = (similar(Q, size(Q, 1), size(R, 1)) .= 0),
-    E::M  = (similar(Q, 0, length(s0)) .= 0),
-    F::M  = (similar(Q, 0, size(R, 1)) .= 0),
+    S::M  = (similar(Q, size(Q, 1), size(R, 1)) .= 0.0),
+    E::M  = (similar(Q, 0, length(s0)) .= 0.0),
+    F::M  = (similar(Q, 0, size(R, 1)) .= 0.0),
     K::MK = nothing,
     sl::V = (similar(s0) .= -Inf),
     su::V = (similar(s0) .=  Inf),
@@ -881,7 +883,7 @@ function _build_dense_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) where {T, 
 
     nvar = nu * N
     nnzj = size(J, 1) * size(J, 2)
-    nnzh = sum(LinearAlgebra.LowerTriangular(H) .!= 0)
+    nnzh = floor(Int, size(H, 1) * (size(H,1) + 1) / 2)
     ncon = size(J, 1)
 
     c = similar(s0, nvar)
@@ -915,19 +917,19 @@ end
 function _build_block_matrices(
     s0, Q, R, A, B, E, F, N, gu, gl, K;
     Qf = Q, 
-    S = (similar(Q, size(Q, 1), size(R, 1)) .= 0)
+    S = (similar(Q, size(Q, 1), size(R, 1)) .= 0.0)
     )
 
     ns = size(Q, 1)
     nu = size(R, 1)
 
     if K == nothing
-        K = similar(Q, nu, ns); fill!(K, 0)
+        K = similar(Q, nu, ns); fill!(K, 0.0)
     end    
   
     # Define block matrices
-    block_B = similar(Q, ns * (N + 1), nu * N); fill!(block_B, 0)
-    block_A = similar(Q, ns * (N + 1), ns); fill!(block_A, 0)
+    block_B = similar(Q, ns * (N + 1), nu * N); fill!(block_B, 0.0)
+    block_A = similar(Q, ns * (N + 1), ns); fill!(block_A, 0.0)
     block_Q = SparseArrays.sparse([],[], eltype(Q)[], ns * (N + 1), ns * (N + 1))
     block_R = SparseArrays.sparse([],[], eltype(R)[], nu * N, nu * N)
     block_S = SparseArrays.sparse([],[], eltype(S)[], ns * (N + 1), nu * N)
@@ -938,10 +940,10 @@ function _build_block_matrices(
     nF1 = size(F, 1)
     nF2 = size(F, 2)
     
-    block_E  = similar(Q, nE1 * N, nE2 * (N + 1)); fill!(block_E, 0)
-    block_F  = similar(Q, nF1 * N, nF2 * N); fill!(block_F, 0)
-    block_gl = similar(Q, nE1 * N, 1); fill!(block_gl, 0)
-    block_gu = similar(Q, nE1 * N, 1); fill!(block_gu, 0)
+    block_E  = similar(Q, nE1 * N, nE2 * (N + 1)); fill!(block_E, 0.0)
+    block_F  = similar(Q, nF1 * N, nF2 * N); fill!(block_F, 0.0)
+    block_gl = similar(Q, nE1 * N, 1); fill!(block_gl, 0.0)
+    block_gu = similar(Q, nE1 * N, 1); fill!(block_gu, 0.0)
   
     # Build E, F, and d (gl and gu) blocks
     for i in 1:N
@@ -982,14 +984,14 @@ function _build_block_matrices(
     # Define matrices for mul!
     A_klast  = copy(A_k)
     A_knext  = copy(A_k)
-    AB_klast = similar(Q, size(B, 1), size(B, 2)); fill!(AB_klast, 0)
-    AB_k     = similar(Q, size(B, 1), size(B, 2)); fill!(AB_k, 0)
+    AB_klast = similar(Q, size(B, 1), size(B, 2)); fill!(AB_klast, 0.0)
+    AB_k     = similar(Q, size(B, 1), size(B, 2)); fill!(AB_k, 0.0)
   
     # Fill the A and B matrices
     for i in 1:(N - 1)
         if i == 1
             block_A[(ns + 1):ns*2, :] = A_k
-            LinearAlgebra.mul!(AB_k, A_k, B)
+            LinearAlgebra.mul!(AB_k, A_k, B, 1, 0)
             for k in 1:(N-i)
                 row_range = (1 + (k + 1) * ns):((k + 2) * ns)
                 col_range = (1 + (k - 1) * nu):(k * nu)
@@ -1031,6 +1033,29 @@ function _build_block_matrices(
     )
 end
 
+function _build_H_blocks2(block_Q, block_R, block_A::M, block_B::M, block_S, block_K, s0, N, K::MK) where {T, M <: AbstractMatrix{T}, MK <: Nothing}
+
+    ns = size(block_B, 1) / (N + 1)
+    nu = size(block_B, 2) / N
+    Q = block_Q[1:ns, 1:ns]
+
+    H  = similar(block_A, size(block_B, 2), size(block_B, 2)); fill!(H, 0.0)
+    QB = similar(block_A, size(block_Q, 1), size(block_B, 2)); fill!(QB, 0.0)
+
+    for i in 1:N
+        AKB = block_B[(1 + i * ns):((i + 1) * ns), 1:nu] 
+        for j in 1:i
+
+        end
+    end
+
+end
+
+
+
+
+
+
 function _build_H_blocks(block_Q, block_R, block_A::M, block_B::M, block_S, block_K, s0, N, K::MK) where {T, M <: AbstractMatrix{T}, MK <: Nothing}
     As0      = similar(s0, size(block_A, 1))
     QB       = similar(block_A, size(block_Q, 1), size(block_B, 2))
@@ -1038,8 +1063,8 @@ function _build_H_blocks(block_Q, block_R, block_A::M, block_B::M, block_S, bloc
     B_Q_B    = similar(block_A, size(block_B, 2), size(block_B, 2))
 
     LinearAlgebra.mul!(As0, block_A, s0)
-    LinearAlgebra.mul!(QB, block_Q, block_B)
-    LinearAlgebra.mul!(STB, block_S', block_B)
+    LinearAlgebra.mul!(QB, block_Q, block_B, 1, 0)
+    LinearAlgebra.mul!(STB, block_S', block_B, 1, 0)
     LinearAlgebra.mul!(B_Q_B, block_B', QB)
 
     # Define Hessian term so that H = B_Q_B
@@ -1055,7 +1080,7 @@ function _build_H_blocks(block_Q, block_R, block_A::M, block_B::M, block_S, bloc
     # Define linear term so that c0 = h0
     h0   = similar(block_A, 1,1)
     QAs0 = similar(block_A, size(block_Q, 1), 1)
-    LinearAlgebra.mul!(QAs0, block_Q, As0)
+    LinearAlgebra.mul!(QAs0, block_Q, As0, 1, 0)
     LinearAlgebra.mul!(h0, As0', QAs0)
 
     return (H = B_Q_B, c = h, c0 = h0 ./ T(2))
