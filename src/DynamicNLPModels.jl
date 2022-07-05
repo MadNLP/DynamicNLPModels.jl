@@ -6,7 +6,7 @@ import LinearAlgebra
 import SparseArrays
 import SparseArrays: SparseMatrixCSC
 
-export LQDynamicData, SparseLQDynamicModel, DenseLQDynamicModel, get_u, get_s
+export LQDynamicData, SparseLQDynamicModel, DenseLQDynamicModel, get_u, get_s, DenseLQDynamicBlocks
 
 abstract type AbstractLQDynData{T,V} end
 """
@@ -1033,17 +1033,127 @@ function _build_block_matrices(
     )
 end
 
-function _build_H_blocks2(block_Q, block_R, block_A::M, block_B::M, block_S, block_K, s0, N, K::MK) where {T, M <: AbstractMatrix{T}, MK <: Nothing}
 
-    ns = size(block_B, 1) / (N + 1)
-    nu = size(block_B, 2) / N
-    Q = block_Q[1:ns, 1:ns]
+function _build_block_matrices2(
+    s0, Q, R, A, B, E, F, N, gu, gl, K;
+    Qf = Q, 
+    S = (similar(Q, size(Q, 1), size(R, 1)) .= 0.0)
+    )
 
-    H  = similar(block_A, size(block_B, 2), size(block_B, 2)); fill!(H, 0.0)
-    QB = similar(block_A, size(block_Q, 1), size(block_B, 2)); fill!(QB, 0.0)
+    ns = size(Q, 1)
+    nu = size(R, 1)
+
+    if K == nothing
+        K = similar(Q, nu, ns); fill!(K, 0.0)
+    end    
+  
+    # Define block matrices
+    block_B = similar(Q, ns * N, nu); fill!(block_B, 0.0)
+    block_A = similar(Q, ns * N, ns); fill!(block_A, 0.0)
+
+  
+    # Add diagonal of Bs and fill Q, R, S, and K block matrices
+    block_B[1:ns, :] = B
+
+
+    for i in 1:ns
+        block_A[i, i] = 1.0
+    end
+
+    A_k = copy(A)
+
+    # Define matrices for mul!
+    A_klast  = copy(A_k)
+    A_knext  = copy(A_k)
+    AB_klast = similar(Q, size(B, 1), size(B, 2));
+    AB_k     = similar(Q, size(B, 1), size(B, 2));
+  
+    # Fill the A and B matrices
+    for i in 1:(N - 1)
+        if i == 1
+            block_A[(ns + 1):ns * 2, :] = A_k
+            LinearAlgebra.mul!(AB_k, A_k, B, 1, 0)
+
+            block_B[(1 + i * ns):((i + 1) * ns), :] = AB_k
+        
+
+            AB_klast = copy(AB_k)
+        else
+            LinearAlgebra.mul!(AB_k, A_k, AB_klast)
+            
+            LinearAlgebra.mul!(A_knext, A_k, A_klast)
+
+            block_A[(ns * i + 1):ns * (i + 1),:] = A_knext
+  
+            block_B[(1 + (i + 1) * ns):((i + 2) * ns), :] = AB_k
+  
+            AB_klast = copy(AB_k)
+            A_klast  = copy(A_knext)
+        end
+    end
+
+    LinearAlgebra.mul!(A_knext, A_k, A_klast)
+
+    block_A[(ns * N + 1):ns * (N + 1), :] = A_knext
+
+    DenseLQDynamicBlocks(
+        block_A, 
+        block_B, 
+        Q, 
+        R,
+        S,
+        K,
+        E,
+        F,
+        gl,
+        gu
+    )
+end
+
+function _build_H_blocks2(Q, R, block_A::M, block_B::M, S, s0, N, K::MK) where {T, M <: AbstractMatrix{T}, MK <: Nothing}
+
+    ns = size(Q, 1)
+    nu = size(R, 1)
+
+    QB = similar(block_B)
+
+    QAB = similar(block_B, ns, nu)
+
+    H  = similar(block_A, nu * N, nu * N); fill!(H, 0.0)
+
+    As0 = similar(block_A, ns * (N + 1))
+    LinearAlgebra.mul!(As0, block_A, s0)
+
+    BQB = similar(block_B, nu, nu)
+
 
     for i in 1:N
-        AKB = block_B[(1 + i * ns):((i + 1) * ns), 1:nu] 
+        B_sub_block = block_B[(1 + (i - 1) * ns):(i * ns),:]
+        LinearAlgebra.mul!(QAB, Q, B_sub_block)
+
+        QB[(1 + (i - 1) * ns):(i * ns),:] = QAB
+        left_QAB = transpose(QAB)
+
+        offset = 0
+        for j in 1:(N + 1 - i)
+            right_block = block_B[(1 + (j - 1) * ns):(j * ns),:]
+            LinearAlgebra.mul!(BQB, left_QAB, right_block)
+            
+
+            for k in 1:(N - j + 1)
+                row_range = (1 + nu * (k + offset - 1)):(nu * (k + offset))
+                col_range = (1 + nu * (k - 1)):(nu * k)
+
+                H[row_range, col_range] .+= BQB
+            end
+
+            offset += 1
+
+        end
+    end
+
+    for i in 1:N
+        QAKB = QB[(1 + (i - 1) * ns):(i * ns), :]
         for j in 1:i
 
         end
