@@ -239,8 +239,6 @@ lq_sparse_from_data = SparseLQDynamicModel(s0, A, B, Q, R, N; sl = sl, ul = ul, 
 lq_dense_from_data  = DenseLQDynamicModel(s0, A, B, Q, R, N; sl = sl, ul = ul, su = su, uu = uu, E = E, F = F, gl = gl, gu = gu, S = S)
 
 optimize!(model)
-
-optimize!(model)
 solution_ref_sparse           = madnlp(lq_sparse, max_iter=100) 
 solution_ref_dense            = madnlp(lq_dense, max_iter=100)
 solution_ref_sparse_from_data = madnlp(lq_sparse_from_data, max_iter=100)
@@ -356,7 +354,6 @@ solution_ref_dense_from_data  = madnlp(lq_dense_from_data, max_iter=100)
 
 
 
-
 # Test K with no bounds
 model     = build_QP_JuMP_model(Q,R,A,B, N;s0=s0, E = E, F = F, gl = gl, gu = gu, K = K)
 dnlp      = LQDynamicData(s0, A, B, Q, R, N; E = E, F = F, gl = gl, gu = gu, K = K)
@@ -469,9 +466,9 @@ ul = Test.GenericArray(ul)
 uu = Test.GenericArray(uu)
 
 @test (DenseLQDynamicModel(s0, A, B, Q, R, 10; S = S, E = E, F = F, gl = gl, gu = gu, ul = ul, uu = uu, sl = sl, su = su) isa 
-DenseLQDynamicModel{Float32, GenericArray{Float32, 1}, GenericArray{Float32, 2}, GenericArray{Float32, 2}, GenericArray{Float32, 2}, GenericArray{Float32, 2}, SparseMatrixCSC{Float32, Int64}, Nothing})
+    DenseLQDynamicModel{Float32, GenericArray{Float32, 1}, GenericArray{Float32, 2}, GenericArray{Float32, 2}, GenericArray{Float32, 2}, GenericArray{Float32, 2}, Nothing})
 @test (DenseLQDynamicModel(s0, A, B, Q, R, 10; K = K, S = S, E = E, F = F, gl = gl, gu = gu, ul = ul, uu = uu, sl = sl, su = su) isa 
-DenseLQDynamicModel{Float32, GenericArray{Float32, 1}, GenericArray{Float32, 2}, GenericArray{Float32, 2}, GenericArray{Float32, 2}, GenericArray{Float32, 2}, SparseMatrixCSC{Float32, Int64}, GenericArray{Float32, 2}})
+DenseLQDynamicModel{Float32, GenericArray{Float32, 1}, GenericArray{Float32, 2}, GenericArray{Float32, 2}, GenericArray{Float32, 2}, GenericArray{Float32, 2}, GenericArray{Float32, 2}})
 @test (SparseLQDynamicModel(s0, A, B, Q, R, 10; S = S, E = E, F = F, gl = gl, gu = gu, ul = ul, uu = uu, sl = sl, su = su) isa 
     SparseLQDynamicModel{Float32, GenericArray{Float32, 1}, SparseMatrixCSC{Float32, Int64}, SparseMatrixCSC{Float32, Int64}, GenericArray{Float32, 2}, Nothing})
 @test (SparseLQDynamicModel(s0, A, B, Q, R, 10; K = K, S = S, E = E, F = F, gl = gl, gu = gu, ul = ul, uu = uu, sl = sl, su = su) isa 
