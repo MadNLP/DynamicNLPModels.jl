@@ -615,19 +615,15 @@ function _build_dense_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) where {T, 
     if num_real_bounds == length(sl)
         As0_bounds .= As0[(1 + ns):ns * (N + 1)]
         for i in 1:N
-            B_row_range = 1:(ns *(N - i + 1))
-            B_sub_block = view(block_B, B_row_range, :)
-            J2[(1 + (i - 1) * ns):ns * N, (1 + nu * (i - 1)):(nu * i)] = B_sub_block
+            J2[(1 + (i - 1) * ns):ns * N, (1 + nu * (i - 1)):(nu * i)] = @view(block_B[1:(ns * (N - i + 1)),:])
         end
     else        
         for i in 1:N
             row_range = (1 + (i - 1) * num_real_bounds):(i * num_real_bounds)
-            As0_bounds[row_range] = As0[(1 + ns * i):(ns * (i + 1))][bool_vec]
+            As0_bounds[row_range] .= As0[(1 + ns * i):(ns * (i + 1))][bool_vec]
 
             for j in 1:(N - i + 1)
-                B_row_range = (1 + (j - 1) * ns):(j * ns)
-                B_sub_block = view(view(block_B, B_row_range, :), bool_vec, :)
-                J2[(1 + (i + j - 2) * num_real_bounds):((i + j - 1) * num_real_bounds), (1 + nu * (i - 1)):(nu * i)] .= B_sub_block
+                J2[(1 + (i + j - 2) * num_real_bounds):((i + j - 1) * num_real_bounds), (1 + nu * (i - 1)):(nu * i)] = @view(block_B[(1 + (j - 1) * ns):(j * ns), :][bool_vec, :])
             end
         end
 
@@ -754,9 +750,7 @@ function _build_dense_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) where {T, 
     if num_real_bounds == length(sl)
         As0_bounds .= As0[(1 + ns):ns * (N + 1)]
         for i in 1:N
-            B_row_range = 1:(ns *(N - i + 1))
-            B_sub_block = view(block_B, B_row_range, :)
-            J2[(1 + (i - 1) * ns):ns * N, (1 + nu * (i - 1)):(nu * i)] = B_sub_block
+            J2[(1 + (i - 1) * ns):ns * N, (1 + nu * (i - 1)):(nu * i)] = @view(block_B[1:(ns * (N - i + 1)),:])
         end
     else        
         for i in 1:N
@@ -764,9 +758,7 @@ function _build_dense_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) where {T, 
             As0_bounds[row_range] = As0[(1 + ns * i):(ns * (i + 1))][bool_vec_s]
 
             for j in 1:(N - i + 1)
-                B_row_range = (1 + (j - 1) * ns):(j * ns)
-                B_sub_block = view(view(block_B, B_row_range, :), bool_vec_s, :)
-                J2[(1 + (i + j - 2) * num_real_bounds):((i + j - 1) * num_real_bounds), (1 + nu * (i - 1)):(nu * i)] .= B_sub_block
+                J2[(1 + (i + j - 2) * num_real_bounds):((i + j - 1) * num_real_bounds), (1 + nu * (i - 1)):(nu * i)] = @view(block_B[(1 + (j - 1) * ns):(j * ns), :][bool_vec_s, :])
             end
         end
 
@@ -806,11 +798,8 @@ function _build_dense_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) where {T, 
 
     if num_real_bounds == length(ul)
         KAs0_bounds .= KAs0
-
         for i in 1:N
-            KBI_row_range = 1:(nu * (N - i +1))
-            KBI_sub_block = view(KBI, KBI_row_range, :)
-            J3[(1 + (i - 1) * nu):nu * N, (1 + nu * (i - 1)):(nu * i)] = KBI_sub_block
+            J3[(1 + (i - 1) * nu):nu * N, (1 + nu * (i - 1)):(nu * i)] = @view(KBI[1:(nu * (N - i + 1)),:])
         end
     else
         for i in 1:N
@@ -818,9 +807,7 @@ function _build_dense_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) where {T, 
             KAs0_bounds[row_range] = KAs0[(1 + nu * (i - 1)):(nu * i)][bool_vec_u]
 
             for j in 1:(N - i +1)
-                KBI_row_range = (1 + (j - 1) * nu):(j * nu)
-                KBI_sub_block = view(view(KBI, KBI_row_range, :), bool_vec_u, :)
-                J3[(1 + (i + j - 2) * num_real_bounds):((i + j - 1) * num_real_bounds), (1 + nu * (i - 1)):(nu * i)] .= KBI_sub_block
+            J3[(1 + (i + j - 2) * num_real_bounds):((i + j - 1) * num_real_bounds), (1 + nu * (i - 1)):(nu * i)] = @view(KBI[(1 + (j - 1) * nu):(j * nu), :][bool_vec_u, :])
             end
         end
 
