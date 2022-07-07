@@ -580,10 +580,12 @@ function _build_dense_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) where {T, 
 
     nc = size(E, 1)
 
+    bool_vec_s        = (su .!= Inf .|| sl .!= -Inf)
+    num_real_bounds_s = sum(bool_vec_s)
+
     dense_blocks = _build_block_matrices(A, B, K, N)
     block_A  = dense_blocks.A
     block_B  = dense_blocks.B
-
 
     H_blocks = _build_H_blocks(Q, R, block_A, block_B, S,Qf, K, s0, N)
 
@@ -591,13 +593,14 @@ function _build_dense_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) where {T, 
     c0 = H_blocks.c0
 
     G  = _init_similar(Q, nc * N, nu, T)
-    J1 = _init_similar(Q, nc * N, nu * N, T)
+    J  = _init_similar(Q, nc * N + num_real_bounds_s * N, nu * N, T)
+    As0_bounds = _init_similar(s0, num_real_bounds_s * N, T)
 
     dl = repeat(gl, N)
     du = repeat(gu, N)
     
     _set_G_blocks!(G, dl, du, block_B, block_A, s0, E, F, K, N)
-    _set_J1_dense!(J1, G, N)
+    _set_J1_dense!(J, G, N)
 
     As0 = _init_similar(s0, ns * (N + 1), T)
     LinearAlgebra.mul!(As0, block_A, s0)
@@ -606,29 +609,24 @@ function _build_dense_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) where {T, 
     uvar = repeat(uu, N)
 
     # Convert state variable constraints to algebraic constraints
-    bool_vec        = (su .!= Inf .|| sl .!= -Inf)
-    num_real_bounds = sum(bool_vec)
-
-    J2         = _init_similar(Q, num_real_bounds * N, nu * N, T)
-    As0_bounds = _init_similar(s0, num_real_bounds * N, T)
-
-    if num_real_bounds == length(sl)
+    offset_s = N * nc
+    if num_real_bounds_s == length(sl)
         As0_bounds .= As0[(1 + ns):ns * (N + 1)]
         for i in 1:N
-            J2[(1 + (i - 1) * ns):ns * N, (1 + nu * (i - 1)):(nu * i)] = @view(block_B[1:(ns * (N - i + 1)),:])
+            J[(offset_s + 1 + (i - 1) * ns):(offset_s + ns * N), (1 + nu * (i - 1)):(nu * i)] = @view(block_B[1:(ns * (N - i + 1)),:])
         end
     else        
         for i in 1:N
-            row_range = (1 + (i - 1) * num_real_bounds):(i * num_real_bounds)
-            As0_bounds[row_range] .= As0[(1 + ns * i):(ns * (i + 1))][bool_vec]
+            row_range = (1 + (i - 1) * num_real_bounds_s):(i * num_real_bounds_s)
+            As0_bounds[row_range] .= As0[(1 + ns * i):(ns * (i + 1))][bool_vec_s]
 
             for j in 1:(N - i + 1)
-                J2[(1 + (i + j - 2) * num_real_bounds):((i + j - 1) * num_real_bounds), (1 + nu * (i - 1)):(nu * i)] = @view(block_B[(1 + (j - 1) * ns):(j * ns), :][bool_vec, :])
+                J[(offset_s + 1 + (i + j - 2) * num_real_bounds_s):(offset_s + (i + j - 1) * num_real_bounds_s), (1 + nu * (i - 1)):(nu * i)] = @view(block_B[(1 + (j - 1) * ns):(j * ns), :][bool_vec_s, :])
             end
         end
 
-        sl = sl[bool_vec]
-        su = su[bool_vec]
+        sl = sl[bool_vec_s]
+        su = su[bool_vec_s]
     end
 
     lcon2 = repeat(sl, N)
@@ -644,15 +642,8 @@ function _build_dense_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) where {T, 
     ucon[1:length(du)] = du
 
     if length(lcon2) > 0
-        lcon[(1 + length(dl)):(length(dl) + size(J2, 1))] = lcon2
-        ucon[(1 + length(du)):(length(du) + size(J2, 1))] = ucon2
-    end
-
-    J   = _init_similar(Q, size(J1, 1) + size(J2, 1), size(J1, 2), T)
-    J[1:(size(J1, 1)), :] = J1
-
-    if size(J2, 1) > 0
-        J[(1 + size(J1, 1)):(size(J1, 1) + size(J2, 1)), :] = J2
+        lcon[(1 + length(dl)):(length(dl) + num_real_bounds_s * N)] = lcon2
+        ucon[(1 + length(du)):(length(du) + num_real_bounds_s * N)] = ucon2
     end
 
     nvar = nu * N
@@ -725,50 +716,19 @@ function _build_dense_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) where {T, 
     H  = H_blocks.H
     c0 = H_blocks.c0
 
-    G   = _init_similar(Q, nc * N, nu, T)
-    J1  = _init_similar(Q, nc * N, nu * N, T)
-    As0 = _init_similar(s0, ns * (N + 1), T)
-
-
-    dl = repeat(gl, N)
-    du = repeat(gu, N)
-
-    
-    _set_G_blocks!(G, dl, du, block_B, block_A, s0, E, F, K, N)
-    _set_J1_dense!(J1, G, N)
-
-    LinearAlgebra.mul!(As0, block_A, s0)
-
-    # Convert state variable constraints to algebraic constraints
     bool_vec_s        = (su .!= Inf .|| sl .!= -Inf)
-    num_real_bounds   = sum(bool_vec_s)
+    num_real_bounds_s   = sum(bool_vec_s)
 
-    J2         = _init_similar(Q, num_real_bounds * N, nu * N, T)
-    As0_bounds = _init_similar(s0, num_real_bounds * N, T)
-
-
-    if num_real_bounds == length(sl)
-        As0_bounds .= As0[(1 + ns):ns * (N + 1)]
-        for i in 1:N
-            J2[(1 + (i - 1) * ns):ns * N, (1 + nu * (i - 1)):(nu * i)] = @view(block_B[1:(ns * (N - i + 1)),:])
-        end
-    else        
-        for i in 1:N
-            row_range = (1 + (i - 1) * num_real_bounds):(i * num_real_bounds)
-            As0_bounds[row_range] = As0[(1 + ns * i):(ns * (i + 1))][bool_vec_s]
-
-            for j in 1:(N - i + 1)
-                J2[(1 + (i + j - 2) * num_real_bounds):((i + j - 1) * num_real_bounds), (1 + nu * (i - 1)):(nu * i)] = @view(block_B[(1 + (j - 1) * ns):(j * ns), :][bool_vec_s, :])
-            end
-        end
-
-        sl = sl[bool_vec_s]
-        su = su[bool_vec_s]
-    end
-
-    # Convert bounds on u to algebraic constraints
     bool_vec_u       = (ul .!= -Inf .|| uu .!= Inf)
-    num_real_bounds  = sum(bool_vec_u)
+    num_real_bounds_u  = sum(bool_vec_u)
+
+
+
+    G   = _init_similar(Q, nc * N, nu, T)
+    J   = _init_similar(Q, (nc + num_real_bounds_s + num_real_bounds_u) * N, nu * N, T)
+    As0 = _init_similar(s0, ns * (N + 1), T)
+    As0_bounds = _init_similar(s0, num_real_bounds_s * N, T)
+    KAs0_bounds = _init_similar(s0, num_real_bounds_u * N, T)
 
     KBI        = _init_similar(Q, nu * N, nu, T)
     KAs0       = _init_similar(s0, nu * N, T)
@@ -778,7 +738,37 @@ function _build_dense_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) where {T, 
     I_mat = _init_similar(Q, nu, nu, T)
 
     I_mat[LinearAlgebra.diagind(I_mat)] .= T(1)
-    
+
+    dl = repeat(gl, N)
+    du = repeat(gu, N)
+
+    _set_G_blocks!(G, dl, du, block_B, block_A, s0, E, F, K, N)
+    _set_J1_dense!(J, G, N)
+
+    LinearAlgebra.mul!(As0, block_A, s0)
+
+    # Convert state variable constraints to algebraic constraints
+    offset_s = nc * N
+    if num_real_bounds_s == length(sl)
+        As0_bounds .= As0[(1 + ns):ns * (N + 1)]
+        for i in 1:N
+            J[(offset_s + 1 + (i - 1) * ns):(offset_s + ns * N), (1 + nu * (i - 1)):(nu * i)] = @view(block_B[1:(ns * (N - i + 1)),:])
+        end
+    else        
+        for i in 1:N
+            row_range = (1 + (i - 1) * num_real_bounds_s):(i * num_real_bounds_s)
+            As0_bounds[row_range] = As0[(1 + ns * i):(ns * (i + 1))][bool_vec_s]
+
+            for j in 1:(N - i + 1)
+                J[(offset_s + 1 + (i + j - 2) * num_real_bounds_s):(offset_s + (i + j - 1) * num_real_bounds_s), (1 + nu * (i - 1)):(nu * i)] = @view(block_B[(1 + (j - 1) * ns):(j * ns), :][bool_vec_s, :])
+            end
+        end
+
+        sl = sl[bool_vec_s]
+        su = su[bool_vec_s]
+    end
+
+    # Convert bounds on u to algebraic constraints
     for i in 1:N
         if i == 1
             KB = I_mat
@@ -793,21 +783,19 @@ function _build_dense_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) where {T, 
         KAs0[(1 + nu * (i - 1)):nu * i] = KAs0_block
     end
 
-    J3          = _init_similar(Q, num_real_bounds * N, nu * N, T)
-    KAs0_bounds = _init_similar(s0, num_real_bounds * N, T)
-
-    if num_real_bounds == length(ul)
+    offset_u = nc * N + num_real_bounds_s * N
+    if num_real_bounds_u == length(ul)
         KAs0_bounds .= KAs0
         for i in 1:N
-            J3[(1 + (i - 1) * nu):nu * N, (1 + nu * (i - 1)):(nu * i)] = @view(KBI[1:(nu * (N - i + 1)),:])
+            J[(offset_u + 1 + (i - 1) * nu):(offset_u + nu * N), (1 + nu * (i - 1)):(nu * i)] = @view(KBI[1:(nu * (N - i + 1)),:])
         end
     else
         for i in 1:N
-            row_range              = (1 + (i - 1) * num_real_bounds):(i * num_real_bounds)
+            row_range              = (1 + (i - 1) * num_real_bounds_u):(i * num_real_bounds_u)
             KAs0_bounds[row_range] = KAs0[(1 + nu * (i - 1)):(nu * i)][bool_vec_u]
 
             for j in 1:(N - i +1)
-            J3[(1 + (i + j - 2) * num_real_bounds):((i + j - 1) * num_real_bounds), (1 + nu * (i - 1)):(nu * i)] = @view(KBI[(1 + (j - 1) * nu):(j * nu), :][bool_vec_u, :])
+            J[(offset_u + 1 + (i + j - 2) * num_real_bounds_u):(offset_u + (i + j - 1) * num_real_bounds_u), (1 + nu * (i - 1)):(nu * i)] = @view(KBI[(1 + (j - 1) * nu):(j * nu), :][bool_vec_u, :])
             end
         end
 
@@ -821,25 +809,13 @@ function _build_dense_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) where {T, 
     lcon3 = repeat(ul, N)
     ucon3 = repeat(uu, N)
 
-
     LinearAlgebra.axpy!(-1, As0_bounds, lcon2)
     LinearAlgebra.axpy!(-1, As0_bounds, ucon2)
 
     LinearAlgebra.axpy!(-1, KAs0_bounds, lcon3)
     LinearAlgebra.axpy!(-1, KAs0_bounds, ucon3)
 
-
-    J = _init_similar(Q, size(J1, 1) + size(J2, 1) + size(J3, 1), size(J1, 2), T)
-    J[1:size(J1, 1), :] = J1
-
-    if size(J2, 1) > 0
-        J[(size(J1, 1) + 1):(size(J1, 1) + size(J2, 1)), :] = J2
-    end
-
-    if size(J3, 1) > 0
-        J[(size(J1, 1) + size(J2, 1) + 1):(size(J1, 1) + size(J2, 1) + size(J3, 1)), :] = J3
-    end
-
+    
     lcon = _init_similar(s0, size(J, 1), T)
     ucon = _init_similar(s0, size(J, 1), T)
 
