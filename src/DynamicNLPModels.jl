@@ -208,20 +208,7 @@ end
 struct DenseLQDynamicBlocks{T, M}
     A::M
     B::M
-
 end
-
-function DenseLQDynamicBlocks(
-    A::M,
-    B::M,
-) where {T, M <: AbstractMatrix{T}}
-
-    DenseLQDynamicBlocks{T, M}(
-        A,
-        B
-    )
-end
-
 
 struct DenseLQDynamicModel{T, V, M1, M2, M3, M4, MK} <:  AbstractDynamicModel{T,V} 
     meta::NLPModels.NLPModelMeta{T, V}
@@ -681,7 +668,8 @@ function _build_dense_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) where {T, 
 
     nvar = nu * N
     nnzj = size(J, 1) * size(J, 2)
-    nnzh = floor(Int, size(H, 1) * (size(H,1) + 1) / 2)
+    nh   = size(H, 1)
+    nnzh = div(nh * (nh + 1), 2)
     ncon = size(J, 1)
 
     c = similar(s0, nvar)
@@ -892,7 +880,8 @@ function _build_dense_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) where {T, 
 
     nvar = nu * N
     nnzj = size(J, 1) * size(J, 2)
-    nnzh = floor(Int, size(H, 1) * (size(H,1) + 1) / 2)
+    nh   = size(H, 1)
+    nnzh = div(nh * (nh + 1), 2)
     ncon = size(J, 1)
 
     c = similar(s0, nvar)
@@ -924,8 +913,8 @@ end
 
 
 function _build_block_matrices(
-    A, B, K, N
-)
+    A::M, B::M, K, N
+) where {T, M <: AbstractMatrix{T}}
 
     ns = size(A, 2)
     nu = size(B, 2)
@@ -983,7 +972,7 @@ function _build_block_matrices(
 
     block_A[(ns * N + 1):ns * (N + 1), :] = A_knext
 
-    DenseLQDynamicBlocks(
+    DenseLQDynamicBlocks{T, M}(
         block_A, 
         block_B
     )
