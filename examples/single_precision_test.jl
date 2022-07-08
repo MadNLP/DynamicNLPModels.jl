@@ -109,11 +109,12 @@ lqdm32 = convert_precision(lq_dense, Float32)
 
 # Solve the dense problem
 dense_options = Dict{Symbol, Any}(
-    :kkt_system => MadNLP.DENSE_KKT_SYSTEM,
+    :kkt_system => MadNLP.DENSE_CONDENSED_KKT_SYSTEM,
     :linear_solver=> LapackCPUSolver,
     :max_iter=> 200,
     :jacobian_constant=>true,
-    :hessian_constant=>true
+    :hessian_constant=>true,
+    :lapack_algorithm => :CHOLESKY
 )
 
 linear_solver_options = Dict{Symbol, Any}(
@@ -122,5 +123,6 @@ linear_solver_options = Dict{Symbol, Any}(
 
 opt = MadNLP.Options(; dense_options...)
 
-d_ips = MadNLP.InteriorPointSolver(lqdm32, opt; option_linear_solver=linear_solver_options)
+
+d_ips = MadNLP.InteriorPointSolver(lqdm64, opt; option_linear_solver=linear_solver_options)
 sol_ref_dense = MadNLP.optimize!(d_ips)
