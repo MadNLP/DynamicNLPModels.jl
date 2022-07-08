@@ -366,14 +366,16 @@ function _build_sparse_lq_dynamic_model(dnlp::LQDynamicData{T, V, M, MK}) where 
     gl = dnlp.gl
     gu = dnlp.gu
 
-    H   = _build_H(Q, R, N; Qf = Qf, S = S)
-    J1  = _build_sparse_J1(A, B, N)
-    J2  = _build_sparse_J2(E, F, N)
+    nc = size(E, 1)
 
-    J = vcat(J1, J2)
+    H = SparseArrays.sparse([],[],T[], (ns * (N + 1) + nu * N), (ns * (N + 1) + nu * N))
+    J = SparseArrays.sparse([],[],T[], (nc * N + ns * N), (ns * (N + 1) + nu * N))
+
+    @time _set_sparse_H!(H, Q, R, N; Qf = Qf, S = S)
+    _set_sparse_J1!(J, A, B, N)
+    _set_sparse_J2!(J, E, F, N)
 
     c0  = zero(T)
-
 
     nvar = ns * (N + 1) + nu * N
     c  = _init_similar(s0, nvar, T)
@@ -384,8 +386,8 @@ function _build_sparse_lq_dynamic_model(dnlp::LQDynamicData{T, V, M, MK}) where 
     lvar[1:ns] = s0
     uvar[1:ns] = s0
 
-    lcon  = _init_similar(s0, ns * N + N * length(gl), T)
-    ucon  = _init_similar(s0, ns * N + N * length(gl), T)
+    lcon  = _init_similar(s0, ns * N + N * nc, T)
+    ucon  = _init_similar(s0, ns * N + N * nc, T)
 
     ncon  = size(J, 1)
     nnzj = length(J.rowval)
@@ -395,8 +397,8 @@ function _build_sparse_lq_dynamic_model(dnlp::LQDynamicData{T, V, M, MK}) where 
         lvar[(i * ns + 1):((i + 1) * ns)] = sl
         uvar[(i * ns + 1):((i + 1) * ns)] = su
 
-        lcon[(ns * N + 1 + (i -1) * length(gl)):(ns * N + i * length(gl))] = gl
-        ucon[(ns * N + 1 + (i -1) * length(gl)):(ns * N + i * length(gl))] = gu
+        lcon[(ns * N + 1 + (i -1) * nc):(ns * N + i * nc)] = gl
+        ucon[(ns * N + 1 + (i -1) * nc):(ns * N + i * nc)] = gu
     end
 
     for j in 1:N
@@ -453,46 +455,70 @@ function _build_sparse_lq_dynamic_model(dnlp::LQDynamicData{T, V, M, MK}) where 
     gl = dnlp.gl
     gu = dnlp.gu
 
+    nc = size(E, 1)
+
+    bool_vec        = (ul .!= -Inf .|| uu .!= Inf)
+    num_real_bounds = sum(bool_vec)
+
     # Transform u variables to v variables
     new_Q = _init_similar(Q, size(Q, 1), size(Q, 2), T)
     new_S = _init_similar(S, size(S, 1), size(S, 2), T)
     new_A = _init_similar(A, size(A, 1), size(A, 2), T)
     new_E = _init_similar(E, size(E, 1), size(E, 2), T)
+    KTR   = _init_similar(Q, size(K, 2), size(R, 2), T)
+    SK    = _init_similar(Q, size(S, 1), size(K, 2), T)
+    KTRK  = _init_similar(Q, size(K, 2), size(K, 2), T)
+    BK    = _init_similar(Q, size(B, 1), size(K, 2), T)
+    FK    = _init_similar(Q, size(F, 1), size(K, 2), T)
+
+    H = SparseArrays.sparse([],[],T[], (ns * (N + 1) + nu * N), (ns * (N + 1) + nu * N))
+    J = SparseArrays.sparse([],[],T[], (nc * N + ns * N + num_real_bounds * N), (ns * (N + 1) + nu * N))
 
     LinearAlgebra.copyto!(new_Q, Q)
     LinearAlgebra.copyto!(new_S, S)
     LinearAlgebra.copyto!(new_A, A)
     LinearAlgebra.copyto!(new_E, E)
 
-    KTR  = _init_similar(Q, size(K, 2), size(R, 2), T)
     LinearAlgebra.mul!(KTR, K', R)
     LinearAlgebra.axpy!(1, KTR, new_S)
 
-    SK   = _init_similar(Q, size(S, 1), size(K, 2), T)
-    KTRK = _init_similar(Q, size(K, 2), size(K, 2), T)
     LinearAlgebra.mul!(SK, S, K)
     LinearAlgebra.mul!(KTRK, KTR, K)
     LinearAlgebra.axpy!(1, SK, new_Q)
     LinearAlgebra.axpy!(1, SK', new_Q)
     LinearAlgebra.axpy!(1, KTRK, new_Q)
 
-    BK    = _init_similar(Q, size(B, 1), size(K, 2), T)
     LinearAlgebra.mul!(BK, B, K)
     LinearAlgebra.axpy!(1, BK, new_A)
 
-    FK    = _init_similar(Q, size(F, 1), size(K, 2), T)
     LinearAlgebra.mul!(FK, F, K)
     LinearAlgebra.axpy!(1, FK, new_E)
 
     # Get H and J matrices from new matrices
-    H   = _build_H(new_Q, R, N; Qf = Qf, S = new_S)
-    J1  = _build_sparse_J1(new_A, B, N)
-    J2  = _build_sparse_J2(new_E, F, N)
-    J3, lcon3, ucon3  = _build_sparse_J3(K, N, uu, ul)
+    _set_sparse_H!(H, new_Q, R, N; Qf = Qf, S = new_S)
+    _set_sparse_J1!(J, new_A, B, N)
+    _set_sparse_J2!(J, new_E, F, N)
 
-    J = vcat(J1, J2)
-    J = vcat(J, J3)
+    # Remove algebraic constraints if u variable is unbounded on both upper and lower ends
 
+    I_mat = Matrix(LinearAlgebra.I, nu, nu)
+
+    lcon3 = _init_similar(ul, nu * N, T)
+    ucon3 = _init_similar(ul, nu * N, T)
+
+    for i in 1:N
+        row_range   = (ns * N + nc * N + num_real_bounds * (i - 1) + 1):(ns * N + nc * N + num_real_bounds * i)
+        K_col_range = (ns * (i - 1) + 1):(ns * i)
+        I_col_range = (ns * (N + 1) + 1 + nu * (i - 1)):(ns * (N + 1) + nu * i)
+        @views LinearAlgebra.copyto!(J[row_range, K_col_range], K[bool_vec, :])
+        @views LinearAlgebra.copyto!(J[row_range, I_col_range], I_mat[bool_vec, :])
+    end
+
+    ul = ul[bool_vec]
+    uu = uu[bool_vec]
+
+    lcon3 = repeat(ul, N)
+    ucon3 = repeat(uu, N)
 
     nvar = ns * (N + 1) + nu * N
 
@@ -513,14 +539,15 @@ function _build_sparse_lq_dynamic_model(dnlp::LQDynamicData{T, V, M, MK}) where 
         lvar[(i * ns + 1):((i + 1) * ns)] = sl
         uvar[(i * ns + 1):((i + 1) * ns)] = su
 
-        lcon[(ns * N + 1 + (i -1) * length(gl)):(ns * N + i * length(gl))] = gl
-        ucon[(ns * N + 1 + (i -1) * length(gl)):(ns * N + i * length(gl))] = gu
+        lcon[(ns * N + 1 + (i -1) * nc):(ns * N + i * nc)] = gl
+        ucon[(ns * N + 1 + (i -1) * nc):(ns * N + i * nc)] = gu
     end
 
     if length(lcon3) > 0
-        lcon[(1 + ns * N + N * length(gl)):end] = lcon3
-        ucon[(1 + ns * N + N * length(gl)):end] = ucon3
+        lcon[(1 + ns * N + N * nc):(ns * N + nc * N + num_real_bounds * N)] = lcon3
+        ucon[(1 + ns * N + N * nc):(ns * N + nc * N + num_real_bounds * N)] = ucon3
     end
+
 
     c0 = zero(T)
     c  = _init_similar(s0, nvar, T)
@@ -1484,73 +1511,48 @@ function NLPModels.jac_coord!(
 end
 
 """
-    _build_H(Q, R, N; Qf = []) -> H
+    _set_sparse_H!(H, Q, R, N; Qf = [])
 
-Build the (sparse) `H` matrix from square `Q` and `R` matrices such that
+set the (sparse) `H` matrix from square `Q` and `R` matrices such that
  z^T H z = sum_{i=1}^{N-1} s_i^T Q s + sum_{i=1}^{N-1} u^T R u + s_N^T Qf s_n .
-
-
-# Examples
-```julia-repl
-julia> Q = [1 2; 2 1]; R = ones(1,1); _build_H(Q, R, 2)
-6×6 SparseArrays.SparseMatrixCSC{Float64, Int64} with 9 stored entries:
- 1.0  2.0   ⋅    ⋅    ⋅    ⋅
- 2.0  1.0   ⋅    ⋅    ⋅    ⋅
-  ⋅    ⋅   1.0  2.0   ⋅    ⋅
-  ⋅    ⋅   2.0  1.0   ⋅    ⋅
-  ⋅    ⋅    ⋅    ⋅   1.0   ⋅
-  ⋅    ⋅    ⋅    ⋅    ⋅     ⋅
-```
 
 If `Qf` is not given, then `Qf` defaults to `Q`
 """
-function _build_H(
-    Q::M, R::M, N;
+function _set_sparse_H!(
+    H, Q::M, R::M, N;
     Qf::M = Q,
     S::Union{M, Nothing} = nothing) where M <: AbstractMatrix
     ns = size(Q, 1)
     nu = size(R, 1)
 
-    H = SparseArrays.sparse([],[],eltype(Q)[],(ns * (N + 1) + nu * N), (ns * (N+1) + nu * N))
-
     for i in 1:N
-        range_Q = (1 + (i - 1) * ns): (i * ns)
+        range_Q = (1 + (i - 1) * ns):(i * ns)
         range_R = (ns * (N + 1) + 1 + (i - 1) * nu):(ns * (N + 1) + i * nu)
-        H[range_Q, range_Q] = Q
-        H[range_R, range_R] = R
-        if S != nothing
-            H[range_Q, range_R] = S
-            H[range_R, range_Q] = S'
+
+        @views LinearAlgebra.copyto!(H[range_Q, range_Q], Q)
+        @views LinearAlgebra.copyto!(H[range_R, range_R], R)
+        @views LinearAlgebra.copyto!(H[range_Q, range_R], S)
+        @views LinearAlgebra.copyto!(H[range_R, range_Q], S')
+
+        if i%20 ==0
+            println(i)
         end
     end
 
-    H[(N * ns + 1):( N * ns + ns), (N * ns + 1):(N * ns + ns)] = Qf
-
-    return H
+    @views LinearAlgebra.copyto!(H[(N * ns + 1):( N * ns + ns), (N * ns + 1):(N * ns + ns)], Qf)
 end
 
 """
-    _build_sparse_J1(A, B, N) -> J
+    _set_sparse_J1!(J, A, B, N)
 
-Build the (sparse) `J` matrix or a linear model from `A` and `B` matrices such that
+Set the (sparse) `J` matrix or a linear model from `A` and `B` matrices such that
 0 <= Jz <= 0 is equivalent to s_{i+1} = As_i + Bs_i for i = 1,..., N-1
 
-# Examples
-```julia-repl
-julia> A = [1 2 ; 3 4]; B = [5 6; 7 8]; _build_J(A,B,3)
-4×12 SparseArrays.SparseMatrixCSC{Float64, Int64} with 20 stored entries:
- 1.0  2.0  -1.0    ⋅     ⋅     ⋅   5.0  6.0   ⋅    ⋅    ⋅    ⋅
- 3.0  4.0    ⋅   -1.0    ⋅     ⋅   7.0  8.0   ⋅    ⋅    ⋅    ⋅
-  ⋅    ⋅    1.0   2.0  -1.0    ⋅    ⋅    ⋅   5.0  6.0   ⋅    ⋅
-  ⋅    ⋅    3.0   4.0    ⋅   -1.0   ⋅    ⋅   7.0  8.0   ⋅    ⋅
-```
 """
-function _build_sparse_J1(A::M, B::M, N) where M <: AbstractMatrix
+function _set_sparse_J1!(J, A::M, B::M, N) where M <: AbstractMatrix
 
     ns = size(A, 2)
     nu = size(B, 2)
-
-    J1 = SparseArrays.sparse([], [], eltype(A)[], ns * N, (ns* (N + 1) + nu * N))
 
     neg_ones = .-Matrix(LinearAlgebra.I, ns, ns)
 
@@ -1558,69 +1560,33 @@ function _build_sparse_J1(A::M, B::M, N) where M <: AbstractMatrix
         row_range  = (ns * (i - 1) + 1):(i * ns)
         Acol_range = (ns * (i - 1) + 1):(i * ns)
         Bcol_range = (ns * (N + 1) + 1 + (i - 1) * nu):(ns * (N + 1) + i * nu)
-        J1[row_range, Acol_range] = A
-        J1[row_range, Bcol_range] = B
+        @views LinearAlgebra.copyto!(J[row_range, Acol_range], A)
+        @views LinearAlgebra.copyto!(J[row_range, Bcol_range], B)
 
         Icol_range = (ns * i + 1):(ns * (i + 1))
 
-        J1[row_range, Icol_range] = neg_ones
+        @views LinearAlgebra.copyto!(J[row_range, Icol_range], neg_ones)
     end
-
-    return J1
 end
 
-function _build_sparse_J2(E, F, N)
+function _set_sparse_J2!(J, E, F, N)
     ns = size(E, 2)
     nu = size(F, 2)
     nc = size(E, 1)
 
-    J2 = SparseArrays.sparse([],[], eltype(E)[], N * nc, ns * (N + 1) + nu * N)
-
     if nc != 0
         for i in 1:N
-            row_range   = (1 + nc * (i - 1)):(nc * i)
+            row_range   = (1 + ns * N + nc * (i - 1)):(ns * N + nc * i)
             col_range_E = (1 + ns * (i - 1)):(ns * i)
             col_range_F = (ns * (N + 1) + 1 + nu * (i - 1)):(ns * (N + 1) + nu * i)
 
-            J2[row_range, col_range_E] = E
-            J2[row_range, col_range_F] = F
+            @views LinearAlgebra.copyto!(J[row_range, col_range_E], E)
+            @views LinearAlgebra.copyto!(J[row_range, col_range_F], F)
         end
     end
 
-    return J2
+    return J
 
-end
-
-function _build_sparse_J3(K::M, N, uu, ul) where {T, M <: AbstractMatrix{T}}
-
-    # Remove algebraic constraints if u variable is unbounded on both upper and lower ends
-    nu = length(ul)
-    ns = size(K, 2)
-
-    bool_vec        = (ul .!= -Inf .|| uu .!= Inf)
-    num_real_bounds = sum(bool_vec)
-
-    J3 = SparseArrays.sparse([],[],eltype(K)[], nu * N, ns * (N + 1) + nu * N)
-    I_mat = Matrix(LinearAlgebra.I, nu, nu)
-
-    full_bool_vec = fill(true, nu * N)
-
-    lcon3 = _init_similar(ul, nu * N, T)
-    ucon3 = _init_similar(ul, nu * N, T)
-
-    for i in 1:N
-        row_range   = (nu * (i - 1) + 1):(nu * i)
-        K_col_range = (ns * (i - 1) + 1):(ns * i)
-        I_col_range = (ns * (N + 1) + 1 + nu * (i - 1)):(ns * (N + 1) + nu * i)
-        J3[row_range, K_col_range] = K
-        J3[row_range, I_col_range] = I_mat
-
-        lcon3[row_range] .= ul
-        ucon3[row_range] .= uu
-        full_bool_vec[row_range] = bool_vec
-    end
-
-    return J3[full_bool_vec, :], lcon3[full_bool_vec], ucon3[full_bool_vec]
 end
 
 function _cmp_arr(op, A, B)
