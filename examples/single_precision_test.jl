@@ -5,7 +5,7 @@ using MadNLP, LinearAlgebra, Random, SparseArrays, NLPModels
 
 function MadNLP.jac_dense!(nlp::DenseLQDynamicModel{T, V, M1, M2, M3}, x, jac) where {T, V, M1<: AbstractMatrix{T}, M2 <: AbstractMatrix, M3 <: AbstractMatrix}
     NLPModels.increment!(nlp, :neval_jac)
-    
+
     J = nlp.data.A
     copyto!(jac, J)
 end
@@ -113,8 +113,14 @@ dense_options = Dict{Symbol, Any}(
     :linear_solver=> LapackCPUSolver,
     :max_iter=> 200,
     :jacobian_constant=>true,
-    :hessian_constant=>true,
+    :hessian_constant=>true
 )
 
-d_ips = MadNLP.InteriorPointSolver(lqdm32, option_dict = dense_options)
+linear_solver_options = Dict{Symbol, Any}(
+    :lapack_algorithm => LU,
+)
+
+opt = MadNLP.Options(; dense_options...)
+
+d_ips = MadNLP.InteriorPointSolver(lqdm32, opt; option_linear_solver=linear_solver_options)
 sol_ref_dense = MadNLP.optimize!(d_ips)
