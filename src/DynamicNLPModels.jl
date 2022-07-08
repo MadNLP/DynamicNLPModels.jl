@@ -12,7 +12,7 @@ abstract type AbstractLQDynData{T,V} end
 """
     LQDynamicData{T,V,M,MK} <: AbstractLQDynData{T,V}
 
-A struct to represent the features of the optimization problem 
+A struct to represent the features of the optimization problem
 
 ```math
     minimize    \\frac{1}{2} \\sum_{i = 0}^{N-1}(s_i^T Q s_i + 2 u_i^T S^T x_i + u_i^T R u_i) + \\frac{1}{2} s_N^T Qf s_N
@@ -23,7 +23,7 @@ A struct to represent the features of the optimization problem
                 ul \\le u \\le uu
                 s_0 = s0
 ```
---- 
+---
 Attributes include:
 - `s0`: initial state of system
 - `A` : constraint matrix for system states
@@ -73,7 +73,7 @@ end
 
 """
     LQDynamicData(s0, A, B, Q, R, N; ...) -> LQDynamicData{T, V, M, MK}
-A constructor for building an object of type `LQDynamicData` for the optimization problem 
+A constructor for building an object of type `LQDynamicData` for the optimization problem
 ```math
     minimize    \\frac{1}{2} \\sum_{i = 0}^{N-1}(s_i^T Q s_i + 2 u_i^T S^T x_i + u_i^T R u_i) + \\frac{1}{2} s_N^T Qf s_N
     subject to  s_{i+1} = A s_i + B u_i  \\forall i=0, 1, ..., N - 1
@@ -114,10 +114,10 @@ function LQDynamicData(
     R::M,
     N;
 
-    Qf::M = Q, 
-    S::M  = (similar(Q, size(Q, 1), size(R, 1)) .= 0),
-    E::M  = (similar(Q, 0, length(s0)) .= 0),
-    F::M  = (similar(Q, 0, size(R, 1)) .= 0),
+    Qf::M = Q,
+    S::M  = _init_similar(Q, size(Q, 1), size(R, 1), T),
+    E::M  = _init_similar(Q, 0, length(s0), T),
+    F::M  = _init_similar(Q, 0, size(R, 1), T),
     K::MK = nothing,
 
     sl::V = (similar(s0) .= -Inf),
@@ -128,7 +128,7 @@ function LQDynamicData(
     gu::V = (similar(s0, size(F, 1)) .= Inf)
     ) where {T,V <: AbstractVector{T}, M <: AbstractMatrix{T}, MK <: Union{Nothing, AbstractMatrix{T}}}
 
-    if size(Q, 1) != size(Q, 2) 
+    if size(Q, 1) != size(Q, 2)
         error("Q matrix is not square")
     end
     if size(R, 1) != size(R, 1)
@@ -163,7 +163,7 @@ function LQDynamicData(
     if size(E, 2) != size(Q, 1)
         error("Dimensions of E are not the same as number of states")
     end
-    if size(F, 2) != size(R, 1) 
+    if size(F, 2) != size(R, 1)
         error("Dimensions of F are not the same as the number of inputs")
     end
     if length(gl) != size(E, 1)
@@ -193,89 +193,59 @@ function LQDynamicData(
 end
 
 
-
 abstract type AbstractDynamicModel{T,V} <: QuadraticModels.AbstractQuadraticModel{T, V} end
 
-struct SparseLQDynamicModel{T, V, M1, M2, M3, MK} <:  AbstractDynamicModel{T,V} 
+struct SparseLQDynamicModel{T, V, M1, M2, M3, MK} <:  AbstractDynamicModel{T,V}
   meta::NLPModels.NLPModelMeta{T, V}
   counters::NLPModels.Counters
   data::QuadraticModels.QPData{T, V, M1, M2}
   dynamic_data::LQDynamicData{T, V, M3, MK}
 end
 
-struct DenseLQDynamicBlocks{T, M1, M2}
-    A::M1
-    B::M1
-    Q::M2
-    R::M2
-    S::M2
-    K::M2
-    E::M1
-    F::M1
-    gl::M1
-    gu::M1
+"""
+Struct containing block A and B matrices used in creating the `DenseLQDynamicModel`. These matrices are given by Jerez, Kerrigan, and Constantinides
+in section 4 of "A sparse and condensed QP formulation for predictive control of LTI systems" (doi:10.1016/j.automatica.2012.03.010).
+
+`A` is a ns(N+1) x ns matrix and `B` is a ns(N) x nu matrix containing the first column of the `B` block matrix in the above text. Note that the
+first block of zeros is omitted.
+"""
+struct DenseLQDynamicBlocks{T, M}
+    A::M
+    B::M
 end
 
-function DenseLQDynamicBlocks(
-    A::M1,
-    B::M1,
-    Q::M2,
-    R::M2,
-    S::M2,
-    K::M2,
-    E::M1,
-    F::M1,
-    gl::M1,
-    gu::M1
-) where {T, M1 <: AbstractMatrix{T}, M2 <: AbstractMatrix{T}}
-
-    DenseLQDynamicBlocks{T, M1, M2}(
-        A,
-        B,
-        Q,
-        R,
-        S,
-        K,
-        E,
-        F,
-        gl,
-        gu
-    )
-end
-
-
-struct DenseLQDynamicModel{T, V, M1, M2, M3, M4, M5, MK} <:  AbstractDynamicModel{T,V} 
+struct DenseLQDynamicModel{T, V, M1, M2, M3, M4, MK} <:  AbstractDynamicModel{T,V}
     meta::NLPModels.NLPModelMeta{T, V}
     counters::NLPModels.Counters
     data::QuadraticModels.QPData{T, V, M1, M2}
     dynamic_data::LQDynamicData{T, V, M3, MK}
-    blocks::DenseLQDynamicBlocks{T, M4, M5}
+    blocks::DenseLQDynamicBlocks{T, M4}
 end
 
 """
     SparseLQDynamicModel(dnlp::LQDynamicData)    -> SparseLQDynamicModel
     SparseLQDynamicModel(s0, A, B, Q, R, N; ...) -> SparseLQDynamicModel
 A constructor for building a `SparseLQDynamicModel <: QuadraticModels.AbstractQuadraticModel`
-Input data is for the problem of the form 
+Input data is for the problem of the form
 ```math
     minimize    \\frac{1}{2} \\sum_{i = 0}^{N-1}(s_i^T Q s_i + 2 u_i^T S^T x_i + u_i^T R u_i) + \\frac{1}{2} s_N^T Qf s_N
     subject to  s_{i+1} = A s_i + B u_i  for i=0, 1, ..., N-1
                 u_i = Kx_i + v_i  \\forall i = 0, 1, ..., N - 1
-                gl \\le E s_i + F u_i \\le gu for i = 0, 1, ..., N-1            
+                gl \\le E s_i + F u_i \\le gu for i = 0, 1, ..., N-1
                 sl \\le s \\le su
                 ul \\le u \\le uu
                 s_0 = s0
 ```
 ---
 
-Data is converted to the form 
+Data is converted to the form
 
 ```math
-    minimize    \\frac{1}{2} z^T H z 
+    minimize    \\frac{1}{2} z^T H z
     subject to  lcon \\le Jz \\le ucon
                 lvar \\le z \\le uvar
 ```
-Resulting `H` and `J` matrices are stored as `QuadraticModels.QPData` within the `SparseLQDynamicModel` struct and 
+Resulting `H` and `J` matrices are stored as `QuadraticModels.QPData` within the `SparseLQDynamicModel` struct and
 variable and constraint limits are stored within `NLPModels.NLPModelMeta`
 
 If `K` is defined, then `u` variables are replaced by `v` variables, and `u` can be queried by `get_u` and `get_s` within `DynamicNLPModels.jl`
@@ -291,24 +261,24 @@ function SparseLQDynamicModel(
     Q::M,
     R::M,
     N;
-    Qf::M = Q, 
-    S::M  = (similar(Q, size(Q, 1), size(R, 1)) .= 0),
-    E::M  = (similar(Q, 0, length(s0)) .= 0),
-    F::M  = (similar(Q, 0, size(R, 1)) .= 0),
+    Qf::M = Q,
+    S::M  = _init_similar(Q, size(Q, 1), size(R, 1), T),
+    E::M  = _init_similar(Q, 0, length(s0), T),
+    F::M  = _init_similar(Q, 0, size(R, 1), T),
     K::MK = nothing,
     sl::V = (similar(s0) .= -Inf),
     su::V = (similar(s0) .=  Inf),
     ul::V = (similar(s0, size(R, 1)) .= -Inf),
     uu::V = (similar(s0, size(R, 1)) .=  Inf),
-    gl::V = (similar(s0, size(E, 1)) .= -Inf), 
-    gu::V = (similar(s0, size(F, 1)) .= Inf) 
+    gl::V = (similar(s0, size(E, 1)) .= -Inf),
+    gu::V = (similar(s0, size(F, 1)) .= Inf)
 ) where {T, V <: AbstractVector{T}, M <: AbstractMatrix{T}, MK <: Union{Nothing, AbstractMatrix{T}}}
 
     dnlp = LQDynamicData(
-        s0, A, B, Q, R, N; 
-        Qf = Qf, S = S, E = E, F = F, K = K, 
+        s0, A, B, Q, R, N;
+        Qf = Qf, S = S, E = E, F = F, K = K,
         sl = sl, su = su, ul = ul, uu = uu, gl = gl, gu = gu)
-    
+
     SparseLQDynamicModel(dnlp)
 end
 
@@ -317,22 +287,22 @@ end
     DenseLQDynamicModel(s0, A, B, Q, R, N; ...) -> DenseLQDynamicModel
 A constructor for building a `DenseLQDynamicModel <: QuadraticModels.AbstractQuadraticModel`
 
-Input data is for the problem of the form 
+Input data is for the problem of the form
 ```math
     minimize    \\frac{1}{2} \\sum_{i = 0}^{N-1}(s_i^T Q s_i + 2 u_i^T S^T x_i + u_i^T R u_i) + \\frac{1}{2} s_N^T Qf s_N
     subject to  s_{i+1} = A s_i + B u_i  for i=0, 1, ..., N-1
                 u_i = Kx_i + v_i  \\forall i = 0, 1, ..., N - 1
-                gl \\le E s_i + F u_i \\le gu for i = 0, 1, ..., N-1            
+                gl \\le E s_i + F u_i \\le gu for i = 0, 1, ..., N-1
                 sl \\le s \\le su
                 ul \\le u \\le uu
                 s_0 = s0
 ```
 ---
 
-Data is converted to the form 
+Data is converted to the form
 
 ```math
-    minimize    \\frac{1}{2} u^T H u + h^T u + h0 
+    minimize    \\frac{1}{2} u^T H u + h^T u + h0
     subject to  Jz \\le g
                 ul \\le u \\le uu
 ```
@@ -353,24 +323,24 @@ function DenseLQDynamicModel(
     Q::M,
     R::M,
     N;
-    Qf::M = Q, 
-    S::M  = (similar(Q, size(Q, 1), size(R, 1)) .= 0),
-    E::M  = (similar(Q, 0, length(s0)) .= 0),
-    F::M  = (similar(Q, 0, size(R, 1)) .= 0),
+    Qf::M = Q,
+    S::M  = _init_similar(Q, size(Q, 1), size(R, 1), T),
+    E::M  = _init_similar(Q, 0, length(s0), T),
+    F::M  = _init_similar(Q, 0, size(R, 1), T),
     K::MK = nothing,
     sl::V = (similar(s0) .= -Inf),
     su::V = (similar(s0) .=  Inf),
     ul::V = (similar(s0, size(R, 1)) .= -Inf),
     uu::V = (similar(s0, size(R, 1)) .=  Inf),
-    gl::V = (similar(s0, size(E, 1)) .= -Inf), 
+    gl::V = (similar(s0, size(E, 1)) .= -Inf),
     gu::V = (similar(s0, size(F, 1)) .= Inf)
 ) where {T, V <: AbstractVector{T}, M <: AbstractMatrix{T}, MK <: Union{Nothing, AbstractMatrix{T}}}
 
     dnlp = LQDynamicData(
-        s0, A, B, Q, R, N; 
-        Qf = Qf, S = S, E = E, F = F, K = K, 
+        s0, A, B, Q, R, N;
+        Qf = Qf, S = S, E = E, F = F, K = K,
         sl = sl, su = su, ul = ul, uu = uu, gl = gl, gu = gu)
-    
+
     DenseLQDynamicModel(dnlp)
 end
 
@@ -396,53 +366,50 @@ function _build_sparse_lq_dynamic_model(dnlp::LQDynamicData{T, V, M, MK}) where 
     gl = dnlp.gl
     gu = dnlp.gu
 
-
-
     H   = _build_H(Q, R, N; Qf = Qf, S = S)
     J1  = _build_sparse_J1(A, B, N)
     J2  = _build_sparse_J2(E, F, N)
 
     J = vcat(J1, J2)
 
-    c0  = zero(eltype(s0))
+    c0  = zero(T)
 
-    
+
     nvar = ns * (N + 1) + nu * N
-    c  = similar(s0, nvar); fill!(c, 0)
-    
-    lvar  = similar(s0, nvar); fill!(lvar, 0)
-    uvar  = similar(s0, nvar); fill!(uvar, 0)
+    c  = _init_similar(s0, nvar, T)
 
-    lvar[1:ns] .= s0
-    uvar[1:ns] .= s0
+    lvar  = _init_similar(s0, nvar, T)
+    uvar  = _init_similar(s0, nvar, T)
 
+    lvar[1:ns] = s0
+    uvar[1:ns] = s0
 
-    lcon  = similar(s0, ns * N + N * length(gl)); fill!(lcon, 0)
-    ucon  = similar(s0, ns * N + N * length(gl)); fill!(ucon, 0)
+    lcon  = _init_similar(s0, ns * N + N * length(gl), T)
+    ucon  = _init_similar(s0, ns * N + N * length(gl), T)
 
     ncon  = size(J, 1)
     nnzj = length(J.rowval)
     nnzh = length(H.rowval)
 
     for i in 1:N
-        lvar[(i * ns + 1):((i + 1) * ns)] .= sl
-        uvar[(i * ns + 1):((i + 1) * ns)] .= su
+        lvar[(i * ns + 1):((i + 1) * ns)] = sl
+        uvar[(i * ns + 1):((i + 1) * ns)] = su
 
-        lcon[(ns * N + 1 + (i -1) * length(gl)):(ns * N + i * length(gl))] .= gl
-        ucon[(ns * N + 1 + (i -1) * length(gl)):(ns * N + i * length(gl))] .= gu
+        lcon[(ns * N + 1 + (i -1) * length(gl)):(ns * N + i * length(gl))] = gl
+        ucon[(ns * N + 1 + (i -1) * length(gl)):(ns * N + i * length(gl))] = gu
     end
 
     for j in 1:N
-        lvar[((N + 1) * ns + (j - 1) * nu + 1):((N + 1) * ns + j * nu)] .= ul
-        uvar[((N + 1) * ns + (j - 1) * nu + 1):((N + 1) * ns + j * nu)] .= uu
+        lvar[((N + 1) * ns + (j - 1) * nu + 1):((N + 1) * ns + j * nu)] = ul
+        uvar[((N + 1) * ns + (j - 1) * nu + 1):((N + 1) * ns + j * nu)] = uu
     end
-    
+
     SparseLQDynamicModel(
         NLPModels.NLPModelMeta(
         nvar,
-        x0   = (similar(s0, nvar) .= 0),
+        x0   = _init_similar(s0, nvar, T),
         lvar = lvar,
-        uvar = uvar, 
+        uvar = uvar,
         ncon = ncon,
         lcon = lcon,
         ucon = ucon,
@@ -453,7 +420,7 @@ function _build_sparse_lq_dynamic_model(dnlp::LQDynamicData{T, V, M, MK}) where 
         ),
         NLPModels.Counters(),
         QuadraticModels.QPData(
-        c0, 
+        c0,
         c,
         H,
         J
@@ -487,36 +454,36 @@ function _build_sparse_lq_dynamic_model(dnlp::LQDynamicData{T, V, M, MK}) where 
     gu = dnlp.gu
 
     # Transform u variables to v variables
-    new_Q = similar(Q)
-    new_S = similar(S)
-    new_A = similar(A)
-    new_E = similar(E)
+    new_Q = _init_similar(Q, size(Q, 1), size(Q, 2), T)
+    new_S = _init_similar(S, size(S, 1), size(S, 2), T)
+    new_A = _init_similar(A, size(A, 1), size(A, 2), T)
+    new_E = _init_similar(E, size(E, 1), size(E, 2), T)
 
     LinearAlgebra.copyto!(new_Q, Q)
     LinearAlgebra.copyto!(new_S, S)
     LinearAlgebra.copyto!(new_A, A)
     LinearAlgebra.copyto!(new_E, E)
 
-    KTR  = similar(Q, size(K, 2), size(R, 2))
+    KTR  = _init_similar(Q, size(K, 2), size(R, 2), T)
     LinearAlgebra.mul!(KTR, K', R)
     LinearAlgebra.axpy!(1, KTR, new_S)
 
-    SK   = similar(Q, size(S, 1), size(K, 2))
-    KTRK = similar(Q, size(K, 2), size(K, 2))
+    SK   = _init_similar(Q, size(S, 1), size(K, 2), T)
+    KTRK = _init_similar(Q, size(K, 2), size(K, 2), T)
     LinearAlgebra.mul!(SK, S, K)
     LinearAlgebra.mul!(KTRK, KTR, K)
     LinearAlgebra.axpy!(1, SK, new_Q)
     LinearAlgebra.axpy!(1, SK', new_Q)
     LinearAlgebra.axpy!(1, KTRK, new_Q)
 
-    BK    = similar(Q, size(B, 1), size(K, 2))
+    BK    = _init_similar(Q, size(B, 1), size(K, 2), T)
     LinearAlgebra.mul!(BK, B, K)
     LinearAlgebra.axpy!(1, BK, new_A)
 
-    FK    = similar(Q, size(F, 1), size(K, 2))
+    FK    = _init_similar(Q, size(F, 1), size(K, 2), T)
     LinearAlgebra.mul!(FK, F, K)
     LinearAlgebra.axpy!(1, FK, new_E)
-    
+
     # Get H and J matrices from new matrices
     H   = _build_H(new_Q, R, N; Qf = Qf, S = new_S)
     J1  = _build_sparse_J1(new_A, B, N)
@@ -528,44 +495,42 @@ function _build_sparse_lq_dynamic_model(dnlp::LQDynamicData{T, V, M, MK}) where 
 
 
     nvar = ns * (N + 1) + nu * N
-    
+
     lvar  = similar(s0, nvar); fill!(lvar, -Inf)
     uvar  = similar(s0, nvar); fill!(uvar, Inf)
 
-    lvar[1:ns] .= s0
-    uvar[1:ns] .= s0
+    lvar[1:ns] = s0
+    uvar[1:ns] = s0
 
-    lcon  = similar(s0, ns * N + N * length(gl) + length(lcon3)); fill!(lcon, 0)
-    ucon  = similar(s0, ns * N + N * length(gl) + length(lcon3)); fill!(ucon, 0)
+    lcon  = _init_similar(s0, ns * N + N * length(gl) + length(lcon3))
+    ucon  = _init_similar(s0, ns * N + N * length(gl) + length(lcon3))
 
     ncon  = size(J, 1)
     nnzj = length(J.rowval)
     nnzh = length(H.rowval)
 
     for i in 1:N
-        lvar[(i * ns + 1):((i + 1) * ns)] .= sl
-        uvar[(i * ns + 1):((i + 1) * ns)] .= su
+        lvar[(i * ns + 1):((i + 1) * ns)] = sl
+        uvar[(i * ns + 1):((i + 1) * ns)] = su
 
-        lcon[(ns * N + 1 + (i -1) * length(gl)):(ns * N + i * length(gl))] .= gl
-        ucon[(ns * N + 1 + (i -1) * length(gl)):(ns * N + i * length(gl))] .= gu
+        lcon[(ns * N + 1 + (i -1) * length(gl)):(ns * N + i * length(gl))] = gl
+        ucon[(ns * N + 1 + (i -1) * length(gl)):(ns * N + i * length(gl))] = gu
     end
 
     if length(lcon3) > 0
-        lcon[(1 + ns * N + N * length(gl)):end] .= lcon3
-        ucon[(1 + ns * N + N * length(gl)):end] .= ucon3
+        lcon[(1 + ns * N + N * length(gl)):end] = lcon3
+        ucon[(1 + ns * N + N * length(gl)):end] = ucon3
     end
 
-
-
-    c0 = zero(eltype(s0))
-    c  = similar(s0, nvar); fill!(c, 0)
+    c0 = zero(T)
+    c  = _init_similar(s0, nvar, T)
 
     SparseLQDynamicModel(
         NLPModels.NLPModelMeta(
         nvar,
-        x0   = (similar(s0, nvar) .= 0),
+        x0   = _init_similar(s0, nvar, T),
         lvar = lvar,
-        uvar = uvar, 
+        uvar = uvar,
         ncon = ncon,
         lcon = lcon,
         ucon = ucon,
@@ -576,7 +541,7 @@ function _build_sparse_lq_dynamic_model(dnlp::LQDynamicData{T, V, M, MK}) where 
         ),
         NLPModels.Counters(),
         QuadraticModels.QPData(
-        c0, 
+        c0,
         c,
         H,
         J
@@ -584,7 +549,6 @@ function _build_sparse_lq_dynamic_model(dnlp::LQDynamicData{T, V, M, MK}) where 
         dnlp
     )
 end
-
 
 function _build_dense_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) where {T, V <: AbstractVector{T}, M <: AbstractMatrix{T}, MK <: Nothing}
     s0 = dnlp.s0
@@ -609,103 +573,89 @@ function _build_dense_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) where {T, 
     gl = dnlp.gl
     gu = dnlp.gu
 
+    nc = size(E, 1)
 
-    dense_blocks = _build_block_matrices(s0, Q, R, A, B, E, F, N, gu, gl, K; Qf = Qf, S = S)
+    bool_vec_s        = (su .!= Inf .|| sl .!= -Inf)
+    num_real_bounds_s = sum(bool_vec_s)
+
+    dense_blocks = _build_block_matrices(A, B, K, N)
     block_A  = dense_blocks.A
     block_B  = dense_blocks.B
-    block_Q  = dense_blocks.Q
-    block_R  = dense_blocks.R
-    block_E  = dense_blocks.E
-    block_F  = dense_blocks.F
-    block_S  = dense_blocks.S
-    block_K  = dense_blocks.K
-    block_gl = dense_blocks.gl
-    block_gu = dense_blocks.gu
 
-    H_blocks = _build_H_blocks(block_Q, block_R, block_A, block_B, block_S, block_K, s0, N, K)
+    H_blocks = _build_H_blocks(Q, R, block_A, block_B, S,Qf, K, s0, N)
 
     H  = H_blocks.H
     c0 = H_blocks.c0
 
-    G_blocks = _build_G_blocks(block_A, block_B, block_E, block_F, block_K, block_gl, block_gu, s0, N)
+    G  = _init_similar(Q, nc * N, nu, T)
+    J  = _init_similar(Q, nc * N + num_real_bounds_s * N, nu * N, T)
+    As0_bounds = _init_similar(s0, num_real_bounds_s * N, T)
 
-    J1    = G_blocks.J
-    lcon1 = G_blocks.lcon
-    ucon1 = G_blocks.ucon
-    As0   = G_blocks.As0
+    dl = repeat(gl, N)
+    du = repeat(gu, N)
 
-    lvar = similar(s0, nu * N); fill!(lvar, -Inf)
-    uvar = similar(s0, nu * N); fill!(uvar, Inf)
+    _set_G_blocks!(G, dl, du, block_B, block_A, s0, E, F, K, N)
+    _set_J1_dense!(J, G, N)
 
-    for i in 1:(N)
-        lvar[((i - 1) * nu + 1):(i * nu)] = ul
-        uvar[((i - 1) * nu + 1):(i * nu)] = uu
-    end
+    As0 = _init_similar(s0, ns * (N + 1), T)
+    LinearAlgebra.mul!(As0, block_A, s0)
+
+    lvar = repeat(ul, N)
+    uvar = repeat(uu, N)
 
     # Convert state variable constraints to algebraic constraints
-    bool_vec        = (su .!= Inf .|| sl .!= -Inf)
-    num_real_bounds = sum(bool_vec)
-
-    J2         = similar(Q, num_real_bounds * N, nu * N); fill!(J2, 0)
-    As0_bounds = similar(s0, num_real_bounds * N); fill!(As0_bounds, 0)
-
-    if num_real_bounds == length(sl)
-        J2        .= block_B[(1 + ns):end,:]
-        As0_bounds .= As0[(1 + ns):end,1]
-    else        
+    offset_s = N * nc
+    if num_real_bounds_s == length(sl)
+        As0_bounds .= As0[(1 + ns):ns * (N + 1)]
         for i in 1:N
-            row_range = (1 + (i - 1) * num_real_bounds):(i * num_real_bounds)
-            J2[row_range, :] .= block_B[(1 + ns * i): (ns * (i + 1)), :][bool_vec, :]
-            As0_bounds[row_range] .= As0[(1 + ns * i):(ns * (i + 1))][bool_vec]
+            J[(offset_s + 1 + (i - 1) * ns):(offset_s + ns * N), (1 + nu * (i - 1)):(nu * i)] = @view(block_B[1:(ns * (N - i + 1)),:])
+        end
+    else
+        for i in 1:N
+            row_range = (1 + (i - 1) * num_real_bounds_s):(i * num_real_bounds_s)
+            As0_bounds[row_range] .= As0[(1 + ns * i):(ns * (i + 1))][bool_vec_s]
+
+            for j in 1:(N - i + 1)
+                J[(offset_s + 1 + (i + j - 2) * num_real_bounds_s):(offset_s + (i + j - 1) * num_real_bounds_s), (1 + nu * (i - 1)):(nu * i)] = @view(block_B[(1 + (j - 1) * ns):(j * ns), :][bool_vec_s, :])
+            end
         end
 
-        sl = sl[bool_vec]
-        su = su[bool_vec]
+        sl = sl[bool_vec_s]
+        su = su[bool_vec_s]
     end
 
-    lcon2 = similar(s0, size(J2, 1)); fill!(lcon2, 0)
-    ucon2 = similar(s0, size(J2, 1)); fill!(ucon2, 0)
-
-
-    for i in 1:N
-        lcon2[((i - 1) * length(su) + 1):(i * length(su)),1] = sl
-        ucon2[((i - 1) * length(su) + 1):(i * length(su)),1] = su
-    end
+    lcon2 = repeat(sl, N)
+    ucon2 = repeat(su, N)
 
     LinearAlgebra.axpy!(-1, As0_bounds, ucon2)
     LinearAlgebra.axpy!(-1, As0_bounds, lcon2)
 
-    lcon = similar(s0, length(lcon1) + length(lcon2)); fill!(lcon, 0)
-    ucon = similar(s0, length(ucon1) + length(ucon2)); fill!(ucon, 0)
-    
-    lcon[1:length(lcon1)] .= lcon1
-    ucon[1:length(ucon1)] .= ucon1
+    lcon = _init_similar(s0, length(dl) + length(lcon2), T)
+    ucon = _init_similar(s0, length(du) + length(ucon2), T)
+
+    lcon[1:length(dl)] = dl
+    ucon[1:length(du)] = du
 
     if length(lcon2) > 0
-        lcon[(1 + length(lcon1)):end] .= lcon2
-        ucon[(1 + length(ucon1)):end] .= ucon2
-    end
-
-    J   = similar(Q, size(J1, 1) + size(J2, 1), size(J1,2)); fill!(J, 0)
-    J[1:(size(J1, 1)), :]   .= J1
-    if size(J2, 1) > 0
-        J[(1 + size(J1, 1)):end, :] .= J2
+        lcon[(1 + length(dl)):(length(dl) + num_real_bounds_s * N)] = lcon2
+        ucon[(1 + length(du)):(length(du) + num_real_bounds_s * N)] = ucon2
     end
 
     nvar = nu * N
     nnzj = size(J, 1) * size(J, 2)
-    nnzh = floor(Int, size(H, 1) * (size(H,1) + 1) / 2)
+    nh   = size(H, 1)
+    nnzh = div(nh * (nh + 1), 2)
     ncon = size(J, 1)
 
-    c = similar(s0, nvar)
+    c = _init_similar(s0, nvar, T)
     c .= H_blocks.c
 
     DenseLQDynamicModel(
         NLPModels.NLPModelMeta(
         nvar,
-        x0   = (similar(s0, nvar) .= 0),
+        x0   = _init_similar(s0, nvar, T),
         lvar = lvar,
-        uvar = uvar, 
+        uvar = uvar,
         ncon = ncon,
         lcon = lcon,
         ucon = ucon,
@@ -716,7 +666,7 @@ function _build_dense_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) where {T, 
         ),
         NLPModels.Counters(),
         QuadraticModels.QPData(
-        c0[1,1], 
+        c0,
         c,
         H,
         J
@@ -749,47 +699,62 @@ function _build_dense_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) where {T, 
     gl = dnlp.gl
     gu = dnlp.gu
 
+    nc = size(E, 1)
 
-    dense_blocks = _build_block_matrices(s0, Q, R, A, B, E, F, N, gu, gl, K; Qf = Qf, S = S)
+    dense_blocks = _build_block_matrices(A, B, K, N)
     block_A  = dense_blocks.A
     block_B  = dense_blocks.B
-    block_Q  = dense_blocks.Q
-    block_R  = dense_blocks.R
-    block_E  = dense_blocks.E
-    block_F  = dense_blocks.F
-    block_S  = dense_blocks.S
-    block_K  = dense_blocks.K
-    block_gl = dense_blocks.gl
-    block_gu = dense_blocks.gu
 
-    H_blocks = _build_H_blocks(block_Q, block_R, block_A, block_B, block_S, block_K, s0, N, K)
+    H_blocks = _build_H_blocks(Q, R, block_A, block_B, S, Qf, K, s0, N)
 
     H  = H_blocks.H
     c0 = H_blocks.c0
 
-    G_blocks = _build_G_blocks(block_A, block_B, block_E, block_F, block_K, block_gl, block_gu, s0, N)
+    bool_vec_s        = (su .!= Inf .|| sl .!= -Inf)
+    num_real_bounds_s   = sum(bool_vec_s)
 
-    J1    = G_blocks.J
-    lcon1 = G_blocks.lcon
-    ucon1 = G_blocks.ucon
-    As0   = G_blocks.As0
+    bool_vec_u       = (ul .!= -Inf .|| uu .!= Inf)
+    num_real_bounds_u  = sum(bool_vec_u)
+
+
+    G   = _init_similar(Q, nc * N, nu, T)
+    J   = _init_similar(Q, (nc + num_real_bounds_s + num_real_bounds_u) * N, nu * N, T)
+    As0 = _init_similar(s0, ns * (N + 1), T)
+    As0_bounds = _init_similar(s0, num_real_bounds_s * N, T)
+    KAs0_bounds = _init_similar(s0, num_real_bounds_u * N, T)
+
+    KBI        = _init_similar(Q, nu * N, nu, T)
+    KAs0       = _init_similar(s0, nu * N, T)
+    KAs0_block = _init_similar(s0, nu, T)
+    KB         = _init_similar(Q, nu, nu, T)
+
+    I_mat = _init_similar(Q, nu, nu, T)
+
+    I_mat[LinearAlgebra.diagind(I_mat)] .= T(1)
+
+    dl = repeat(gl, N)
+    du = repeat(gu, N)
+
+    _set_G_blocks!(G, dl, du, block_B, block_A, s0, E, F, K, N)
+    _set_J1_dense!(J, G, N)
+
+    LinearAlgebra.mul!(As0, block_A, s0)
 
     # Convert state variable constraints to algebraic constraints
-    bool_vec_s        = (su .!= Inf .|| sl .!= -Inf)
-    num_real_bounds   = sum(bool_vec_s)
-
-    J2         = similar(Q, num_real_bounds * N, nu * N); fill!(J2, 0)
-    As0_bounds = similar(s0, num_real_bounds * N); fill!(As0_bounds, 0)
-
-
-    if num_real_bounds == length(sl)
-        J2         .= block_B[(1 + ns):end,:]
-        As0_bounds .= As0[(1 + ns):end,1]
-    else        
+    offset_s = nc * N
+    if num_real_bounds_s == length(sl)
+        As0_bounds .= As0[(1 + ns):ns * (N + 1)]
         for i in 1:N
-            row_range = (1 + (i - 1) * num_real_bounds):(i * num_real_bounds)
-            J2[row_range, :] .= block_B[(1 + ns * i): (ns * (i + 1)), :][bool_vec_s, :]
-            As0_bounds[row_range] .= As0[(1 + ns * i):(ns * (i + 1))][bool_vec_s]
+            J[(offset_s + 1 + (i - 1) * ns):(offset_s + ns * N), (1 + nu * (i - 1)):(nu * i)] = @view(block_B[1:(ns * (N - i + 1)),:])
+        end
+    else
+        for i in 1:N
+            row_range = (1 + (i - 1) * num_real_bounds_s):(i * num_real_bounds_s)
+            As0_bounds[row_range] = As0[(1 + ns * i):(ns * (i + 1))][bool_vec_s]
+
+            for j in 1:(N - i + 1)
+                J[(offset_s + 1 + (i + j - 2) * num_real_bounds_s):(offset_s + (i + j - 1) * num_real_bounds_s), (1 + nu * (i - 1)):(nu * i)] = @view(block_B[(1 + (j - 1) * ns):(j * ns), :][bool_vec_s, :])
+            end
         end
 
         sl = sl[bool_vec_s]
@@ -797,52 +762,45 @@ function _build_dense_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) where {T, 
     end
 
     # Convert bounds on u to algebraic constraints
-    bool_vec_u       = (ul .!= -Inf .|| uu .!= Inf)
-    num_real_bounds = sum(bool_vec_u)
+    for i in 1:N
+        if i == 1
+            KB = I_mat
+        else
+            B_row_range = (1 + (i - 2) * ns):((i - 1) * ns)
+            B_sub_block = view(block_B, B_row_range, :)
+            LinearAlgebra.mul!(KB, K, B_sub_block)
+        end
 
-    KBI  = similar(Q, nu * N, nu * N)
-    KAs0 = similar(s0, nu * N)
-
-    I_mat = similar(Q, nu * N, nu * N); fill!(I_mat, 0)
-
-    for i in 1:(nu * N)
-        I_mat[i, i] = 1.0
+        KBI[(1 + nu * (i - 1)):(nu * i),:] = KB
+        LinearAlgebra.mul!(KAs0_block, K, As0[(1 + ns * (i - 1)):ns * i])
+        KAs0[(1 + nu * (i - 1)):nu * i] = KAs0_block
     end
 
-    LinearAlgebra.mul!(KBI, block_K, block_B)
-    LinearAlgebra.axpy!(1, I_mat, KBI)
-    LinearAlgebra.mul!(KAs0, block_K, As0)
-
-    J3          = similar(Q, num_real_bounds * N, nu * N); fill!(J3, 0)
-    KAs0_bounds = similar(s0, num_real_bounds * N); fill!(KAs0_bounds, 0)
-
-    if num_real_bounds == length(ul)
-        J3 .= KBI
+    offset_u = nc * N + num_real_bounds_s * N
+    if num_real_bounds_u == length(ul)
         KAs0_bounds .= KAs0
+        for i in 1:N
+            J[(offset_u + 1 + (i - 1) * nu):(offset_u + nu * N), (1 + nu * (i - 1)):(nu * i)] = @view(KBI[1:(nu * (N - i + 1)),:])
+        end
     else
         for i in 1:N
-            row_range   = (1 + (i - 1) * num_real_bounds):(i * num_real_bounds)
-            J3[row_range, :] .= KBI[(1 + nu * (i - 1)):(nu * i), :][bool_vec_u, :]
-            KAs0_bounds[row_range]      .= KAs0[(1 + nu * (i - 1)):(nu * i)][bool_vec_u]
+            row_range              = (1 + (i - 1) * num_real_bounds_u):(i * num_real_bounds_u)
+            KAs0_bounds[row_range] = KAs0[(1 + nu * (i - 1)):(nu * i)][bool_vec_u]
+
+            for j in 1:(N - i +1)
+                J[(offset_u + 1 + (i + j - 2) * num_real_bounds_u):(offset_u + (i + j - 1) * num_real_bounds_u), (1 + nu * (i - 1)):(nu * i)] = @view(KBI[(1 + (j - 1) * nu):(j * nu), :][bool_vec_u, :])
+            end
         end
 
         ul = ul[bool_vec_u]
         uu = uu[bool_vec_u]
     end
 
-    lcon2 = similar(s0, size(J2, 1)); fill!(lcon2, 0)
-    ucon2 = similar(s0, size(J2, 1)); fill!(ucon2, 0)
+    lcon2 = repeat(sl, N)
+    ucon2 = repeat(su, N)
 
-    lcon3 = similar(s0, size(J3, 1)); fill!(lcon3, 0)
-    ucon3 = similar(s0, size(J3, 1)); fill!(ucon3, 0)
-
-    for i in 1:N
-        lcon2[((i - 1) * length(su) + 1):(i * length(su)),1] = sl
-        ucon2[((i - 1) * length(su) + 1):(i * length(su)),1] = su
-
-        lcon3[((i - 1) * length(uu) + 1):(i * length(uu)),1] = ul
-        ucon3[((i - 1) * length(uu) + 1):(i * length(uu)),1] = uu
-    end
+    lcon3 = repeat(ul, N)
+    ucon3 = repeat(uu, N)
 
     LinearAlgebra.axpy!(-1, As0_bounds, lcon2)
     LinearAlgebra.axpy!(-1, As0_bounds, ucon2)
@@ -851,46 +809,35 @@ function _build_dense_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) where {T, 
     LinearAlgebra.axpy!(-1, KAs0_bounds, ucon3)
 
 
-    J = similar(Q, (size(J1, 1) + size(J2, 1) + size(J3, 1)), size(J1, 2)); fill!(J, 0)
-    J[1:size(J1, 1), :] .= J1
+    lcon = _init_similar(s0, size(J, 1), T)
+    ucon = _init_similar(s0, size(J, 1), T)
 
-    if size(J2, 1) > 0
-        J[(size(J1, 1) + 1):(size(J1, 1) + size(J2, 1)), :] .= J2
-    end
-
-    if size(J3, 1) >0
-        J[(size(J1, 1) + size(J2, 1) + 1):(size(J1, 1) + size(J2, 1) + size(J3, 1)), :] .= J3
-    end
-
-    lcon = similar(s0, size(J, 1)); fill!(lcon, 0)
-    ucon = similar(s0, size(J, 1)); fill!(ucon, 0)
-
-    lcon[1:length(lcon1)] .= lcon1
-    ucon[1:length(ucon1)] .= ucon1
+    lcon[1:length(dl)] = dl
+    ucon[1:length(du)] = du
 
     if length(lcon2) > 0
-        lcon[(length(lcon1) + 1):(length(lcon1) + length(lcon2))] .= lcon2
-        ucon[(length(ucon1) + 1):(length(ucon1) + length(ucon2))] .= ucon2
+        lcon[(length(dl) + 1):(length(dl) + length(lcon2))] = lcon2
+        ucon[(length(du) + 1):(length(du) + length(ucon2))] = ucon2
     end
 
     if length(lcon3) > 0
-        lcon[(length(lcon1) + length(lcon2) + 1):(length(lcon1) + length(lcon2) + length(lcon3))] .= lcon3
-        ucon[(length(ucon1) + length(ucon2) + 1):(length(ucon1) + length(ucon2) + length(ucon3))] .= ucon3
+        lcon[(length(dl) + length(lcon2) + 1):(length(dl) + length(lcon2) + length(lcon3))] = lcon3
+        ucon[(length(du) + length(ucon2) + 1):(length(du) + length(ucon2) + length(ucon3))] = ucon3
     end
-
 
     nvar = nu * N
     nnzj = size(J, 1) * size(J, 2)
-    nnzh = sum(LinearAlgebra.LowerTriangular(H) .!= 0)
+    nh   = size(H, 1)
+    nnzh = div(nh * (nh + 1), 2)
     ncon = size(J, 1)
 
-    c = similar(s0, nvar)
+    c = _init_similar(s0, nvar, T)
     c .= H_blocks.c
 
     DenseLQDynamicModel(
         NLPModels.NLPModelMeta(
         nvar,
-        x0   = (similar(s0, nvar) .= 0),
+        x0   = _init_similar(s0, nvar, T),
         ncon = ncon,
         lcon = lcon,
         ucon = ucon,
@@ -901,7 +848,7 @@ function _build_dense_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) where {T, 
         ),
         NLPModels.Counters(),
         QuadraticModels.QPData(
-        c0[1,1], 
+        c0,
         c,
         H,
         J
@@ -911,245 +858,275 @@ function _build_dense_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) where {T, 
     )
 end
 
-
 function _build_block_matrices(
-    s0, Q, R, A, B, E, F, N, gu, gl, K;
-    Qf = Q, 
-    S = (similar(Q, size(Q, 1), size(R, 1)) .= 0)
-    )
+    A::M, B::M, K, N
+) where {T, M <: AbstractMatrix{T}}
 
-    ns = size(Q, 1)
-    nu = size(R, 1)
+    ns = size(A, 2)
+    nu = size(B, 2)
 
     if K == nothing
-        K = similar(Q, nu, ns); fill!(K, 0)
-    end    
-  
+        K = _init_similar(A, nu, ns, T)
+    end
+
     # Define block matrices
-    block_B = similar(Q, ns * (N + 1), nu * N); fill!(block_B, 0)
-    block_A = similar(Q, ns * (N + 1), ns); fill!(block_A, 0)
-    block_Q = SparseArrays.sparse([],[], eltype(Q)[], ns * (N + 1), ns * (N + 1))
-    block_R = SparseArrays.sparse([],[], eltype(R)[], nu * N, nu * N)
-    block_S = SparseArrays.sparse([],[], eltype(S)[], ns * (N + 1), nu * N)
-    block_K = SparseArrays.sparse([],[], eltype(R)[], nu * N, ns * (N + 1))
-
-    nE1 = size(E, 1)
-    nE2 = size(E, 2)
-    nF1 = size(F, 1)
-    nF2 = size(F, 2)
-    
-    block_E  = similar(Q, nE1 * N, nE2 * (N + 1)); fill!(block_E, 0)
-    block_F  = similar(Q, nF1 * N, nF2 * N); fill!(block_F, 0)
-    block_gl = similar(Q, nE1 * N, 1); fill!(block_gl, 0)
-    block_gu = similar(Q, nE1 * N, 1); fill!(block_gu, 0)
-  
-    # Build E, F, and d (gl and gu) blocks
-    for i in 1:N
-        block_E[((i - 1) * nE1 + 1):(i * nE1), ((i - 1) * nE2 + 1):(i * nE2)] = E
-        block_F[((i - 1) * nF1 + 1):(i * nF1), ((i - 1) * nF2 + 1):(i * nF2)] = F
-        block_gl[((i - 1) * nE1  + 1):(i * nE1)]  = gl
-        block_gu[((i - 1) * nE1  + 1):(i * nE1)]  = gu
-    end
-
-  
-    # Add diagonal of Bs and fill Q, R, S, and K block matrices
-    for j in 1:N
-        B_row_range = (j * ns + 1):((j + 1) * ns)
-        B_col_range = ((j - 1) * nu + 1):(j * nu)
-        block_B[B_row_range, B_col_range] = B
-  
-        block_Q[((j - 1) * ns + 1):(j * ns), ((j - 1) * ns + 1):(j * ns)] = Q
-        block_R[((j - 1) * nu + 1):(j * nu), ((j - 1) * nu + 1):(j * nu)] = R
-
-        S_row_range = (1 + ns * (j - 1)):(ns * j)
-        S_col_range = (1 + nu * (j - 1)):(nu * j)
-        
-        block_S[S_row_range, S_col_range] = S
-
-        K_row_range = ((j - 1) * nu + 1):(j * nu)
-        block_K[K_row_range, ((j - 1) * ns + 1):(j * ns)] = K
-    end
-
-    for i in 1:ns
-        block_A[i, i] = 1.0
-    end
+    block_A = _init_similar(A, ns * (N + 1), ns, T)
+    block_B = _init_similar(B, ns * N, nu, T)
 
     A_k = copy(A)
-    BK  = similar(Q, size(B, 1), size(K, 2))
+    BK  = _init_similar(A, ns, ns, T)
+
+
+    AB_klast = _init_similar(A, size(B, 1), size(B, 2), T)
+    AB_k     = _init_similar(A, size(B, 1), size(B, 2), T)
+
+
+    block_B[1:ns, :] = B
+
+    for i in 1:ns
+        block_A[i, i] = T(1)
+    end
+
     LinearAlgebra.mul!(BK, B, K)
     LinearAlgebra.axpy!(1, BK, A_k)
 
-    # Define matrices for mul!
     A_klast  = copy(A_k)
     A_knext  = copy(A_k)
-    AB_klast = similar(Q, size(B, 1), size(B, 2)); fill!(AB_klast, 0)
-    AB_k     = similar(Q, size(B, 1), size(B, 2)); fill!(AB_k, 0)
-  
+
+    block_A[(ns + 1):ns *2, :] = A_k
+    LinearAlgebra.mul!(AB_k, A_k, B, 1, 0)
+
+    block_B[(1 + ns):2 * ns, :] = AB_k
+    AB_klast = copy(AB_k)
+
     # Fill the A and B matrices
-    for i in 1:(N - 1)
-        if i == 1
-            block_A[(ns + 1):ns*2, :] = A_k
-            LinearAlgebra.mul!(AB_k, A_k, B)
-            for k in 1:(N-i)
-                row_range = (1 + (k + 1) * ns):((k + 2) * ns)
-                col_range = (1 + (k - 1) * nu):(k * nu)
-                block_B[row_range, col_range] = AB_k
-            end
-            AB_klast = copy(AB_k)
-        else
-            LinearAlgebra.mul!(AB_k, A_k, AB_klast)
-            LinearAlgebra.mul!(A_knext, A_k, A_klast)
-            block_A[(ns * i + 1):ns * (i + 1),:] = A_knext
-  
-            for k in 1:(N-i)
-                row_range = (1 + (k + i) * ns):((k + i + 1) * ns)
-                col_range = (1 + (k - 1) * nu):(k * nu)
-                block_B[row_range, col_range] = AB_k
-            end
-  
-            AB_klast = copy(AB_k)
-            A_klast  = copy(A_knext)
-        end
+    for i in 2:(N - 1)
+
+        LinearAlgebra.mul!(AB_k, A_k, AB_klast)
+
+        LinearAlgebra.mul!(A_knext, A_k, A_klast)
+
+        block_A[(ns * i + 1):ns * (i + 1),:] = A_knext
+
+        block_B[(1 + (i) * ns):((i + 1) * ns), :] = AB_k
+
+        AB_klast = copy(AB_k)
+        A_klast  = copy(A_knext)
     end
 
     LinearAlgebra.mul!(A_knext, A_k, A_klast)
 
     block_A[(ns * N + 1):ns * (N + 1), :] = A_knext
-    block_Q[(ns * N + 1):((N + 1) * ns), (N * ns + 1):((N + 1) * ns)] = Qf
 
-    DenseLQDynamicBlocks(
-        block_A, 
-        block_B, 
-        block_Q, 
-        block_R,
-        block_S,
-        block_K,
-        block_E,
-        block_F,
-        block_gl,
-        block_gu
+    DenseLQDynamicBlocks{T, M}(
+        block_A,
+        block_B
     )
 end
 
-function _build_H_blocks(block_Q, block_R, block_A::M, block_B::M, block_S, block_K, s0, N, K::MK) where {T, M <: AbstractMatrix{T}, MK <: Nothing}
-    As0      = similar(s0, size(block_A, 1))
-    QB       = similar(block_A, size(block_Q, 1), size(block_B, 2))
-    STB      = similar(block_A, size(block_S, 2), size(block_B, 2))
-    B_Q_B    = similar(block_A, size(block_B, 2), size(block_B, 2))
+
+function _build_H_blocks(Q, R, block_A::M, block_B::M, S, Qf, K, s0, N) where {T, M <: AbstractMatrix{T}}
+
+    ns = size(Q, 1)
+    nu = size(R, 1)
+
+    if K == nothing
+        K = _init_similar(Q, nu, ns, T)
+    end
+
+    H = _init_similar(block_A, nu * N, nu * N, T)
+
+    # quad term refers to the summation of Q, K^T RK, SK, and K^T S^T that is left and right multiplied by B in the Hessian
+    quad_term    = _init_similar(Q, ns, ns, T)
+
+    quad_term_B  = _init_similar(block_B, size(block_B, 1), size(block_B, 2), T)
+    QfB          = _init_similar(block_B, size(block_B, 1), size(block_B, 2), T)
+
+    quad_term_AB = _init_similar(block_A, ns, nu, T)
+    QfAB         = _init_similar(block_A, ns, nu, T)
+
+    RK_STB       = _init_similar(block_B, nu, nu, T)
+    BQB          = _init_similar(block_B, nu, nu, T)
+    BQfB         = _init_similar(block_B, nu, nu, T)
+    SK           = _init_similar(Q, ns, ns, T)
+    RK           = _init_similar(Q, nu, ns, T)
+    KTRK         = _init_similar(Q, ns, ns, T)
+    RK_ST        = _init_similar(Q, nu, ns, T)
+    As0          = _init_similar(s0, ns * (N + 1), T)
+
+    QB_block_vec = _init_similar(quad_term_B, ns * (N + 1), nu, T)
+    h            = _init_similar(s0, nu * N, T)
+    h0           = zero(T)
+
+    As0QB        = _init_similar(s0, nu, T)
+    QAs0         = _init_similar(s0, ns, T)
+    As0S         = _init_similar(s0, nu, T)
+    KTRKAs0      = _init_similar(s0, ns, T)
+    SKAs0        = _init_similar(s0, ns, T)
+
+    LinearAlgebra.mul!(SK, S, K)
+    LinearAlgebra.mul!(RK, R, K)
+    LinearAlgebra.mul!(KTRK, K', RK)
+
+    LinearAlgebra.axpy!(1.0, Q, quad_term)
+    LinearAlgebra.axpy!(1.0, SK, quad_term)
+    LinearAlgebra.axpy!(1.0, SK', quad_term)
+    LinearAlgebra.axpy!(1.0, KTRK, quad_term)
+
+    LinearAlgebra.copyto!(RK_ST, RK)
+    LinearAlgebra.axpy!(1.0, S', RK_ST)
 
     LinearAlgebra.mul!(As0, block_A, s0)
-    LinearAlgebra.mul!(QB, block_Q, block_B)
-    LinearAlgebra.mul!(STB, block_S', block_B)
-    LinearAlgebra.mul!(B_Q_B, block_B', QB)
 
-    # Define Hessian term so that H = B_Q_B
-    LinearAlgebra.axpy!(1, block_R, B_Q_B)
-    LinearAlgebra.axpy!(1, STB, B_Q_B)
-    LinearAlgebra.axpy!(1, STB', B_Q_B)
+    for i in 1:N
+        B_row_range = (1 + (i - 1) * ns):(i * ns)
+        B_sub_block = view(block_B, B_row_range, :)
 
-    # Define linear term so that c = h
-    h = similar(s0, size(block_B, 2))
-    LinearAlgebra.axpy!(1, block_S, QB)
-    LinearAlgebra.mul!(h, QB', As0)
+        LinearAlgebra.mul!(quad_term_AB, quad_term, B_sub_block)
+        LinearAlgebra.mul!(QfAB, Qf, B_sub_block)
 
-    # Define linear term so that c0 = h0
-    h0   = similar(block_A, 1,1)
-    QAs0 = similar(block_A, size(block_Q, 1), 1)
-    LinearAlgebra.mul!(QAs0, block_Q, As0)
-    LinearAlgebra.mul!(h0, As0', QAs0)
+        quad_term_B[(1 + (i - 1) * ns):(i * ns), :]  = quad_term_AB
+        QfB[(1 + (i - 1) * ns):(i * ns), :] = QfAB
 
-    return (H = B_Q_B, c = h, c0 = h0 ./ T(2))
+        for j in 1:(N + 1 - i)
+            right_block = block_B[(1 + (j - 1 + i - 1) * ns):((j + i - 1)* ns), :]
+            LinearAlgebra.mul!(BQB, quad_term_AB', right_block)
+            LinearAlgebra.mul!(BQfB, QfAB', right_block)
+
+
+            for k in 1:(N - j - i + 2)
+                row_range = (1 + nu * (k + (j - 1) - 1)):(nu * (k + (j - 1)))
+                col_range = (1 + nu * (k - 1)):(nu * k)
+
+                if k == N - j - i + 2
+                    view(H, row_range, col_range) .+= BQfB
+                else
+                    view(H, row_range, col_range) .+= BQB
+                end
+            end
+
+        end
+        LinearAlgebra.mul!(RK_STB, RK_ST, B_sub_block)
+        for m in 1:(N - i)
+            row_range = (1 + nu * (m - 1 + i)):(nu * (m + i))
+            col_range = (1 + nu * (m - 1)):(nu * m)
+
+            view(H, row_range, col_range) .+= RK_STB
+        end
+
+        view(H, (1 + nu * (i - 1)):nu * i, (1 + nu * (i - 1)):nu * i) .+= R
+    end
+
+
+    for i in 1:N
+        fill!(QB_block_vec, T(0))
+        rows_QB           = 1:(ns * (N - i))
+        rows_QfB          = (1 + ns * (N - i)):(ns * (N - i + 1))
+
+        QB_block_vec[(1 + ns * i):(ns * N), :]     = quad_term_B[rows_QB, :]
+        QB_block_vec[(1 + ns * N):ns * (N + 1), :] = QfB[rows_QfB, :]
+
+        LinearAlgebra.mul!(As0QB, QB_block_vec', As0)
+        LinearAlgebra.mul!(As0S, RK_ST, As0[(ns * (i - 1) + 1):ns * i])
+
+        h[(1 + nu * (i - 1)):nu * i] = As0QB
+        view(h, (1 + nu * (i - 1)):nu * i) .+= As0S
+
+        LinearAlgebra.mul!(QAs0, Q, As0[(ns * (i - 1) + 1):ns * i])
+        LinearAlgebra.mul!(KTRKAs0, KTRK, As0[(ns * (i - 1) + 1):ns * i])
+        LinearAlgebra.mul!(SKAs0, SK, As0[(ns * (i - 1) + 1):ns * i])
+
+        h0 += LinearAlgebra.dot(As0[(ns * (i - 1) + 1):ns * i], QAs0)
+        h0 += LinearAlgebra.dot(As0[(ns * (i - 1) + 1):ns * i], KTRKAs0)
+        h0 += T(2) * LinearAlgebra.dot(As0[(ns * (i - 1) + 1):ns * i], SKAs0)
+    end
+
+    LinearAlgebra.mul!(QAs0, Qf, As0[(ns * N + 1):ns * (N + 1)])
+    LinearAlgebra.mul!(KTRKAs0, KTRK, As0[(ns * N + 1):ns * (N + 1)])
+    LinearAlgebra.mul!(SKAs0, SK, As0[(ns * N + 1):ns * (N + 1)])
+
+    h0 += LinearAlgebra.dot(As0[(ns * N + 1):ns * (N + 1)], QAs0)
+
+    return (H = H, c = h, c0 = h0 / T(2))
 end
 
-function _build_H_blocks(block_Q, block_R, block_A, block_B, block_S, block_K, s0, N, K::MK) where {T, MK <: AbstractMatrix{T}}
 
-    As0      = similar(s0, size(block_A, 1))
-    RK       = similar(block_A, size(block_R, 1), size(block_K, 2))
-    RKB      = similar(block_A, size(block_R, 1), size(block_B, 2))
-    SK       = similar(block_A, size(block_S, 1), size(block_K, 2))
-    SKB      = similar(block_A, size(block_S, 1), size(block_B, 2))
-    STB      = similar(block_A, size(block_S, 2), size(block_B, 2))
-    KTSTB    = similar(block_A, size(block_K, 2), size(block_B, 2))
-    KTRK     = similar(block_A, size(block_K, 2), size(block_K, 2))
-    QB       = similar(block_A, size(block_Q, 1), size(block_B, 2))
-    KTRK_B   = similar(block_A, size(block_K, 2), size(block_B, 2))
-    B_Q_B    = similar(block_A, size(block_B, 2), size(block_B, 2))
+function _set_G_blocks!(G, dl, du, block_B::M, block_A::M, s0, E, F, K::MK, N) where {T, M <: AbstractMatrix{T}, MK <: Nothing}
+    ns = size(E, 2)
+    nu = size(F, 2)
+    nc = size(E, 1)
+
+    G[1:nc, :] = F
+
+    EB   = _init_similar(block_B, nc, nu, T)
+    As0  = _init_similar(s0, ns * (N + 1), T)
+    EAs0 = _init_similar(s0, nc, T)
 
     LinearAlgebra.mul!(As0, block_A, s0)
-    LinearAlgebra.mul!(RK, block_R, block_K)
-    LinearAlgebra.mul!(RKB, RK, block_B)
-    LinearAlgebra.mul!(SK, block_S, block_K)
-    LinearAlgebra.mul!(SKB, SK, block_B)
-    LinearAlgebra.mul!(STB, block_S', block_B)
-    LinearAlgebra.mul!(KTSTB, block_K', STB)
-    LinearAlgebra.mul!(QB, block_Q, block_B)
-    LinearAlgebra.mul!(KTRK, block_K', RK)
-    LinearAlgebra.mul!(KTRK_B, KTRK, block_B)
 
-    LinearAlgebra.axpy!(1, KTRK_B, QB)
-    LinearAlgebra.axpy!(1, SKB, QB)
-    LinearAlgebra.axpy!(1, KTSTB, QB)  # QB now equals QB + KTRKB + SKB + KTSTB
+    for i in 1:N
+        if i != N
+            B_row_range = (1 + (i - 1) * ns):(i * ns)
+            B_sub_block = view(block_B, B_row_range, :)
 
-    # Define Hessian term so that H = B_Q_B
-    LinearAlgebra.mul!(B_Q_B, block_B', QB)
-    LinearAlgebra.axpy!(1, block_R, B_Q_B)
-    LinearAlgebra.axpy!(1, RKB', B_Q_B)
-    LinearAlgebra.axpy!(1, RKB, B_Q_B)
-    LinearAlgebra.axpy!(1, STB, B_Q_B)
-    LinearAlgebra.axpy!(1, STB', B_Q_B)
+            LinearAlgebra.mul!(EB, E, B_sub_block)
+            G[(1 + nc * i):(nc * (i + 1)), :] = EB
+        end
 
-    # Define linear term so that c = h
-    h = similar(s0, size(block_B, 2))
-    LinearAlgebra.axpy!(1, block_S, QB)
-    LinearAlgebra.axpy!(1, RK', QB)
-    LinearAlgebra.mul!(h, QB', As0)
+        LinearAlgebra.mul!(EAs0, E, As0[(ns * (i - 1) + 1):ns * i])
 
-    # Define constant term sot hat c0 = h0
-    hR_term = similar(block_A, 1, 1) # = s0^T A^T K^T R K A s0
-    hS_term = similar(block_A, 1, 1) # = s0^T A^T K^T S^T A s0 = s0^T A^T S K A s0
-    hQ_term = similar(block_A, 1, 1) # = s0^T A^T Q A s0
+        dl[(1 + nc * (i - 1)):nc * i] .-= EAs0
+        du[(1 + nc * (i - 1)):nc * i] .-= EAs0
+    end
 
-    KTRKAs0 = similar(block_A, size(block_K, 2), 1)
-    SKAs0   = similar(block_A, size(block_S, 1), 1)
-    QAs0    = similar(block_A, size(block_Q, 1), 1)
-
-    LinearAlgebra.mul!(KTRKAs0, KTRK, As0)
-    LinearAlgebra.mul!(SKAs0, SK, As0)
-    LinearAlgebra.mul!(QAs0, block_Q, As0)
-
-    LinearAlgebra.mul!(hR_term, As0', KTRKAs0)
-    LinearAlgebra.mul!(hS_term, As0', SKAs0)
-    LinearAlgebra.mul!(hQ_term, As0', QAs0)
-    
-    h0 = hR_term ./ T(2) .+ hQ_term ./ T(2) .+ hS_term
-
-    return (H = B_Q_B, c = h, c0 = h0)
 end
 
+function _set_G_blocks!(G, dl, du, block_B, block_A, s0, E, F, K::MK, N) where {T, MK <: AbstractMatrix{T}}
+    ns = size(E, 2)
+    nu = size(F, 2)
+    nc = size(E, 1)
 
+    G[1:nc, :] = F
 
-function _build_G_blocks(block_A, block_B, block_E, block_F, block_K, block_gl, block_gu, s0, N)
-  
-    G = similar(block_A, size(block_F, 1), size(block_F, 2))
-  
-    As0  = similar(s0, size(block_A, 1))
-    EAs0 = similar(s0, size(block_E, 1))
-    FK   = similar(block_A, size(block_F, 1), size(block_K, 2))
+    E_FK = _init_similar(E, nc, ns, T)
+    FK   = _init_similar(E, nc, ns, T)
+    EB   = _init_similar(E, nc, nu, T)
+    As0  = _init_similar(s0, ns * (N + 1), T)
+    EAs0 = _init_similar(s0, nc, T)
 
-    block_E_mul = similar(block_E)
-    LinearAlgebra.copyto!(block_E_mul, block_E)
-
-    LinearAlgebra.mul!(FK, block_F, block_K)
-    LinearAlgebra.axpy!(1, FK, block_E_mul)
-    LinearAlgebra.mul!(G, block_E_mul, block_B)
-    LinearAlgebra.axpy!(1, block_F, G)
+    LinearAlgebra.copyto!(E_FK, E)
+    LinearAlgebra.mul!(FK, F, K)
+    LinearAlgebra.axpy!(1.0, FK, E_FK)
 
     LinearAlgebra.mul!(As0, block_A, s0)
-    LinearAlgebra.mul!(EAs0, block_E_mul, As0)
-    LinearAlgebra.axpy!(-1, EAs0, block_gl)
-    LinearAlgebra.axpy!(-1, EAs0, block_gu)
-  
-    return (J = G, lcon = vec(block_gl), ucon = vec(block_gu), As0 = As0)
+
+    for i in 1:N
+        if i != N
+            B_row_range = (1 + (i - 1) * ns):(i * ns)
+            B_sub_block = view(block_B, B_row_range, :)
+
+            LinearAlgebra.mul!(EB, E_FK, B_sub_block)
+            G[(1 + nc * i):(nc * (i + 1)), :] = EB
+        end
+
+
+        LinearAlgebra.mul!(EAs0, E_FK, As0[(ns * (i - 1) + 1):ns * i])
+
+        dl[(1 + nc * (i - 1)):nc * i] .-= EAs0
+        du[(1 + nc * (i - 1)):nc * i] .-= EAs0
+    end
+
+end
+
+function _set_J1_dense!(J1, G, N)
+    nu = size(G, 2)
+    nc = Int(size(G, 1) / N)
+
+    for i in 1:N
+        col_range = (1 + nu * (i - 1)):(nu * i)
+        J1[(1 + nc * (i - 1)):nc * N, col_range] = G[1:((N - i + 1) * nc),:]
+    end
+
 end
 
 """
@@ -1161,7 +1138,7 @@ Query the solution `u` from the solver. If `K = nothing`, the solution for `u` i
 If `K <: AbstractMatrix`, `solution_ref.solution` returns `v`, and `get_u` solves for `u` using the `K` matrix (and the `A` and `B` matrices if `lqdm <: DenseLQDynamicModel`)
 """
 function get_u(
-    solver_status, 
+    solver_status,
     lqdm::SparseLQDynamicModel{T, V, M1, M2, M3, MK}
     ) where {T, V <: AbstractVector{T}, M1 <: AbstractMatrix{T}, M2 <: AbstractMatrix{T}, M3 <: AbstractMatrix{T}, MK <: AbstractMatrix{T}}
 
@@ -1189,40 +1166,58 @@ function get_u(
 
         u[start_v:end_v] = Ks
     end
+
     return u
 end
 
 function get_u(
-    solver_status, 
+    solver_status,
     lqdm::DenseLQDynamicModel{T, V, M1, M2, M3, M4, MK}
     ) where {T, V <: AbstractVector{T}, M1 <: AbstractMatrix{T}, M2 <: AbstractMatrix{T}, M3 <: AbstractMatrix{T}, M4 <: AbstractMatrix{T}, MK <: AbstractMatrix{T}}
 
     dnlp = lqdm.dynamic_data
+
+    N    = dnlp.N
+    ns   = dnlp.ns
+    nu   = dnlp.nu
+    K    = dnlp.K
+
     block_A = lqdm.blocks.A
     block_B = lqdm.blocks.B
-    block_K = lqdm.blocks.K
 
     v = solver_status.solution
 
-    As0 = zeros(T, size(block_A, 1))
-    Bv  = zeros(T, size(block_B, 1))
+    As0 = zeros(T, ns * (N + 1))
+    Bv  = zeros(T, ns)
+    s   = zeros(T, ns * (N + 1))
+
+    for i in 1:N
+        B_row_range = (1 + (i - 1) * ns):(i * ns)
+        B_sub_block = view(block_B, B_row_range, :)
+
+        for j in 1:(N - i + 1)
+            v_sub_vec   = v[(1 + nu * (j - 1)):nu * j]
+            LinearAlgebra.mul!(Bv, B_sub_block, v_sub_vec)
+
+            s[(1 + ns * (i + j - 1)):(ns * (i + j))] .+= Bv
+        end
+    end
 
     LinearAlgebra.mul!(As0, block_A, dnlp.s0)
-    LinearAlgebra.mul!(Bv, block_B, v)
-    LinearAlgebra.axpy!(1, As0, Bv)
+    LinearAlgebra.axpy!(1, As0, s)
 
-    Ks = zeros(T, size(block_K, 1))
-
-    LinearAlgebra.mul!(Ks, block_K, Bv)
-
+    Ks = _init_similar(dnlp.s0, ns, T)
     u = copy(v)
-    LinearAlgebra.axpy!(1, Ks, u)
+    for i in 1:N
+        LinearAlgebra.mul!(Ks, K, s[(1 + ns * (i - 1)):ns * i])
+        u[(1 + nu * (i - 1)):nu * i] .+= Ks
+    end
 
-    return vec(u)
+    return u
 end
 
 function get_u(
-    solver_status, 
+    solver_status,
     lqdm::SparseLQDynamicModel{T, V, M1, M2, M3, MK}
     ) where {T, V <: AbstractVector{T}, M1 <: AbstractMatrix{T}, M2 <: AbstractMatrix{T}, M3 <: AbstractMatrix{T}, MK <: Nothing}
 
@@ -1236,7 +1231,7 @@ function get_u(
 end
 
 function get_u(
-    solver_status, 
+    solver_status,
     lqdm::DenseLQDynamicModel{T, V, M1, M2, M3, M4, MK}
     ) where {T, V <: AbstractVector{T}, M1 <: AbstractMatrix{T}, M2 <: AbstractMatrix{T}, M3 <: AbstractMatrix{T}, M4 <: AbstractMatrix{T}, MK <: Nothing}
 
@@ -1252,7 +1247,7 @@ If `lqdm <: DenseLQDynamicModel`, then `solution_ref.solution` returns `u` (if `
 transforming `u` or `v` into `s` using `A`, `B`, and `K` matrices.
 """
 function get_s(
-    solver_status, 
+    solver_status,
     lqdm::SparseLQDynamicModel{T, V, M1, M2, M3, MK}
     ) where {T, V <: AbstractVector{T}, M1 <: AbstractMatrix{T}, M2 <: AbstractMatrix{T}, M3 <: AbstractMatrix{T}, MK <: Union{Nothing, AbstractMatrix}}
 
@@ -1269,21 +1264,37 @@ function get_s(
     ) where {T, V <: AbstractVector{T}, M1 <: AbstractMatrix{T}, M2 <: AbstractMatrix{T}, M3 <: AbstractMatrix{T}, M4 <: AbstractMatrix{T}, MK <: Union{Nothing, AbstractMatrix}}
 
     dnlp = lqdm.dynamic_data
+
+    N    = dnlp.N
+    ns   = dnlp.ns
+    nu   = dnlp.nu
+
     block_A = lqdm.blocks.A
     block_B = lqdm.blocks.B
 
     v = solver_status.solution
 
-    As0 = zeros(T, size(block_A, 1))
-    Bv  = zeros(T, size(block_B, 1))
+    As0 = zeros(T, ns * (N + 1))
+    Bv  = zeros(T, ns)
+    s   = zeros(T, ns * (N + 1))
+
+    for i in 1:N
+        B_row_range = (1 + (i - 1) * ns):(i * ns)
+        B_sub_block = view(block_B, B_row_range, :)
+
+        for j in 1:(N - i + 1)
+            v_sub_vec   = v[(1 + nu * (j - 1)):nu * j]
+            LinearAlgebra.mul!(Bv, B_sub_block, v_sub_vec)
+
+            s[(1 + ns * (i + j - 1)):(ns * (i + j))] .+= Bv
+        end
+    end
 
     LinearAlgebra.mul!(As0, block_A, dnlp.s0)
-    LinearAlgebra.mul!(Bv, block_B, v)
-    LinearAlgebra.axpy!(1, As0, Bv)
+    LinearAlgebra.axpy!(1, As0, s)
 
-    return vec(Bv)
+    return s
 end
-
 
 for field in fieldnames(LQDynamicData)
     method = Symbol("get_", field)
@@ -1360,7 +1371,7 @@ function NLPModels.hess_structure!(
     return rows, cols
 end
 
-  
+
 function NLPModels.hess_structure!(
     qp::DenseLQDynamicModel{T, V, M1, M2, M3},
     rows::AbstractVector{<:Integer},
@@ -1472,20 +1483,18 @@ function NLPModels.jac_coord!(
     return vals
 end
 
-
-
-""" 
+"""
     _build_H(Q, R, N; Qf = []) -> H
 
-Build the (sparse) `H` matrix from square `Q` and `R` matrices such that 
- z^T H z = sum_{i=1}^{N-1} s_i^T Q s + sum_{i=1}^{N-1} u^T R u + s_N^T Qf s_n . 
+Build the (sparse) `H` matrix from square `Q` and `R` matrices such that
+ z^T H z = sum_{i=1}^{N-1} s_i^T Q s + sum_{i=1}^{N-1} u^T R u + s_N^T Qf s_n .
 
 
 # Examples
 ```julia-repl
 julia> Q = [1 2; 2 1]; R = ones(1,1); _build_H(Q, R, 2)
 6×6 SparseArrays.SparseMatrixCSC{Float64, Int64} with 9 stored entries:
- 1.0  2.0   ⋅    ⋅    ⋅    ⋅ 
+ 1.0  2.0   ⋅    ⋅    ⋅    ⋅
  2.0  1.0   ⋅    ⋅    ⋅    ⋅
   ⋅    ⋅   1.0  2.0   ⋅    ⋅
   ⋅    ⋅   2.0  1.0   ⋅    ⋅
@@ -1519,9 +1528,6 @@ function _build_H(
 
     return H
 end
-
-
-
 
 """
     _build_sparse_J1(A, B, N) -> J
@@ -1570,7 +1576,6 @@ function _build_sparse_J2(E, F, N)
 
     J2 = SparseArrays.sparse([],[], eltype(E)[], N * nc, ns * (N + 1) + nu * N)
 
-
     if nc != 0
         for i in 1:N
             row_range   = (1 + nc * (i - 1)):(nc * i)
@@ -1586,7 +1591,7 @@ function _build_sparse_J2(E, F, N)
 
 end
 
-function _build_sparse_J3(K, N, uu, ul)
+function _build_sparse_J3(K::M, N, uu, ul) where {T, M <: AbstractMatrix{T}}
 
     # Remove algebraic constraints if u variable is unbounded on both upper and lower ends
     nu = length(ul)
@@ -1600,8 +1605,8 @@ function _build_sparse_J3(K, N, uu, ul)
 
     full_bool_vec = fill(true, nu * N)
 
-    lcon3 = similar(ul, nu * N); fill!(lcon3, 0)
-    ucon3 = similar(ul, nu * N); fill!(ucon3, 0)
+    lcon3 = _init_similar(ul, nu * N, T)
+    ucon3 = _init_similar(ul, nu * N, T)
 
     for i in 1:N
         row_range   = (nu * (i - 1) + 1):(nu * i)
@@ -1623,6 +1628,16 @@ function _cmp_arr(op, A, B)
         !op(A[i], B[i]) && return true
     end
     return false
+end
+
+function _init_similar(mat, dim1::Number, dim2::Number, T=eltype(mat))
+    new_mat = similar(mat, dim1, dim2); fill!(new_mat, zero(T))
+    return new_mat
+end
+
+function _init_similar(mat, dim1::Number, T=eltype(mat))
+    new_mat = similar(mat, dim1); fill!(new_mat, zero(T))
+    return new_mat
 end
 
 end # module
