@@ -379,11 +379,11 @@ function _build_sparse_lq_dynamic_model(dnlp::LQDynamicData{T, V, M, MK}) where 
 
     _set_sparse_H!(H_colptr, H_rowval, H_nzval, Q, R, N; Qf = Qf, S = S)
 
-    H = SparseMatrixCSC((N + 1) * ns + nu * N, (N + 1) * ns + nu * N, H_colptr, H_rowval, H_nzval)
+    H = SparseArrays.SparseMatrixCSC((N + 1) * ns + nu * N, (N + 1) * ns + nu * N, H_colptr, H_rowval, H_nzval)
 
     _set_sparse_J!(J_colptr, J_rowval, J_nzval, A, B, E, F, K, N)
 
-    J = SparseMatrixCSC((nc + ns) * N, (N + 1) * ns + nu * N, J_colptr, J_rowval, J_nzval)
+    J = SparseArrays.SparseMatrixCSC((nc + ns) * N, (N + 1) * ns + nu * N, J_colptr, J_rowval, J_nzval)
 
     SparseArrays.dropzeros!(H)
     SparseArrays.dropzeros!(J)
@@ -515,11 +515,11 @@ function _build_sparse_lq_dynamic_model(dnlp::LQDynamicData{T, V, M, MK}) where 
     # Get H and J matrices from new matrices
     _set_sparse_H!(H_colptr, H_rowval, H_nzval, new_Q, R, N; Qf = Qf, S = new_S)
 
-    H = SparseMatrixCSC((N + 1) * ns + nu * N, (N + 1) * ns + nu * N, H_colptr, H_rowval, H_nzval)
+    H = SparseArrays.SparseMatrixCSC((N + 1) * ns + nu * N, (N + 1) * ns + nu * N, H_colptr, H_rowval, H_nzval)
 
     _set_sparse_J!(J_colptr, J_rowval, J_nzval, new_A, B, new_E, F, K, bool_vec, N, num_real_bounds)
 
-    J = SparseMatrixCSC(ns * N + nc * N + num_real_bounds * N, (N + 1) * ns + nu * N, J_colptr, J_rowval, J_nzval)
+    J = SparseArrays.SparseMatrixCSC(ns * N + nc * N + num_real_bounds * N, (N + 1) * ns + nu * N, J_colptr, J_rowval, J_nzval)
 
     SparseArrays.dropzeros!(H)
     SparseArrays.dropzeros!(J)
