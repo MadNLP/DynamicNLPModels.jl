@@ -1527,12 +1527,11 @@ function NLPModels.jac_coord!(
 end
 
 """
-    _set_sparse_H!(H, Q, R, N; Qf = [])
+    _set_sparse_H!(H_colptr, H_rowval, H_nzval, Q, R, N; Qf = Q, S = zeros(T, size(Q, 1), size(R, 1))
 
-set the (sparse) `H` matrix from square `Q` and `R` matrices such that
+set the data needed to build a SparseArrays.SparseMatrixCSC matrix. H_colptr, H_rowval, and H_nzval
+are set so that they can be passed to SparseMatrixCSC() to obtain the `H` matrix such that
  z^T H z = sum_{i=1}^{N-1} s_i^T Q s + sum_{i=1}^{N-1} u^T R u + s_N^T Qf s_n .
-
-If `Qf` is not given, then `Qf` defaults to `Q`
 """
 function _set_sparse_H!(
     H_colptr, H_rowval, H_nzval,
@@ -1574,6 +1573,20 @@ function _set_sparse_H!(
     H_colptr[ns * (N + 1) + nu * N + 1] = length(H_nzval) + 1
 end
 
+"""
+    _set_sparse_J!(J_colptr, J_rowval, J_nzval, A, B, E, F, K, bool_vec, N, nb)
+    _set_sparse_J!(J_colptr, J_rowval, J_nzval, A, B, E, F, K, N)
+
+set the data needed to build a SparseArrays.SparseMatrixCSC matrix. J_colptr, J_rowval, and J_nzval
+are set so that they can be passed to SparseMatrixCSC() to obtain the Jacobain, `J`. The Jacobian
+contains the data for the following constraints:
+
+As_i + Bu_i = s_{i + 1}
+gl <= Es_i + Fu_i <= get_u
+
+If `K` is defined, then this matrix also contains the constraints
+ul <= Kx_i + v_i <= uu
+"""
 function _set_sparse_J!(
     J_colptr, J_rowval, J_nzval,
      A, B, E, F, K::MK, bool_vec,
@@ -1702,53 +1715,6 @@ function _set_sparse_J!(
     end
 
     J_colptr[ns * (N + 1) + nu * N + 1] = length(J_nzval) + 1
-end
-
-"""
-    _set_sparse_J1!(J, A, B, N)
-
-Set the (sparse) `J` matrix or a linear model from `A` and `B` matrices such that
-0 <= Jz <= 0 is equivalent to s_{i+1} = As_i + Bs_i for i = 1,..., N-1
-
-"""
-function _set_sparse_J1!(J, A::M, B::M, N) where M <: AbstractMatrix
-
-    ns = size(A, 2)
-    nu = size(B, 2)
-
-    neg_ones = .-Matrix(LinearAlgebra.I, ns, ns)
-
-    for i in 1:N
-        row_range  = (ns * (i - 1) + 1):(i * ns)
-        Acol_range = (ns * (i - 1) + 1):(i * ns)
-        Bcol_range = (ns * (N + 1) + 1 + (i - 1) * nu):(ns * (N + 1) + i * nu)
-        @views LinearAlgebra.copyto!(J[row_range, Acol_range], A)
-        @views LinearAlgebra.copyto!(J[row_range, Bcol_range], B)
-
-        Icol_range = (ns * i + 1):(ns * (i + 1))
-
-        @views LinearAlgebra.copyto!(J[row_range, Icol_range], neg_ones)
-    end
-end
-
-function _set_sparse_J2!(J, E, F, N)
-    ns = size(E, 2)
-    nu = size(F, 2)
-    nc = size(E, 1)
-
-    if nc != 0
-        for i in 1:N
-            row_range   = (1 + ns * N + nc * (i - 1)):(ns * N + nc * i)
-            col_range_E = (1 + ns * (i - 1)):(ns * i)
-            col_range_F = (ns * (N + 1) + 1 + nu * (i - 1)):(ns * (N + 1) + nu * i)
-
-            @views LinearAlgebra.copyto!(J[row_range, col_range_E], E)
-            @views LinearAlgebra.copyto!(J[row_range, col_range_F], F)
-        end
-    end
-
-    return J
-
 end
 
 function _cmp_arr(op, A, B)
