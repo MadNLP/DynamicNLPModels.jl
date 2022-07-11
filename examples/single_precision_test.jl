@@ -1,6 +1,6 @@
 using Revise
 using DynamicNLPModels
-using MadNLP, LinearAlgebra, Random, SparseArrays, NLPModels
+using MadNLP, LinearAlgebra, Random, SparseArrays, NLPModels, CUDA, MadNLPGPU
 
 
 function MadNLP.jac_dense!(nlp::DenseLQDynamicModel{T, V, M1, M2, M3}, x, jac) where {T, V, M1<: AbstractMatrix{T}, M2 <: AbstractMatrix, M3 <: AbstractMatrix}
@@ -114,15 +114,20 @@ dense_options = Dict{Symbol, Any}(
     :max_iter=> 200,
     :jacobian_constant=>true,
     :hessian_constant=>true,
-    :lapack_algorithm => :CHOLESKY
+    :lapack_algorithm => MadNLP.LU
 )
 
-linear_solver_options = Dict{Symbol, Any}(
-    :lapack_algorithm => LU,
-)
-
-opt = MadNLP.Options(; dense_options...)
-
-
-d_ips = MadNLP.InteriorPointSolver(lqdm64, opt; option_linear_solver=linear_solver_options)
+d_ips = MadNLP.InteriorPointSolver(lqdm64, option_dict = dense_options)
 sol_ref_dense = MadNLP.optimize!(d_ips)
+
+dense_options_gpu = Dict{Symbol, Any}(
+    :kkt_system => MadNLP.DENSE_CONDENSED_KKT_SYSTEM,
+    :linear_solver=> LapackGPUSolver,
+    :max_iter=> 200,
+    :jacobian_constant=>true,
+    :hessian_constant=>true,
+    :lapack_algorithm => MadNLP.CHOLESKY
+)
+
+d_ips = MadNLPGPU.CuInteriorPointSolver(lqdm64, option_dict = copy(dense_options_gpu))
+sol_ref_dense_gpu = MadNLP.optimize!(d_ips)
