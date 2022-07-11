@@ -53,7 +53,7 @@ lq_sparse_from_data = SparseLQDynamicModel(s0, A, B, Q, R, N)
 lq_dense_from_data  = DenseLQDynamicModel(s0, A, B, Q, R, N)
 
 optimize!(model)
-solution_ref_sparse           = madnlp(lq_sparse, max_iter=100) 
+solution_ref_sparse           = madnlp(lq_sparse, max_iter=100)
 solution_ref_dense            = madnlp(lq_dense, max_iter=100)
 solution_ref_sparse_from_data = madnlp(lq_sparse_from_data, max_iter=100)
 solution_ref_dense_from_data  = madnlp(lq_dense_from_data, max_iter=100)
@@ -78,7 +78,7 @@ lq_sparse_from_data = SparseLQDynamicModel(s0, A, B, Q, R, N; sl = sl, ul = ul)
 lq_dense_from_data  = DenseLQDynamicModel(s0, A, B, Q, R, N; sl = sl, ul = ul)
 
 optimize!(model)
-solution_ref_sparse           = madnlp(lq_sparse, max_iter=100) 
+solution_ref_sparse           = madnlp(lq_sparse, max_iter=100)
 solution_ref_dense            = madnlp(lq_dense, max_iter=100)
 solution_ref_sparse_from_data = madnlp(lq_sparse_from_data, max_iter=100)
 solution_ref_dense_from_data  = madnlp(lq_dense_from_data, max_iter=100)
@@ -103,7 +103,7 @@ lq_sparse_from_data = SparseLQDynamicModel(s0, A, B, Q, R, N; su = su, uu = uu)
 lq_dense_from_data  = DenseLQDynamicModel(s0, A, B, Q, R, N; su = su, uu = uu)
 
 optimize!(model)
-solution_ref_sparse           = madnlp(lq_sparse, max_iter=100) 
+solution_ref_sparse           = madnlp(lq_sparse, max_iter=100)
 solution_ref_dense            = madnlp(lq_dense, max_iter=100)
 solution_ref_sparse_from_data = madnlp(lq_sparse_from_data, max_iter=100)
 solution_ref_dense_from_data  = madnlp(lq_dense_from_data, max_iter=100)
@@ -128,7 +128,7 @@ lq_sparse_from_data = SparseLQDynamicModel(s0, A, B, Q, R, N; sl=sl, ul=ul, su =
 lq_dense_from_data  = DenseLQDynamicModel(s0, A, B, Q, R, N; sl=sl, ul=ul, su = su, uu = uu)
 
 optimize!(model)
-solution_ref_sparse           = madnlp(lq_sparse, max_iter=100) 
+solution_ref_sparse           = madnlp(lq_sparse, max_iter=100)
 solution_ref_dense            = madnlp(lq_dense, max_iter=100)
 solution_ref_sparse_from_data = madnlp(lq_sparse_from_data, max_iter=100)
 solution_ref_dense_from_data  = madnlp(lq_dense_from_data, max_iter=100)
@@ -154,7 +154,7 @@ lq_sparse_from_data = SparseLQDynamicModel(s0, A, B, Q, R, N; sl = sl, ul = ul, 
 lq_dense_from_data  = DenseLQDynamicModel(s0, A, B, Q, R, N; sl = sl, ul = ul, su = su, uu = uu, Qf = Qf)
 
 optimize!(model)
-solution_ref_sparse           = madnlp(lq_sparse, max_iter=100) 
+solution_ref_sparse           = madnlp(lq_sparse, max_iter=100)
 solution_ref_dense            = madnlp(lq_dense, max_iter=100)
 solution_ref_sparse_from_data = madnlp(lq_sparse_from_data, max_iter=100)
 solution_ref_dense_from_data  = madnlp(lq_dense_from_data, max_iter=100)
@@ -189,7 +189,7 @@ lq_sparse_from_data = SparseLQDynamicModel(s0, A, B, Q, R, N; sl = sl, ul = ul, 
 lq_dense_from_data  = DenseLQDynamicModel(s0, A, B, Q, R, N; sl = sl, ul = ul, su = su, uu = uu, E = E, F = F, gl = gl, gu = gu)
 
 optimize!(model)
-solution_ref_sparse           = madnlp(lq_sparse, max_iter=100) 
+solution_ref_sparse           = madnlp(lq_sparse, max_iter=100)
 solution_ref_dense            = madnlp(lq_dense, max_iter=100)
 solution_ref_sparse_from_data = madnlp(lq_sparse_from_data, max_iter=100)
 solution_ref_dense_from_data  = madnlp(lq_dense_from_data, max_iter=100)
@@ -213,7 +213,7 @@ lq_sparse_from_data = SparseLQDynamicModel(s0, A, B, Q, R, N; sl = sl_with_inf, 
 lq_dense_from_data  = DenseLQDynamicModel(s0, A, B, Q, R, N; sl = sl_with_inf, ul = ul, su = su_with_inf, uu = uu, E = E, F = F, gl = gl, gu = gu)
 
 optimize!(model)
-solution_ref_sparse           = madnlp(lq_sparse, max_iter=100) 
+solution_ref_sparse           = madnlp(lq_sparse, max_iter=100)
 solution_ref_dense            = madnlp(lq_dense, max_iter=100)
 solution_ref_sparse_from_data = madnlp(lq_sparse_from_data, max_iter=100)
 solution_ref_dense_from_data  = madnlp(lq_dense_from_data, max_iter=100)
@@ -239,7 +239,7 @@ lq_sparse_from_data = SparseLQDynamicModel(s0, A, B, Q, R, N; sl = sl, ul = ul, 
 lq_dense_from_data  = DenseLQDynamicModel(s0, A, B, Q, R, N; sl = sl, ul = ul, su = su, uu = uu, E = E, F = F, gl = gl, gu = gu, S = S)
 
 optimize!(model)
-solution_ref_sparse           = madnlp(lq_sparse, max_iter=100) 
+solution_ref_sparse           = madnlp(lq_sparse, max_iter=100)
 solution_ref_dense            = madnlp(lq_dense, max_iter=100)
 solution_ref_sparse_from_data = madnlp(lq_sparse_from_data, max_iter=100)
 solution_ref_dense_from_data  = madnlp(lq_dense_from_data, max_iter=100)
@@ -263,7 +263,7 @@ lq_sparse_from_data = SparseLQDynamicModel(s0, A, B, Q, R, N; sl = sl, ul = ul, 
 lq_dense_from_data  = DenseLQDynamicModel(s0, A, B, Q, R, N; sl = sl, ul = ul, su = su, uu = uu, E = E, F = F, gl = gl, gu = gu, K = K)
 
 optimize!(model)
-solution_ref_sparse           = madnlp(lq_sparse, max_iter=100) 
+solution_ref_sparse           = madnlp(lq_sparse, max_iter=100)
 solution_ref_dense            = madnlp(lq_dense, max_iter=100)
 solution_ref_sparse_from_data = madnlp(lq_sparse_from_data, max_iter=100)
 solution_ref_dense_from_data  = madnlp(lq_dense_from_data, max_iter=100)
@@ -288,7 +288,7 @@ lq_sparse_from_data = SparseLQDynamicModel(s0, A, B, Q, R, N; sl = sl, ul = ul, 
 lq_dense_from_data  = DenseLQDynamicModel(s0, A, B, Q, R, N; sl = sl, ul = ul, su = su, uu = uu, E = E, F = F, gl = gl, gu = gu, K = K, S = S)
 
 optimize!(model)
-solution_ref_sparse           = madnlp(lq_sparse, max_iter=100) 
+solution_ref_sparse           = madnlp(lq_sparse, max_iter=100)
 solution_ref_dense            = madnlp(lq_dense, max_iter=100)
 solution_ref_sparse_from_data = madnlp(lq_sparse_from_data, max_iter=100)
 solution_ref_dense_from_data  = madnlp(lq_dense_from_data, max_iter=100)
@@ -339,7 +339,7 @@ lq_sparse_from_data = SparseLQDynamicModel(s0, A, B, Q, R, N; sl = sl, ul = ul_w
 lq_dense_from_data  = DenseLQDynamicModel(s0, A, B, Q, R, N; sl = sl, ul = ul_with_inf, su = su, uu = uu_with_inf, E = E, F = F, gl = gl, gu = gu, K = K, S = S)
 
 optimize!(model)
-solution_ref_sparse           = madnlp(lq_sparse, max_iter=100) 
+solution_ref_sparse           = madnlp(lq_sparse, max_iter=100)
 solution_ref_dense            = madnlp(lq_dense, max_iter=100)
 solution_ref_sparse_from_data = madnlp(lq_sparse_from_data, max_iter=100)
 solution_ref_dense_from_data  = madnlp(lq_dense_from_data, max_iter=100)
@@ -364,7 +364,7 @@ lq_sparse_from_data = SparseLQDynamicModel(s0, A, B, Q, R, N; E = E, F = F, gl =
 lq_dense_from_data  = DenseLQDynamicModel(s0, A, B, Q, R, N; E = E, F = F, gl = gl, gu = gu, K = K)
 
 optimize!(model)
-solution_ref_sparse           = madnlp(lq_sparse, max_iter=100) 
+solution_ref_sparse           = madnlp(lq_sparse, max_iter=100)
 solution_ref_dense            = madnlp(lq_dense, max_iter=100)
 solution_ref_sparse_from_data = madnlp(lq_sparse_from_data, max_iter=100)
 solution_ref_dense_from_data  = madnlp(lq_dense_from_data, max_iter=100)
@@ -423,7 +423,7 @@ gltest[1] = rand_val
 set_gl!(dnlp, 1, rand_val)
 @test get_gl(dnlp) == gltest
 
-gltest[2] = rand_val 
+gltest[2] = rand_val
 set_gl!(lq_sparse, 2, rand_val)
 @test get_gl(lq_sparse) == gltest
 
@@ -465,11 +465,11 @@ su = Test.GenericArray(su)
 ul = Test.GenericArray(ul)
 uu = Test.GenericArray(uu)
 
-@test (DenseLQDynamicModel(s0, A, B, Q, R, 10; S = S, E = E, F = F, gl = gl, gu = gu, ul = ul, uu = uu, sl = sl, su = su) isa 
+@test (DenseLQDynamicModel(s0, A, B, Q, R, 10; S = S, E = E, F = F, gl = gl, gu = gu, ul = ul, uu = uu, sl = sl, su = su) isa
     DenseLQDynamicModel{Float32, GenericArray{Float32, 1}, GenericArray{Float32, 2}, GenericArray{Float32, 2}, GenericArray{Float32, 2}, GenericArray{Float32, 2}, Nothing})
-@test (DenseLQDynamicModel(s0, A, B, Q, R, 10; K = K, S = S, E = E, F = F, gl = gl, gu = gu, ul = ul, uu = uu, sl = sl, su = su) isa 
+@test (DenseLQDynamicModel(s0, A, B, Q, R, 10; K = K, S = S, E = E, F = F, gl = gl, gu = gu, ul = ul, uu = uu, sl = sl, su = su) isa
 DenseLQDynamicModel{Float32, GenericArray{Float32, 1}, GenericArray{Float32, 2}, GenericArray{Float32, 2}, GenericArray{Float32, 2}, GenericArray{Float32, 2}, GenericArray{Float32, 2}})
-@test (SparseLQDynamicModel(s0, A, B, Q, R, 10; S = S, E = E, F = F, gl = gl, gu = gu, ul = ul, uu = uu, sl = sl, su = su) isa 
+@test (SparseLQDynamicModel(s0, A, B, Q, R, 10; S = S, E = E, F = F, gl = gl, gu = gu, ul = ul, uu = uu, sl = sl, su = su) isa
     SparseLQDynamicModel{Float32, GenericArray{Float32, 1}, SparseMatrixCSC{Float32, Int64}, SparseMatrixCSC{Float32, Int64}, GenericArray{Float32, 2}, Nothing})
-@test (SparseLQDynamicModel(s0, A, B, Q, R, 10; K = K, S = S, E = E, F = F, gl = gl, gu = gu, ul = ul, uu = uu, sl = sl, su = su) isa 
+@test (SparseLQDynamicModel(s0, A, B, Q, R, 10; K = K, S = S, E = E, F = F, gl = gl, gu = gu, ul = ul, uu = uu, sl = sl, su = su) isa
     SparseLQDynamicModel{Float32, GenericArray{Float32, 1}, SparseMatrixCSC{Float32, Int64}, SparseMatrixCSC{Float32, Int64}, GenericArray{Float32, 2}, GenericArray{Float32, 2}})
