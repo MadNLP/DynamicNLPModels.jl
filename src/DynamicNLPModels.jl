@@ -358,6 +358,7 @@ function _build_sparse_lq_dynamic_model(dnlp::LQDynamicData{T, V, M, MK}) where 
     nu = dnlp.nu
     E  = dnlp.E
     F  = dnlp.F
+    K  = dnlp.K
 
     sl = dnlp.sl
     su = dnlp.su
@@ -366,14 +367,28 @@ function _build_sparse_lq_dynamic_model(dnlp::LQDynamicData{T, V, M, MK}) where 
     gl = dnlp.gl
     gu = dnlp.gu
 
-    H   = _build_H(Q, R, N; Qf = Qf, S = S)
-    J1  = _build_sparse_J1(A, B, N)
-    J2  = _build_sparse_J2(E, F, N)
+    nc = size(E, 1)
 
-    J = vcat(J1, J2)
+    H_colptr = zeros(Int, ns * (N + 1) + nu * N + 1)
+    H_rowval = zeros(Int, (ns + nu) * N * ns + (ns + nu) * N * nu + ns * ns)
+    H_nzval  = zeros(T, (ns + nu) * N * ns + (ns + nu) * N * nu + ns * ns)
+
+    J_colptr = zeros(Int, ns * (N + 1) + nu * N + 1)
+    J_rowval = zeros(Int, N * (ns^2 + ns * nu + ns) + N * (nc * ns + nc * nu))
+    J_nzval  = zeros(T, N * (ns^2 + ns * nu + ns) + N * (nc * ns + nc * nu))
+
+    _set_sparse_H!(H_colptr, H_rowval, H_nzval, Q, R, N; Qf = Qf, S = S)
+
+    H = SparseArrays.SparseMatrixCSC((N + 1) * ns + nu * N, (N + 1) * ns + nu * N, H_colptr, H_rowval, H_nzval)
+
+    _set_sparse_J!(J_colptr, J_rowval, J_nzval, A, B, E, F, K, N)
+
+    J = SparseArrays.SparseMatrixCSC((nc + ns) * N, (N + 1) * ns + nu * N, J_colptr, J_rowval, J_nzval)
+
+    SparseArrays.dropzeros!(H)
+    SparseArrays.dropzeros!(J)
 
     c0  = zero(T)
-
 
     nvar = ns * (N + 1) + nu * N
     c  = _init_similar(s0, nvar, T)
@@ -384,8 +399,8 @@ function _build_sparse_lq_dynamic_model(dnlp::LQDynamicData{T, V, M, MK}) where 
     lvar[1:ns] = s0
     uvar[1:ns] = s0
 
-    lcon  = _init_similar(s0, ns * N + N * length(gl), T)
-    ucon  = _init_similar(s0, ns * N + N * length(gl), T)
+    lcon  = _init_similar(s0, ns * N + N * nc, T)
+    ucon  = _init_similar(s0, ns * N + N * nc, T)
 
     ncon  = size(J, 1)
     nnzj = length(J.rowval)
@@ -395,8 +410,8 @@ function _build_sparse_lq_dynamic_model(dnlp::LQDynamicData{T, V, M, MK}) where 
         lvar[(i * ns + 1):((i + 1) * ns)] = sl
         uvar[(i * ns + 1):((i + 1) * ns)] = su
 
-        lcon[(ns * N + 1 + (i -1) * length(gl)):(ns * N + i * length(gl))] = gl
-        ucon[(ns * N + 1 + (i -1) * length(gl)):(ns * N + i * length(gl))] = gu
+        lcon[(ns * N + 1 + (i -1) * nc):(ns * N + i * nc)] = gl
+        ucon[(ns * N + 1 + (i -1) * nc):(ns * N + i * nc)] = gu
     end
 
     for j in 1:N
@@ -453,46 +468,73 @@ function _build_sparse_lq_dynamic_model(dnlp::LQDynamicData{T, V, M, MK}) where 
     gl = dnlp.gl
     gu = dnlp.gu
 
+    nc = size(E, 1)
+
+    bool_vec        = (ul .!= -Inf .|| uu .!= Inf)
+    num_real_bounds = sum(bool_vec)
+
     # Transform u variables to v variables
     new_Q = _init_similar(Q, size(Q, 1), size(Q, 2), T)
     new_S = _init_similar(S, size(S, 1), size(S, 2), T)
     new_A = _init_similar(A, size(A, 1), size(A, 2), T)
     new_E = _init_similar(E, size(E, 1), size(E, 2), T)
+    KTR   = _init_similar(Q, size(K, 2), size(R, 2), T)
+    SK    = _init_similar(Q, size(S, 1), size(K, 2), T)
+    KTRK  = _init_similar(Q, size(K, 2), size(K, 2), T)
+    BK    = _init_similar(Q, size(B, 1), size(K, 2), T)
+    FK    = _init_similar(Q, size(F, 1), size(K, 2), T)
+
+    H_colptr = zeros(Int, ns * (N + 1) + nu * N + 1)
+    H_rowval = zeros(Int, (ns + nu) * N * ns + (ns + nu) * N * nu + ns * ns)
+    H_nzval  = zeros(T, (ns + nu) * N * ns + (ns + nu) * N * nu + ns * ns)
+
+    J_colptr = zeros(Int, ns * (N + 1) + nu * N + 1)
+    J_rowval = zeros(Int, N * (ns^2 + ns * nu + ns) + N * (nc * ns + nc * nu) + N * (ns * num_real_bounds + num_real_bounds))
+    J_nzval  = zeros(T, N * (ns^2 + ns * nu + ns) + N * (nc * ns + nc * nu) + N * (ns * num_real_bounds + num_real_bounds))
 
     LinearAlgebra.copyto!(new_Q, Q)
     LinearAlgebra.copyto!(new_S, S)
     LinearAlgebra.copyto!(new_A, A)
     LinearAlgebra.copyto!(new_E, E)
 
-    KTR  = _init_similar(Q, size(K, 2), size(R, 2), T)
     LinearAlgebra.mul!(KTR, K', R)
     LinearAlgebra.axpy!(1, KTR, new_S)
 
-    SK   = _init_similar(Q, size(S, 1), size(K, 2), T)
-    KTRK = _init_similar(Q, size(K, 2), size(K, 2), T)
     LinearAlgebra.mul!(SK, S, K)
     LinearAlgebra.mul!(KTRK, KTR, K)
     LinearAlgebra.axpy!(1, SK, new_Q)
     LinearAlgebra.axpy!(1, SK', new_Q)
     LinearAlgebra.axpy!(1, KTRK, new_Q)
 
-    BK    = _init_similar(Q, size(B, 1), size(K, 2), T)
     LinearAlgebra.mul!(BK, B, K)
     LinearAlgebra.axpy!(1, BK, new_A)
 
-    FK    = _init_similar(Q, size(F, 1), size(K, 2), T)
     LinearAlgebra.mul!(FK, F, K)
     LinearAlgebra.axpy!(1, FK, new_E)
 
     # Get H and J matrices from new matrices
-    H   = _build_H(new_Q, R, N; Qf = Qf, S = new_S)
-    J1  = _build_sparse_J1(new_A, B, N)
-    J2  = _build_sparse_J2(new_E, F, N)
-    J3, lcon3, ucon3  = _build_sparse_J3(K, N, uu, ul)
+    _set_sparse_H!(H_colptr, H_rowval, H_nzval, new_Q, R, N; Qf = Qf, S = new_S)
 
-    J = vcat(J1, J2)
-    J = vcat(J, J3)
+    H = SparseArrays.SparseMatrixCSC((N + 1) * ns + nu * N, (N + 1) * ns + nu * N, H_colptr, H_rowval, H_nzval)
 
+    _set_sparse_J!(J_colptr, J_rowval, J_nzval, new_A, B, new_E, F, K, bool_vec, N, num_real_bounds)
+
+    J = SparseArrays.SparseMatrixCSC(ns * N + nc * N + num_real_bounds * N, (N + 1) * ns + nu * N, J_colptr, J_rowval, J_nzval)
+
+    SparseArrays.dropzeros!(H)
+    SparseArrays.dropzeros!(J)
+
+    # Remove algebraic constraints if u variable is unbounded on both upper and lower ends
+
+
+    lcon3 = _init_similar(ul, nu * N, T)
+    ucon3 = _init_similar(ul, nu * N, T)
+
+    ul = ul[bool_vec]
+    uu = uu[bool_vec]
+
+    lcon3 = repeat(ul, N)
+    ucon3 = repeat(uu, N)
 
     nvar = ns * (N + 1) + nu * N
 
@@ -513,14 +555,15 @@ function _build_sparse_lq_dynamic_model(dnlp::LQDynamicData{T, V, M, MK}) where 
         lvar[(i * ns + 1):((i + 1) * ns)] = sl
         uvar[(i * ns + 1):((i + 1) * ns)] = su
 
-        lcon[(ns * N + 1 + (i -1) * length(gl)):(ns * N + i * length(gl))] = gl
-        ucon[(ns * N + 1 + (i -1) * length(gl)):(ns * N + i * length(gl))] = gu
+        lcon[(ns * N + 1 + (i -1) * nc):(ns * N + i * nc)] = gl
+        ucon[(ns * N + 1 + (i -1) * nc):(ns * N + i * nc)] = gu
     end
 
     if length(lcon3) > 0
-        lcon[(1 + ns * N + N * length(gl)):end] = lcon3
-        ucon[(1 + ns * N + N * length(gl)):end] = ucon3
+        lcon[(1 + ns * N + N * nc):(ns * N + nc * N + num_real_bounds * N)] = lcon3
+        ucon[(1 + ns * N + N * nc):(ns * N + nc * N + num_real_bounds * N)] = ucon3
     end
+
 
     c0 = zero(T)
     c  = _init_similar(s0, nvar, T)
@@ -1484,143 +1527,195 @@ function NLPModels.jac_coord!(
 end
 
 """
-    _build_H(Q, R, N; Qf = []) -> H
+    _set_sparse_H!(H_colptr, H_rowval, H_nzval, Q, R, N; Qf = Q, S = zeros(T, size(Q, 1), size(R, 1))
 
-Build the (sparse) `H` matrix from square `Q` and `R` matrices such that
+set the data needed to build a SparseArrays.SparseMatrixCSC matrix. H_colptr, H_rowval, and H_nzval
+are set so that they can be passed to SparseMatrixCSC() to obtain the `H` matrix such that
  z^T H z = sum_{i=1}^{N-1} s_i^T Q s + sum_{i=1}^{N-1} u^T R u + s_N^T Qf s_n .
-
-
-# Examples
-```julia-repl
-julia> Q = [1 2; 2 1]; R = ones(1,1); _build_H(Q, R, 2)
-6×6 SparseArrays.SparseMatrixCSC{Float64, Int64} with 9 stored entries:
- 1.0  2.0   ⋅    ⋅    ⋅    ⋅
- 2.0  1.0   ⋅    ⋅    ⋅    ⋅
-  ⋅    ⋅   1.0  2.0   ⋅    ⋅
-  ⋅    ⋅   2.0  1.0   ⋅    ⋅
-  ⋅    ⋅    ⋅    ⋅   1.0   ⋅
-  ⋅    ⋅    ⋅    ⋅    ⋅     ⋅
-```
-
-If `Qf` is not given, then `Qf` defaults to `Q`
 """
-function _build_H(
+function _set_sparse_H!(
+    H_colptr, H_rowval, H_nzval,
     Q::M, R::M, N;
     Qf::M = Q,
-    S::Union{M, Nothing} = nothing) where M <: AbstractMatrix
+    S::M = zeros(T, size(Q, 1), size(R, 1))
+) where {T, M <: AbstractMatrix{T}}
+
     ns = size(Q, 1)
     nu = size(R, 1)
 
-    H = SparseArrays.sparse([],[],eltype(Q)[],(ns * (N + 1) + nu * N), (ns * (N+1) + nu * N))
 
     for i in 1:N
-        range_Q = (1 + (i - 1) * ns): (i * ns)
-        range_R = (ns * (N + 1) + 1 + (i - 1) * nu):(ns * (N + 1) + i * nu)
-        H[range_Q, range_Q] = Q
-        H[range_R, range_R] = R
-        if S != nothing
-            H[range_Q, range_R] = S
-            H[range_R, range_Q] = S'
+        for j in 1:ns
+            H_nzval[(1 + (i - 1) * (ns^2 + nu * ns) + (j - 1) * (ns + nu)):(ns * j + nu * (j - 1) + (i - 1) * (ns^2 + nu * ns))]  = @view Q[:, j]
+            H_nzval[(1 + (i - 1) * (ns^2 + nu * ns) + j * ns + (j - 1) * nu):((i - 1) * (ns^2 + nu * ns) + j * (ns + nu))] = @view S[j, :]
+            H_rowval[(1 + (i - 1) * (ns^2 + nu * ns) + (j - 1) * ns + (j - 1) * nu):(ns * j + nu * (j - 1) + (i - 1) * (ns^2 + nu * ns))] = (1 + (i - 1) * ns):ns * i
+            H_rowval[(1 + (i - 1) * (ns^2 + nu * ns) + j * ns + (j - 1) * nu ):((i - 1) * (ns^2 + nu * ns) + j * (ns + nu))] =(1 + (N + 1) * ns + nu * (i - 1)):((N + 1) * ns + nu * i)
+            H_colptr[((i - 1) * ns + j)] = 1 + (ns + nu) * (j - 1) + (i - 1) * (ns * nu + ns * ns)
         end
     end
 
-    H[(N * ns + 1):( N * ns + ns), (N * ns + 1):(N * ns + ns)] = Qf
+    for j in 1:ns
+        H_nzval[(1 + N * (ns^2 + nu * ns) + (j - 1) * ns):(ns * j + N * (ns^2 + nu * ns))]  = @view Qf[:, j]
+        H_rowval[(1 + N * (ns^2 + nu * ns) + (j - 1) * ns):(ns * j + N * (ns^2 + nu * ns))] = (1 + N * ns):((N + 1) * ns)
+        H_colptr[(N * ns + j)] = 1 + ns * (j - 1) + N * (ns * nu + ns * ns)
+    end
 
-    return H
+    offset = ns^2 * (N + 1) + ns * nu * N
+    for i in 1:N
+        for j in 1:nu
+            H_nzval[(1 + offset + (i - 1) * (nu^2 + ns * nu) + (j - 1) * (nu + ns)):(offset + (i - 1) * (nu^2 + ns * nu) + (j - 1) * nu + j * ns)]  = @view S[:,j]
+            H_nzval[(1 + offset + (i - 1) * (nu^2 + ns * nu) + (j - 1) * nu + j * ns):(offset + (i - 1) * (nu^2 + ns * nu) +  j * (ns + nu ))]      = @view R[:, j]
+            H_rowval[(1 + offset + (i - 1) * (nu^2 + ns * nu) + (j - 1) * (nu + ns)):(offset + (i - 1) * (nu^2 + ns * nu) + (j - 1) * nu + j * ns)] = (1 + (i - 1) * ns):i * ns
+            H_rowval[(1 + offset + (i - 1) * (nu^2 + ns * nu) + (j - 1) * nu + j * ns):(offset + (i - 1) * (nu^2 + ns * nu) +  j * (ns + nu ))]     = (1 + (N + 1) * ns + (i - 1) * nu):((N + 1) * ns + i * nu)
+            H_colptr[(N + 1) * ns + (i - 1) * nu + j] = 1 + offset + (ns + nu) * (j - 1) + (nu^2 + ns * nu) * (i - 1)
+        end
+    end
+
+    H_colptr[ns * (N + 1) + nu * N + 1] = length(H_nzval) + 1
 end
 
 """
-    _build_sparse_J1(A, B, N) -> J
+    _set_sparse_J!(J_colptr, J_rowval, J_nzval, A, B, E, F, K, bool_vec, N, nb)
+    _set_sparse_J!(J_colptr, J_rowval, J_nzval, A, B, E, F, K, N)
 
-Build the (sparse) `J` matrix or a linear model from `A` and `B` matrices such that
-0 <= Jz <= 0 is equivalent to s_{i+1} = As_i + Bs_i for i = 1,..., N-1
+set the data needed to build a SparseArrays.SparseMatrixCSC matrix. J_colptr, J_rowval, and J_nzval
+are set so that they can be passed to SparseMatrixCSC() to obtain the Jacobian, `J`. The Jacobian
+contains the data for the following constraints:
 
-# Examples
-```julia-repl
-julia> A = [1 2 ; 3 4]; B = [5 6; 7 8]; _build_J(A,B,3)
-4×12 SparseArrays.SparseMatrixCSC{Float64, Int64} with 20 stored entries:
- 1.0  2.0  -1.0    ⋅     ⋅     ⋅   5.0  6.0   ⋅    ⋅    ⋅    ⋅
- 3.0  4.0    ⋅   -1.0    ⋅     ⋅   7.0  8.0   ⋅    ⋅    ⋅    ⋅
-  ⋅    ⋅    1.0   2.0  -1.0    ⋅    ⋅    ⋅   5.0  6.0   ⋅    ⋅
-  ⋅    ⋅    3.0   4.0    ⋅   -1.0   ⋅    ⋅   7.0  8.0   ⋅    ⋅
-```
+As_i + Bu_i = s_{i + 1}
+gl <= Es_i + Fu_i <= get_u
+
+If `K` is defined, then this matrix also contains the constraints
+ul <= Kx_i + v_i <= uu
 """
-function _build_sparse_J1(A::M, B::M, N) where M <: AbstractMatrix
+function _set_sparse_J!(
+    J_colptr, J_rowval, J_nzval,
+    A, B, E, F, K::MK, bool_vec,
+    N, nb
+) where {T, MK <: AbstractMatrix{T}}
+    # nb = num_real_bounds
 
     ns = size(A, 2)
     nu = size(B, 2)
-
-    J1 = SparseArrays.sparse([], [], eltype(A)[], ns * N, (ns* (N + 1) + nu * N))
-
-    neg_ones = .-Matrix(LinearAlgebra.I, ns, ns)
-
-    for i in 1:N
-        row_range  = (ns * (i - 1) + 1):(i * ns)
-        Acol_range = (ns * (i - 1) + 1):(i * ns)
-        Bcol_range = (ns * (N + 1) + 1 + (i - 1) * nu):(ns * (N + 1) + i * nu)
-        J1[row_range, Acol_range] = A
-        J1[row_range, Bcol_range] = B
-
-        Icol_range = (ns * i + 1):(ns * (i + 1))
-
-        J1[row_range, Icol_range] = neg_ones
-    end
-
-    return J1
-end
-
-function _build_sparse_J2(E, F, N)
-    ns = size(E, 2)
-    nu = size(F, 2)
     nc = size(E, 1)
 
-    J2 = SparseArrays.sparse([],[], eltype(E)[], N * nc, ns * (N + 1) + nu * N)
+    I_mat = _init_similar(A, nu, nu)
 
-    if nc != 0
-        for i in 1:N
-            row_range   = (1 + nc * (i - 1)):(nc * i)
-            col_range_E = (1 + ns * (i - 1)):(ns * i)
-            col_range_F = (ns * (N + 1) + 1 + nu * (i - 1)):(ns * (N + 1) + nu * i)
+    I_mat[LinearAlgebra.diagind(I_mat)] .= T(1)
 
-            J2[row_range, col_range_E] = E
-            J2[row_range, col_range_F] = F
+    # Set the first block column of A, E, and K
+    for j in 1:ns
+        J_nzval[(1 + (j - 1) * (ns + nc + nb)):((j - 1) * (nc + nb) + j * ns)]      = @view A[:, j]
+        J_nzval[(1 + (j - 1) * (nc + nb) + j * ns):(j * (ns + nc) + (j - 1) * nb)]  = @view E[:, j]
+        J_nzval[(1 + j * (ns + nc) + (j - 1) * nb):(j * (ns + nc + nb))]            = @view K[:, j][bool_vec]
+        J_rowval[(1 + (j - 1) * (ns + nc + nb)):((j - 1) * (nc + nb) + j * ns)]     = 1:ns
+        J_rowval[(1 + (j - 1) * (nc + nb) + j * ns):(j * (ns + nc) + (j - 1) * nb)] = (1 + ns * N):(nc + ns * N)
+        J_rowval[(1 + j * (ns + nc) + (j - 1) * nb):(j * (ns + nc + nb))]           = (1 + (ns + nc) * N):((ns + nc) * N + nb)
+        J_colptr[j] = 1 + (j - 1) * (ns + nc + nb)
+    end
+
+    # Set the remaining block columns corresponding to states: -I, A, E, K
+    for i in 2:N
+        offset = (i - 1) * ns * (ns + nc + nb) + (i - 2) * ns
+        for j in 1:ns
+            J_nzval[1 + offset + (j - 1) * (ns + nc + nb + 1)]  = T(-1)
+            J_nzval[(1 + offset + (j - 1) * (ns + nc + nb) + j):(offset + j * ns + (j - 1) * (nc + nb) + j)]      = @view A[:, j]
+            J_nzval[(1 + offset + j * ns + (j - 1) * (nc + nb) + j):(offset + j * (ns + nc) + (j - 1) * nb + j)]  = @view E[:, j]
+            J_nzval[(1 + offset + j * (ns + nc) + (j - 1) * nb + j):(offset + j * (ns + nc + nb) + j)]            = @view K[:, j][bool_vec]
+            J_rowval[1 + offset + (j - 1) * (ns + nc + nb + 1)] = ns * (i - 2) + j
+            J_rowval[(1 + offset + (j - 1) * (ns + nc + nb) + j):(offset + j * ns + (j - 1) * (nc + nb) + j)]     = (1 + (i - 1) * ns):(i * ns)
+            J_rowval[(1 + offset + j * ns + (j - 1) * (nc + nb) + j):(offset + j * (ns + nc) + (j - 1) * nb + j)] = (1 + N * ns + (i - 1) * nc):(N * ns + i * nc)
+            J_rowval[(1 + offset + j * (ns + nc) + (j - 1) * nb + j):(offset + j * (ns + nc + nb) + j)]           = (1 + N * (ns + nc) + (i - 1) * nb):(N * (ns + nc) + i * nb)
+            J_colptr[(i - 1) * ns + j] = 1 + (j - 1) * (ns + nc + nb + 1) + offset
         end
     end
 
-    return J2
-
-end
-
-function _build_sparse_J3(K::M, N, uu, ul) where {T, M <: AbstractMatrix{T}}
-
-    # Remove algebraic constraints if u variable is unbounded on both upper and lower ends
-    nu = length(ul)
-    ns = size(K, 2)
-
-    bool_vec        = (ul .!= -Inf .|| uu .!= Inf)
-    num_real_bounds = sum(bool_vec)
-
-    J3 = SparseArrays.sparse([],[],eltype(K)[], nu * N, ns * (N + 1) + nu * N)
-    I_mat = Matrix(LinearAlgebra.I, nu, nu)
-
-    full_bool_vec = fill(true, nu * N)
-
-    lcon3 = _init_similar(ul, nu * N, T)
-    ucon3 = _init_similar(ul, nu * N, T)
-
-    for i in 1:N
-        row_range   = (nu * (i - 1) + 1):(nu * i)
-        K_col_range = (ns * (i - 1) + 1):(ns * i)
-        I_col_range = (ns * (N + 1) + 1 + nu * (i - 1)):(ns * (N + 1) + nu * i)
-        J3[row_range, K_col_range] = K
-        J3[row_range, I_col_range] = I_mat
-
-        lcon3[row_range] .= ul
-        ucon3[row_range] .= uu
-        full_bool_vec[row_range] = bool_vec
+    # Set the column corresponding to states at N + 1, which are a single block of -I
+    for j in 1:ns
+        J_nzval[j + ns * (ns + nc + nb + 1) * N - ns]  = T(-1)
+        J_rowval[j + ns * (ns + nc + nb + 1) * N - ns] = j + (N - 1) * ns
+        J_colptr[ns * N + j] = 1 + ns * (ns + nc + nb + 1) * N - ns + (j - 1)
     end
 
-    return J3[full_bool_vec, :], lcon3[full_bool_vec], ucon3[full_bool_vec]
+    # Set the remaining block columns corresponding to inputs: B, F, I
+    nscol_offset = N * (ns^2 + nc * ns + nb * ns + ns)
+    for i in 1:N
+        offset = (i - 1) * (nu * ns + nu * nc + nb) + nscol_offset
+        bool_offset = 0
+        for j in 1:nu
+            J_nzval[(1 + offset + (j - 1) * (ns + nc) + bool_offset):(offset + j * ns + (j - 1) * nc + bool_offset)]  = @view B[:, j]
+            J_nzval[(1 + offset + j * ns + (j - 1) * nc + bool_offset):(offset + j * (ns + nc) + bool_offset)]  = @view F[:, j]
+            if bool_vec[j]
+                J_nzval[1 + offset + j * (ns + nc) + bool_offset]  = T(1)
+                J_rowval[1 + offset + j * (ns + nc) + bool_offset] = (N * (ns + nc) + (i - 1) * nb + 1 + (bool_offset))
+            end
+            J_rowval[(1 + offset + (j - 1) * (ns + nc) + bool_offset):(offset + j * ns + (j - 1) * nc + bool_offset)] = (1 + (i - 1) * ns):i * ns
+            J_rowval[(1 + offset + j * ns + (j - 1) * nc + bool_offset):(offset + j * (ns + nc) + bool_offset)] = (1 + N * ns + (i - 1) * nc):(N * ns + i * nc)
+            J_colptr[(ns * (N + 1) + (i - 1) * nu + j)] = 1 + offset + (j - 1) * (ns + nc) + bool_offset
+
+            bool_offset += bool_vec[j]
+        end
+    end
+
+    J_colptr[ns * (N + 1) + nu * N + 1] = length(J_nzval) + 1
+end
+
+
+function _set_sparse_J!(
+    J_colptr, J_rowval, J_nzval,
+    A::M, B::M, E, F, K::MK, N
+) where {T, M <: AbstractMatrix{T}, MK <: Nothing}
+    # nb = num_real_bounds
+
+    ns = size(A, 2)
+    nu = size(B, 2)
+    nc = size(E, 1)
+
+
+    # Set the first block column of A, E, and K
+    for j in 1:ns
+        J_nzval[(1 + (j - 1) * (ns + nc)):((j - 1) * nc + j * ns)]  = @view A[:, j]
+        J_nzval[(1 + (j - 1) * nc + j * ns):(j * (ns + nc))]        = @view E[:, j]
+        J_rowval[(1 + (j - 1) * (ns + nc)):((j - 1) * nc + j * ns)] = 1:ns
+        J_rowval[(1 + (j - 1) * nc + j * ns):(j * (ns + nc))]       = (1 + ns * N):(nc + ns * N)
+        J_colptr[j] = 1 + (j - 1) * (ns + nc)
+    end
+
+    # Set the remaining block columns corresponding to states: -I, A, E, K
+    for i in 2:N
+        offset = (i - 1) * ns * (ns + nc) + (i - 2) * ns
+        for j in 1:ns
+            J_nzval[1 + offset + (j - 1) * (ns + nc + 1)]  = T(-1)
+            J_nzval[(1 + offset + (j - 1) * (ns + nc) + j):(offset + j * ns + (j - 1) * nc + j)]  = @view A[:, j]
+            J_nzval[(1 + offset + j * ns + (j - 1) * nc + j):(offset + j * (ns + nc) + j)]        = @view E[:, j]
+            J_rowval[1 + offset + (j - 1) * (ns + nc + 1)] = ns * (i - 2) + j
+            J_rowval[(1 + offset + (j - 1) * (ns + nc) + j):(offset + j * ns + (j - 1) * nc + j)] = (1 + (i - 1) * ns):(i * ns)
+            J_rowval[(1 + offset + j * ns + (j - 1) * nc + j):(offset + j * (ns + nc) + j)]       = (1 + N * ns + (i - 1) * nc):(N * ns + i * nc)
+            J_colptr[(i - 1) * ns + j] = 1 + (j - 1) * (ns + nc + 1) + offset
+        end
+    end
+
+    # Set the column corresponding to states at N + 1, which are a single block of -I
+    for j in 1:ns
+        J_nzval[j + ns * (ns + nc + 1) * N - ns]  = T(-1)
+        J_rowval[j + ns * (ns + nc + 1) * N - ns] = j + (N - 1) * ns
+        J_colptr[ns * N + j] = 1 + ns * (ns + nc + 1) * N - ns + (j - 1)
+    end
+
+    # Set the remaining block columns corresponding to inputs: B, F, I
+    nscol_offset = N * (ns^2 + nc * ns + ns)
+    for i in 1:N
+        offset = (i - 1) * (nu * ns + nu * nc) + nscol_offset
+        for j in 1:nu
+            J_nzval[(1 + offset + (j - 1) * (ns + nc)):(offset + j * ns + (j - 1) * nc)]  = @view B[:, j]
+            J_nzval[(1 + offset + j * ns + (j - 1) * nc):(offset + j * (ns + nc))]        = @view F[:, j]
+            J_rowval[(1 + offset + (j - 1) * (ns + nc)):(offset + j * ns + (j - 1) * nc)] = (1 + (i - 1) * ns):i * ns
+            J_rowval[(1 + offset + j * ns + (j - 1) * nc):(offset + j * (ns + nc))]       = (1 + N * ns + (i - 1) * nc):(N * ns + i * nc)
+            J_colptr[(ns * (N + 1) + (i - 1) * nu + j)] = 1 + offset + (j - 1) * (ns + nc)
+        end
+    end
+
+    J_colptr[ns * (N + 1) + nu * N + 1] = length(J_nzval) + 1
 end
 
 function _cmp_arr(op, A, B)
