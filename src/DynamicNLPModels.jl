@@ -369,13 +369,13 @@ function _build_sparse_lq_dynamic_model(dnlp::LQDynamicData{T, V, M, MK}) where 
 
     nc = size(E, 1)
 
-    H_colptr = _init_similar(Int[], ns * (N + 1) + nu * N + 1, Int)
-    H_rowval = _init_similar(Int[], (ns + nu) * N * ns + (ns + nu) * N * nu + ns * ns, Int)
-    H_nzval  = _init_similar(T[], (ns + nu) * N * ns + (ns + nu) * N * nu + ns * ns, T)
+    H_colptr = zeros(Int, ns * (N + 1) + nu * N + 1)
+    H_rowval = zeros(Int, (ns + nu) * N * ns + (ns + nu) * N * nu + ns * ns)
+    H_nzval  = zeros(T, (ns + nu) * N * ns + (ns + nu) * N * nu + ns * ns)
 
-    J_colptr = _init_similar(Int[], ns * (N + 1) + nu * N + 1, Int)
-    J_rowval = _init_similar(Int[], N * (ns^2 + ns * nu + ns) + N * (nc * ns + nc * nu), Int)
-    J_nzval  = _init_similar(T[],   N * (ns^2 + ns * nu + ns) + N * (nc * ns + nc * nu), T)
+    J_colptr = zeros(Int, ns * (N + 1) + nu * N + 1)
+    J_rowval = zeros(Int, N * (ns^2 + ns * nu + ns) + N * (nc * ns + nc * nu))
+    J_nzval  = zeros(T, N * (ns^2 + ns * nu + ns) + N * (nc * ns + nc * nu))
 
     _set_sparse_H!(H_colptr, H_rowval, H_nzval, Q, R, N; Qf = Qf, S = S)
 
@@ -484,13 +484,13 @@ function _build_sparse_lq_dynamic_model(dnlp::LQDynamicData{T, V, M, MK}) where 
     BK    = _init_similar(Q, size(B, 1), size(K, 2), T)
     FK    = _init_similar(Q, size(F, 1), size(K, 2), T)
 
-    H_colptr = _init_similar(Int[], ns * (N + 1) + nu * N + 1, Int)
-    H_rowval = _init_similar(Int[], (ns + nu) * N * ns + (ns + nu) * N * nu + ns * ns, Int)
-    H_nzval  = _init_similar(T[], (ns + nu) * N * ns + (ns + nu) * N * nu + ns * ns, T)
+    H_colptr = zeros(Int, ns * (N + 1) + nu * N + 1)
+    H_rowval = zeros(Int, (ns + nu) * N * ns + (ns + nu) * N * nu + ns * ns)
+    H_nzval  = zeros(T, (ns + nu) * N * ns + (ns + nu) * N * nu + ns * ns)
 
-    J_colptr = _init_similar(Int[], ns * (N + 1) + nu * N + 1, Int)
-    J_rowval = _init_similar(Int[], N * (ns^2 + ns * nu + ns) + N * (nc * ns + nc * nu) + N * (ns * num_real_bounds + num_real_bounds), Int)
-    J_nzval  = _init_similar(T[],   N * (ns^2 + ns * nu + ns) + N * (nc * ns + nc * nu) + N * (ns * num_real_bounds + num_real_bounds), T)
+    J_colptr = zeros(Int, ns * (N + 1) + nu * N + 1)
+    J_rowval = zeros(Int, N * (ns^2 + ns * nu + ns) + N * (nc * ns + nc * nu) + N * (ns * num_real_bounds + num_real_bounds))
+    J_nzval  = zeros(T, N * (ns^2 + ns * nu + ns) + N * (nc * ns + nc * nu) + N * (ns * num_real_bounds + num_real_bounds))
 
     LinearAlgebra.copyto!(new_Q, Q)
     LinearAlgebra.copyto!(new_S, S)
@@ -1537,7 +1537,8 @@ function _set_sparse_H!(
     H_colptr, H_rowval, H_nzval,
     Q::M, R::M, N;
     Qf::M = Q,
-    S::M = zeros(T, size(Q, 1), size(R, 1))) where {T, M <: AbstractMatrix{T}}
+    S::M = zeros(T, size(Q, 1), size(R, 1))
+) where {T, M <: AbstractMatrix{T}}
 
     ns = size(Q, 1)
     nu = size(R, 1)
@@ -1546,7 +1547,7 @@ function _set_sparse_H!(
     for i in 1:N
         for j in 1:ns
             H_nzval[(1 + (i - 1) * (ns^2 + nu * ns) + (j - 1) * (ns + nu)):(ns * j + nu * (j - 1) + (i - 1) * (ns^2 + nu * ns))]  = @view Q[:, j]
-            H_nzval[(1 + (i - 1) * (ns^2 + nu * ns) + j * ns + (j - 1) * nu):((i - 1) * (ns^2 + nu * ns) + j * (ns + nu))] = @view S'[:, j]
+            H_nzval[(1 + (i - 1) * (ns^2 + nu * ns) + j * ns + (j - 1) * nu):((i - 1) * (ns^2 + nu * ns) + j * (ns + nu))] = @view S[j, :]
             H_rowval[(1 + (i - 1) * (ns^2 + nu * ns) + (j - 1) * ns + (j - 1) * nu):(ns * j + nu * (j - 1) + (i - 1) * (ns^2 + nu * ns))] = (1 + (i - 1) * ns):ns * i
             H_rowval[(1 + (i - 1) * (ns^2 + nu * ns) + j * ns + (j - 1) * nu ):((i - 1) * (ns^2 + nu * ns) + j * (ns + nu))] =(1 + (N + 1) * ns + nu * (i - 1)):((N + 1) * ns + nu * i)
             H_colptr[((i - 1) * ns + j)] = 1 + (ns + nu) * (j - 1) + (i - 1) * (ns * nu + ns * ns)
@@ -1578,7 +1579,7 @@ end
     _set_sparse_J!(J_colptr, J_rowval, J_nzval, A, B, E, F, K, N)
 
 set the data needed to build a SparseArrays.SparseMatrixCSC matrix. J_colptr, J_rowval, and J_nzval
-are set so that they can be passed to SparseMatrixCSC() to obtain the Jacobain, `J`. The Jacobian
+are set so that they can be passed to SparseMatrixCSC() to obtain the Jacobian, `J`. The Jacobian
 contains the data for the following constraints:
 
 As_i + Bu_i = s_{i + 1}
@@ -1589,10 +1590,10 @@ ul <= Kx_i + v_i <= uu
 """
 function _set_sparse_J!(
     J_colptr, J_rowval, J_nzval,
-     A, B, E, F, K::MK, bool_vec,
-     N, nb
-     ) where {T, MK <: AbstractMatrix{T}}
-     # nb = num_real_bounds
+    A, B, E, F, K::MK, bool_vec,
+    N, nb
+) where {T, MK <: AbstractMatrix{T}}
+    # nb = num_real_bounds
 
     ns = size(A, 2)
     nu = size(B, 2)
@@ -1662,9 +1663,9 @@ end
 
 function _set_sparse_J!(
     J_colptr, J_rowval, J_nzval,
-     A::M, B::M, E, F, K::MK, N
-     ) where {T, M <: AbstractMatrix{T}, MK <: Nothing}
-     # nb = num_real_bounds
+    A::M, B::M, E, F, K::MK, N
+) where {T, M <: AbstractMatrix{T}, MK <: Nothing}
+    # nb = num_real_bounds
 
     ns = size(A, 2)
     nu = size(B, 2)
