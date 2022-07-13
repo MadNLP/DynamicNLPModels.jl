@@ -4,9 +4,11 @@ import NLPModels
 import QuadraticModels
 import LinearAlgebra
 import SparseArrays
+import LinearOperators
+
 import SparseArrays: SparseMatrixCSC
 
-export LQDynamicData, SparseLQDynamicModel, DenseLQDynamicModel, get_u, get_s
+export LQDynamicData, SparseLQDynamicModel, DenseLQDynamicModel, get_u, get_s, get_jacobian
 
 abstract type AbstractLQDynData{T,V} end
 """
@@ -53,7 +55,7 @@ struct LQDynamicData{T, V, M, MK} <: AbstractLQDynData{T,V}
     B::M
     Q::M
     R::M
-    N
+    N::Int
 
     Qf::M
     S::M
@@ -192,7 +194,6 @@ function LQDynamicData(
     )
 end
 
-
 abstract type AbstractDynamicModel{T,V} <: QuadraticModels.AbstractQuadraticModel{T, V} end
 
 struct SparseLQDynamicModel{T, V, M1, M2, M3, MK} <:  AbstractDynamicModel{T,V}
@@ -283,8 +284,8 @@ function SparseLQDynamicModel(
 end
 
 """
-    DenseLQDynamicModel(dnlp::LQDynamicData)    -> DenseLQDynamicModel
-    DenseLQDynamicModel(s0, A, B, Q, R, N; ...) -> DenseLQDynamicModel
+    DenseLQDynamicModel(dnlp::LQDynamicData; implicit = false)    -> DenseLQDynamicModel
+    DenseLQDynamicModel(s0, A, B, Q, R, N; implicit = false ...) -> DenseLQDynamicModel
 A constructor for building a `DenseLQDynamicModel <: QuadraticModels.AbstractQuadraticModel`
 
 Input data is for the problem of the form
@@ -311,9 +312,16 @@ Resulting `H`, `J`, `h`, and `h0` matrices are stored within `QuadraticModels.QP
 
 If `K` is defined, then `u` variables are replaced by `v` variables. The bounds on `u` are transformed into algebraic constraints,
 and `u` can be queried by `get_u` and `get_s` within `DynamicNLPModels.jl`
+
+Keyword argument `implicit = false` determines how the Jacobian is stored within the `QPData`. If `implicit = false`, the full, dense
+Jacobian matrix is stored. If `implicit = true`, only the first `nu` columns of the Jacobian are stored with the Linear Operator `LQJacobianOperator`.
 """
-function DenseLQDynamicModel(dnlp::LQDynamicData{T,V,M}) where {T, V <: AbstractVector{T}, M  <: AbstractMatrix{T}, MK <: Union{Nothing, AbstractMatrix{T}}}
-    _build_dense_lq_dynamic_model(dnlp)
+function DenseLQDynamicModel(dnlp::LQDynamicData{T,V,M}; implicit = false) where {T, V <: AbstractVector{T}, M  <: AbstractMatrix{T}, MK <: Union{Nothing, AbstractMatrix{T}}}
+    if implicit
+        _build_implicit_dense_lq_dynamic_model(dnlp)
+    else
+        _build_dense_lq_dynamic_model(dnlp)
+    end
 end
 
 function DenseLQDynamicModel(
@@ -333,7 +341,8 @@ function DenseLQDynamicModel(
     ul::V = (similar(s0, size(R, 1)) .= -Inf),
     uu::V = (similar(s0, size(R, 1)) .=  Inf),
     gl::V = (similar(s0, size(E, 1)) .= -Inf),
-    gu::V = (similar(s0, size(F, 1)) .= Inf)
+    gu::V = (similar(s0, size(F, 1)) .= Inf),
+    implicit = false
 ) where {T, V <: AbstractVector{T}, M <: AbstractMatrix{T}, MK <: Union{Nothing, AbstractMatrix{T}}}
 
     dnlp = LQDynamicData(
@@ -341,8 +350,52 @@ function DenseLQDynamicModel(
         Qf = Qf, S = S, E = E, F = F, K = K,
         sl = sl, su = su, ul = ul, uu = uu, gl = gl, gu = gu)
 
-    DenseLQDynamicModel(dnlp)
+    DenseLQDynamicModel(dnlp; implicit = implicit)
 end
+
+"""
+    LQJacobianOperator{T, V, M}
+
+Struct for storing the implicit Jacobian matrix. All data for the Jacobian can be stored
+in the first `nu` columns of `J`. This struct contains the needed data and storage arrays for
+calculating `Jx`, `J^T x`, and `J^T Sigma J`. `Jx` and `J^T x` are performed through extensions
+to `LinearAlgebra.mul!()`.
+
+---
+Attributes
+ - `Jac`: Matrix of first `nu` columns of the Jacobian
+ - `N`  : number of time steps
+ - `nu` : number of inputs
+ - `nc` : number of algebraic constraints of the form gl <= Es + Fu <= gu
+ - `nsc`: number of bounded state variables
+ - `nuc`: number of bounded input variables (if `K` is defined)
+ - `scaled_Jac`: placeholder to avoid allocaiton when calculating `Sigma J`
+ - `J1Bx` : vector for storing multiplications when doing `Jx`
+ - `J2Bx` : vector for storing multiplications when doing `Jx`
+ - `J3Bx` : vector for storing multiplications when doing `Jx`
+ - `J1BTx`: vector for storing multiplications when doing `J^T x`
+ - `J2BTx`: vector for storing multiplications when doing `J^T x`
+ - `J3BTx`: vector for storing multiplications when doing `J^T x`
+ - `J1B`  : matrix for storing multiplicaitons when doing `J^T Sigma J`
+ - `J2B`  : matrix for storing multiplicaitons when doing `J^T Sigma J`
+ - `J3B`  : matrix for storing multiplicaitons when doing `J^T Sigma J`
+"""
+struct LQJacobianOperator{T, V, M} <: LinearOperators.AbstractLinearOperator{T}
+    Jac::M        # column of Jacobian block matrix
+    N::Int        # number of time steps
+    nu::Int       # number of inputs
+    nc::Int       # number of inequality constraints
+    nsc::Int      # number of state variables that are constrained
+    nuc::Int      # number of input variables that are constrained
+
+    scaled_Jac::M
+
+    # Storage matices for building J^TΣJ
+    J1B::M
+    J2B::M
+    J3B::M
+end
+
 
 function _build_sparse_lq_dynamic_model(dnlp::LQDynamicData{T, V, M, MK}) where {T, V <: AbstractVector{T}, M  <: AbstractMatrix{T}, MK <: Nothing}
     s0 = dnlp.s0
@@ -421,24 +474,24 @@ function _build_sparse_lq_dynamic_model(dnlp::LQDynamicData{T, V, M, MK}) where 
 
     SparseLQDynamicModel(
         NLPModels.NLPModelMeta(
-        nvar,
-        x0   = _init_similar(s0, nvar, T),
-        lvar = lvar,
-        uvar = uvar,
-        ncon = ncon,
-        lcon = lcon,
-        ucon = ucon,
-        nnzj = nnzj,
-        nnzh = nnzh,
-        lin = 1:ncon,
-        islp = (ncon == 0);
+            nvar,
+            x0   = _init_similar(s0, nvar, T),
+            lvar = lvar,
+            uvar = uvar,
+            ncon = ncon,
+            lcon = lcon,
+            ucon = ucon,
+            nnzj = nnzj,
+            nnzh = nnzh,
+            lin = 1:ncon,
+            islp = (ncon == 0);
         ),
         NLPModels.Counters(),
         QuadraticModels.QPData(
-        c0,
-        c,
-        H,
-        J
+            c0,
+            c,
+            H,
+            J
         ),
         dnlp
     )
@@ -570,24 +623,24 @@ function _build_sparse_lq_dynamic_model(dnlp::LQDynamicData{T, V, M, MK}) where 
 
     SparseLQDynamicModel(
         NLPModels.NLPModelMeta(
-        nvar,
-        x0   = _init_similar(s0, nvar, T),
-        lvar = lvar,
-        uvar = uvar,
-        ncon = ncon,
-        lcon = lcon,
-        ucon = ucon,
-        nnzj = nnzj,
-        nnzh = nnzh,
-        lin = 1:ncon,
-        islp = (ncon == 0);
+            nvar,
+            x0   = _init_similar(s0, nvar, T),
+            lvar = lvar,
+            uvar = uvar,
+            ncon = ncon,
+            lcon = lcon,
+            ucon = ucon,
+            nnzj = nnzj,
+            nnzh = nnzh,
+            lin = 1:ncon,
+            islp = (ncon == 0);
         ),
         NLPModels.Counters(),
         QuadraticModels.QPData(
-        c0,
-        c,
-        H,
-        J
+            c0,
+            c,
+            H,
+            J
         ),
         dnlp
     )
@@ -695,24 +748,24 @@ function _build_dense_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) where {T, 
 
     DenseLQDynamicModel(
         NLPModels.NLPModelMeta(
-        nvar,
-        x0   = _init_similar(s0, nvar, T),
-        lvar = lvar,
-        uvar = uvar,
-        ncon = ncon,
-        lcon = lcon,
-        ucon = ucon,
-        nnzj = nnzj,
-        nnzh = nnzh,
-        lin = 1:ncon,
-        islp = (ncon == 0);
+            nvar,
+            x0   = _init_similar(s0, nvar, T),
+            lvar = lvar,
+            uvar = uvar,
+            ncon = ncon,
+            lcon = lcon,
+            ucon = ucon,
+            nnzj = nnzj,
+            nnzh = nnzh,
+            lin = 1:ncon,
+            islp = (ncon == 0);
         ),
         NLPModels.Counters(),
         QuadraticModels.QPData(
-        c0,
-        c,
-        H,
-        J
+            c0,
+            c,
+            H,
+            J
         ),
         dnlp,
         dense_blocks
@@ -876,6 +929,319 @@ function _build_dense_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) where {T, 
 
     c = _init_similar(s0, nvar, T)
     c .= H_blocks.c
+
+    DenseLQDynamicModel(
+        NLPModels.NLPModelMeta(
+            nvar,
+            x0   = _init_similar(s0, nvar, T),
+            ncon = ncon,
+            lcon = lcon,
+            ucon = ucon,
+            nnzj = nnzj,
+            nnzh = nnzh,
+            lin = 1:ncon,
+            islp = (ncon == 0);
+        ),
+        NLPModels.Counters(),
+            QuadraticModels.QPData(
+            c0,
+            c,
+            H,
+            J
+        ),
+        dnlp,
+        dense_blocks
+    )
+end
+
+function _build_implicit_dense_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) where {T, V <: AbstractVector{T}, M <: AbstractMatrix{T}, MK <: Nothing}
+    s0 = dnlp.s0
+    A  = dnlp.A
+    B  = dnlp.B
+    Q  = dnlp.Q
+    R  = dnlp.R
+    N  = dnlp.N
+
+    Qf = dnlp.Qf
+    S  = dnlp.S
+    ns = dnlp.ns
+    nu = dnlp.nu
+    E  = dnlp.E
+    F  = dnlp.F
+    K  = dnlp.K
+
+    sl = dnlp.sl
+    su = dnlp.su
+    ul = dnlp.ul
+    uu = dnlp.uu
+    gl = dnlp.gl
+    gu = dnlp.gu
+
+    nc = size(E, 1)
+    nvar = nu * N
+
+    bool_vec_s        = (su .!= Inf .|| sl .!= -Inf)
+    num_real_bounds_s = sum(bool_vec_s)
+
+    G          = _init_similar(Q, nc * N, nu, T)
+    Jac        = _init_similar(Q, nc * N + num_real_bounds_s * N, nu, T)
+    As0        = _init_similar(s0, ns * (N + 1), T)
+    As0_bounds = _init_similar(s0, num_real_bounds_s * N, T)
+
+    c  = _init_similar(s0, nvar, T)
+    x0 = _init_similar(s0, nvar, T)
+
+    lcon = _init_similar(s0, nc * N + num_real_bounds_s * N, T)
+    ucon = _init_similar(s0, nc * N + num_real_bounds_s * N, T)
+
+    J1B   = _init_similar(s0, nc, nu, T)
+    J2B   = _init_similar(s0, num_real_bounds_s, nu, T)
+    J3B   = _init_similar(s0, 0, nu, T)
+
+    dense_blocks = _build_block_matrices(A, B, K, N)
+    block_A      = dense_blocks.A
+    block_B      = dense_blocks.B
+
+    H_blocks = _build_H_blocks(Q, R, block_A, block_B, S,Qf, K, s0, N)
+
+    H  = H_blocks.H
+    c0 = H_blocks.c0
+    c .= H_blocks.c
+
+    dl = repeat(gl, N)
+    du = repeat(gu, N)
+
+    _set_G_blocks!(G, dl, du, block_B, block_A, s0, E, F, K, N)
+    Jac[1:nc * N, :] = G
+
+    LinearAlgebra.mul!(As0, block_A, s0)
+
+    lvar = repeat(ul, N)
+    uvar = repeat(uu, N)
+
+    # Convert state variable constraints to algebraic constraints
+    offset_s = N * nc
+    if num_real_bounds_s == length(sl)
+        As0_bounds .= As0[(1 + ns):ns * (N + 1)]
+        Jac[(1 + N * nc):(N * nc + ns * N), :] = block_B
+    else
+        for i in 1:N
+            row_range = (1 + (i - 1) * num_real_bounds_s):(i * num_real_bounds_s)
+            As0_bounds[row_range] .= As0[(1 + ns * i):(ns * (i + 1))][bool_vec_s]
+            Jac[(1 + offset_s + (i - 1) * num_real_bounds_s):offset_s + i * num_real_bounds_s] = @view block_B[(1 + (i - 1) * ns):(i*ns), :][bool_vec_s, :]
+        end
+        sl = sl[bool_vec_s]
+        su = su[bool_vec_s]
+    end
+
+    lcon2 = repeat(sl, N)
+    ucon2 = repeat(su, N)
+
+    LinearAlgebra.axpy!(-1, As0_bounds, ucon2)
+    LinearAlgebra.axpy!(-1, As0_bounds, lcon2)
+
+    lcon[1:length(dl)] = dl
+    ucon[1:length(du)] = du
+
+    if length(lcon2) > 0
+        lcon[(1 + length(dl)):(length(dl) + num_real_bounds_s * N)] = lcon2
+        ucon[(1 + length(du)):(length(du) + num_real_bounds_s * N)] = ucon2
+    end
+
+    nnzj = size(Jac, 1) * size(H, 2)
+    nh   = size(H, 1)
+    nnzh = div(nh * (nh + 1), 2)
+    ncon = size(Jac, 1)
+
+    J = LQJacobianOperator{T, V, M}(
+        Jac, N, nu, nc, num_real_bounds_s, 0,
+        Jac,
+        J1B, J2B, J3B
+    )
+
+    DenseLQDynamicModel(
+        NLPModels.NLPModelMeta(
+            nvar,
+            x0   = x0,
+            lvar = lvar,
+            uvar = uvar,
+            ncon = ncon,
+            lcon = lcon,
+            ucon = ucon,
+            nnzj = nnzj,
+            nnzh = nnzh,
+            lin = 1:ncon,
+            islp = (ncon == 0);
+        ),
+        NLPModels.Counters(),
+        QuadraticModels.QPData(
+            c0,
+            c,
+            H,
+            J
+        ),
+        dnlp,
+        dense_blocks
+    )
+end
+
+function _build_implicit_dense_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) where {T, V <: AbstractVector{T}, M <: AbstractMatrix{T}, MK <: AbstractMatrix{T}}
+    s0 = dnlp.s0
+    A  = dnlp.A
+    B  = dnlp.B
+    Q  = dnlp.Q
+    R  = dnlp.R
+    N  = dnlp.N
+
+    Qf = dnlp.Qf
+    S  = dnlp.S
+    ns = dnlp.ns
+    nu = dnlp.nu
+    E  = dnlp.E
+    F  = dnlp.F
+    K  = dnlp.K
+
+    sl = dnlp.sl
+    su = dnlp.su
+    ul = dnlp.ul
+    uu = dnlp.uu
+    gl = dnlp.gl
+    gu = dnlp.gu
+
+    nc = size(E, 1)
+
+    dense_blocks = _build_block_matrices(A, B, K, N)
+    block_A  = dense_blocks.A
+    block_B  = dense_blocks.B
+
+    H_blocks = _build_H_blocks(Q, R, block_A, block_B, S, Qf, K, s0, N)
+
+    H  = H_blocks.H
+    c0 = H_blocks.c0
+
+    bool_vec_s        = (su .!= Inf .|| sl .!= -Inf)
+    num_real_bounds_s   = sum(bool_vec_s)
+
+    bool_vec_u       = (ul .!= -Inf .|| uu .!= Inf)
+    num_real_bounds_u  = sum(bool_vec_u)
+
+
+    G   = _init_similar(Q, nc * N, nu, T)
+    Jac = _init_similar(Q, (nc + num_real_bounds_s + num_real_bounds_u) * N, nu, T)
+
+    As0 = _init_similar(s0, ns * (N + 1), T)
+    As0_bounds = _init_similar(s0, num_real_bounds_s * N, T)
+    KAs0_bounds = _init_similar(s0, num_real_bounds_u * N, T)
+
+    KBI        = _init_similar(Q, nu * N, nu, T)
+    KAs0       = _init_similar(s0, nu * N, T)
+    KAs0_block = _init_similar(s0, nu, T)
+    KB         = _init_similar(Q, nu, nu, T)
+
+    lcon = _init_similar(s0, size(Jac, 1), T)
+    ucon = _init_similar(s0, size(Jac, 1), T)
+
+    I_mat = _init_similar(Q, nu, nu, T)
+
+    J1B   = _init_similar(s0, nc, nu, T)
+    J2B   = _init_similar(s0, num_real_bounds_s, nu, T)
+    J3B   = _init_similar(s0, num_real_bounds_u, nu, T)
+
+    I_mat[LinearAlgebra.diagind(I_mat)] .= T(1)
+
+    dl = repeat(gl, N)
+    du = repeat(gu, N)
+
+    _set_G_blocks!(G, dl, du, block_B, block_A, s0, E, F, K, N)
+    Jac[1:nc * N, :] = G
+
+    LinearAlgebra.mul!(As0, block_A, s0)
+
+    # Convert state variable constraints to algebraic constraints
+    offset_s = nc * N
+    if num_real_bounds_s == length(sl)
+        As0_bounds .= As0[(1 + ns):ns * (N + 1)]
+        Jac[(1 + N * nc):(N * nc + ns * N), :] = block_B
+    else
+        for i in 1:N
+            row_range = (1 + (i - 1) * num_real_bounds_s):(i * num_real_bounds_s)
+            As0_bounds[row_range] .= As0[(1 + ns * i):(ns * (i + 1))][bool_vec_s]
+            Jac[(1 + offset_s + (i - 1) * num_real_bounds_s):offset_s + i * num_real_bounds_s] = @view block_B[(1 + (i - 1) * ns):(i*ns), :][bool_vec_s, :]
+        end
+        sl = sl[bool_vec_s]
+        su = su[bool_vec_s]
+    end
+
+    # Convert bounds on u to algebraic constraints
+    for i in 1:N
+        if i == 1
+            KB = I_mat
+        else
+            B_row_range = (1 + (i - 2) * ns):((i - 1) * ns)
+            B_sub_block = view(block_B, B_row_range, :)
+            LinearAlgebra.mul!(KB, K, B_sub_block)
+        end
+
+        KBI[(1 + nu * (i - 1)):(nu * i),:] = KB
+        LinearAlgebra.mul!(KAs0_block, K, As0[(1 + ns * (i - 1)):ns * i])
+        KAs0[(1 + nu * (i - 1)):nu * i] = KAs0_block
+    end
+
+    offset_u = nc * N + num_real_bounds_s * N
+    if num_real_bounds_u == length(ul)
+        KAs0_bounds .= KAs0
+        Jac[(1 + offset_u):(offset_u + nu * N), :] = KBI
+    else
+        for i in 1:N
+            row_range              = (1 + (i - 1) * num_real_bounds_u):(i * num_real_bounds_u)
+            KAs0_bounds[row_range] = KAs0[(1 + nu * (i - 1)):(nu * i)][bool_vec_u]
+
+            Jac[(1 + offset_u + (i - 1) * num_real_bounds_u):(offset_u + i * num_real_bounds_u), :] = @view KBI[(1 + (i - 1) * nu):(i * nu), :][bool_vec_u, :]
+        end
+
+        ul = ul[bool_vec_u]
+        uu = uu[bool_vec_u]
+    end
+
+    lcon2 = repeat(sl, N)
+    ucon2 = repeat(su, N)
+
+    lcon3 = repeat(ul, N)
+    ucon3 = repeat(uu, N)
+
+    LinearAlgebra.axpy!(-1, As0_bounds, lcon2)
+    LinearAlgebra.axpy!(-1, As0_bounds, ucon2)
+
+    LinearAlgebra.axpy!(-1, KAs0_bounds, lcon3)
+    LinearAlgebra.axpy!(-1, KAs0_bounds, ucon3)
+
+    lcon[1:length(dl)] = dl
+    ucon[1:length(du)] = du
+
+    if length(lcon2) > 0
+        lcon[(length(dl) + 1):(length(dl) + length(lcon2))] = lcon2
+        ucon[(length(du) + 1):(length(du) + length(ucon2))] = ucon2
+    end
+
+    if length(lcon3) > 0
+        lcon[(length(dl) + length(lcon2) + 1):(length(dl) + length(lcon2) + length(lcon3))] = lcon3
+        ucon[(length(du) + length(ucon2) + 1):(length(du) + length(ucon2) + length(ucon3))] = ucon3
+    end
+
+    nvar = nu * N
+    nnzj = size(Jac, 1) * size(H, 1)
+    nh   = size(H, 1)
+    nnzh = div(nh * (nh + 1), 2)
+    ncon = size(Jac, 1)
+
+    c = _init_similar(s0, nvar, T)
+    c .= H_blocks.c
+
+    J = LQJacobianOperator{T, V, M}(
+        Jac, N, nu, nc, num_real_bounds_s, num_real_bounds_u,
+        Jac,
+        J1B, J2B, J3B
+    )
 
     DenseLQDynamicModel(
         NLPModels.NLPModelMeta(
@@ -1733,6 +2099,122 @@ end
 function _init_similar(mat, dim1::Number, T=eltype(mat))
     new_mat = similar(mat, dim1); fill!(new_mat, zero(T))
     return new_mat
+end
+
+
+function LinearAlgebra.mul!(y::V,
+    Jac::LQJacobianOperator{T, V, M},
+    x::V
+) where {T, V <: AbstractVector{T}, M <: AbstractMatrix{T}}
+    fill!(y, zero(T))
+
+    J   = Jac.Jac
+    N   = Jac.N
+    nu  = Jac.nu
+    nc  = Jac.nc
+    nsc = Jac.nsc
+    nuc = Jac.nuc
+
+    for i in 1:N
+        sub_B1 = @view J[(1 + (i - 1) * nc):(i * nc), :]
+        sub_B2 = @view J[(1 + nc * N + (i - 1) * nsc):(nc * N + i * nsc), :]
+        sub_B3 = @view J[(1 + nc * N + nsc * N + (i - 1) * nuc):(nc * N + nsc * N + nuc * i), :]
+
+        for j in 1:(N - i + 1)
+            sub_x = view(x, (1 + (j - 1) * nu):(j * nu))
+            LinearAlgebra.mul!(view(y, (1 + nc * (j + i - 2)):(nc * (j + i - 1) )), sub_B1, sub_x, 1, 1)
+            LinearAlgebra.mul!(view(y, (1 + nc * N + nsc * (j + i - 2)):(nc * N + nsc * (j + i - 1))), sub_B2, sub_x, 1, 1)
+            LinearAlgebra.mul!(view(y, (1 + nc * N + nsc * N + nuc * (j + i- 2)):(nc * N + nsc * N + nuc * (j + i - 1))), sub_B3, sub_x, 1, 1)
+        end
+    end
+end
+
+function LinearAlgebra.mul!(
+    y::V,
+    Jac::LinearOperators.AdjointLinearOperator{T, LQJacobianOperator{T, V, M}},
+    x::V
+) where {T, V <: AbstractVector{T}, M <: AbstractMatrix{T}}
+    fill!(y, zero(T))
+
+    J   = get_jacobian(Jac).Jac
+    N   = get_jacobian(Jac).N
+    nu  = get_jacobian(Jac).nu
+    nc  = get_jacobian(Jac).nc
+    nsc = get_jacobian(Jac).nsc
+    nuc = get_jacobian(Jac).nuc
+
+    for i in 1:N
+        sub_B1 = @view J[(1 + (i - 1) * nc):(i * nc), :]
+        sub_B2 = @view J[(1 + nc * N + (i - 1) * nsc):(nc * N + i * nsc), :]
+        sub_B3 = @view J[(1 + nc * N + nsc * N + (i - 1) * nuc):(nc * N + nsc * N + nuc * i), :]
+
+        for j in 1:(N - i + 1)
+            x1 = view(x, (1 + (j + i - 2) * nc):((j + i - 1) * nc))
+            x2 = view(x, (1 + nc * N + (j + i - 2) * nsc):(nc * N + (j + i - 1) * nsc))
+            x3 = view(x, (1 + nc * N + nsc * N + (j + i - 2) * nuc):(nc * N + nsc * N + (j + i - 1) * nuc))
+
+            LinearAlgebra.mul!(view(y, (1 + nu * (j - 1)):(nu * j )), sub_B1', x1, 1, 1)
+            LinearAlgebra.mul!(view(y, (1 + nu * (j - 1)):(nu * j )), sub_B2', x2, 1, 1)
+            LinearAlgebra.mul!(view(y, (1 + nu * (j - 1)):(nu * j )), sub_B3', x3, 1, 1)
+        end
+    end
+end
+
+
+"""
+    get_jacobian(lqdm::DenseLQDynamicModel) -> LQJacobianOperator
+    get_jacobian(Jac::AdjointLinearOpeartor{T, LQJacobianOperator}) -> LQJacobianOperator
+
+Gets the `LQJacobianOperator` from `DenseLQDynamicModel` (if the `QPdata` contains a `LQJacobian Operator`)
+or returns the `LQJacobian Operator` from the adjoint of the `LQJacobianOperator`
+"""
+function get_jacobian(
+    lqdm::DenseLQDynamicModel{T, V, M1, M2, M3, M4, MK}
+) where {T, V, M1, M2 <: LQJacobianOperator, M3, M4, MK}
+    return lqdm.data.A
+end
+
+function get_jacobian(
+    Jac::LinearOperators.AdjointLinearOperator{T, LQJacobianOperator{T, V, M}}
+) where {T, V <: AbstractVector{T}, M <: AbstractMatrix{T}}
+    return Jac'
+end
+
+function Base.length(
+    Jac::LQJacobianOperator{T, V, M}
+) where {T, V <: AbstractVector{T}, M <: AbstractMatrix{T}}
+    return length(Jac.Jac)
+end
+
+function Base.size(
+    Jac::LQJacobianOperator{T, V, M}
+) where {T, V <: AbstractVector{T}, M <: AbstractMatrix{T}}
+    return size(Jac.Jac)
+end
+
+function Base.eltype(
+    Jac::LQJacobianOperator{T, V, M}
+) where {T, V <: AbstractVector{T}, M <: AbstractMatrix{T}}
+    return T
+end
+
+function Base.isreal(
+    Jac::LQJacobianOperator{T, V, M}
+) where {T, V <: AbstractVector{T}, M <: AbstractMatrix{T}}
+    return isreal(Jac.Jac)
+end
+
+"""
+    LinearOperators.reset!(Jac::LQJacobianOperator{T, V, M})
+
+Resets the values of attributes `JB1`, `JB2`, and `JB3` to zero
+"""
+function LinearOperators.reset!(
+    Jac::LQJacobianOperator{T, V, M}
+) where {T, V <: AbstractVector{T}, M <: AbstractMatrix{T}}
+    fill!(Jac.JB1, T(0))
+    fill!(Jac.JB2, T(0))
+    fill!(Jac.JB3, T(0))
 end
 
 end # module
