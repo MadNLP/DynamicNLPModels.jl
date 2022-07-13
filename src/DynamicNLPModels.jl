@@ -2168,13 +2168,13 @@ end
 Gets the `LQJacobianOperator` from `DenseLQDynamicModel` (if the `QPdata` contains a `LQJacobian Operator`)
 or returns the `LQJacobian Operator` from the adjoint of the `LQJacobianOperator`
 """
-function get_Jacobian(
+function get_jacobian(
     lqdm::DenseLQDynamicModel{T, V, M1, M2, M3, M4, MK}
 ) where {T, V, M1, M2 <: LQJacobianOperator, M3, M4, MK}
     return lqdm.data.A
 end
 
-function get_Jacobian(
+function get_jacobian(
     Jac::LinearOperators.AdjointLinearOperator{T, LQJacobianOperator{T, V, M}}
 ) where {T, V <: AbstractVector{T}, M <: AbstractMatrix{T}}
     return Jac'
