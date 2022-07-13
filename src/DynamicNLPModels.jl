@@ -2136,12 +2136,12 @@ function LinearAlgebra.mul!(
 ) where {T, V <: AbstractVector{T}, M <: AbstractMatrix{T}}
     fill!(y, zero(T))
 
-    J   = get_Jacobian(Jac).Jac
-    N   = get_Jacobian(Jac).N
-    nu  = get_Jacobian(Jac).nu
-    nc  = get_Jacobian(Jac).nc
-    nsc = get_Jacobian(Jac).nsc
-    nuc = get_Jacobian(Jac).nuc
+    J   = get_jacobian(Jac).Jac
+    N   = get_jacobian(Jac).N
+    nu  = get_jacobian(Jac).nu
+    nc  = get_jacobian(Jac).nc
+    nsc = get_jacobian(Jac).nsc
+    nuc = get_jacobian(Jac).nuc
 
     for i in 1:N
         sub_B1 = @view J[(1 + (i - 1) * nc):(i * nc), :]
