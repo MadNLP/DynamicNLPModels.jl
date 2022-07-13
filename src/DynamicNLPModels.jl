@@ -8,7 +8,7 @@ import LinearOperators
 
 import SparseArrays: SparseMatrixCSC
 
-export LQDynamicData, SparseLQDynamicModel, DenseLQDynamicModel, get_u, get_s, get_Jacobian
+export LQDynamicData, SparseLQDynamicModel, DenseLQDynamicModel, get_u, get_s, get_jacobian
 
 abstract type AbstractLQDynData{T,V} end
 """
@@ -2162,8 +2162,8 @@ end
 
 
 """
-    get_Jacobian(lqdm::DenseLQDynamicModel) -> LQJacobianOperator
-    get_Jacobian(Jac::AdjointLinearOpeartor{T, LQJacobianOperator}) -> LQJacobianOperator
+    get_jacobian(lqdm::DenseLQDynamicModel) -> LQJacobianOperator
+    get_jacobian(Jac::AdjointLinearOpeartor{T, LQJacobianOperator}) -> LQJacobianOperator
 
 Gets the `LQJacobianOperator` from `DenseLQDynamicModel` (if the `QPdata` contains a `LQJacobian Operator`)
 or returns the `LQJacobian Operator` from the adjoint of the `LQJacobianOperator`
