@@ -1,6 +1,69 @@
 using Test, DynamicNLPModels, MadNLP, Random, JuMP, LinearAlgebra, SparseArrays, CUDA
 include("sparse_lq_test.jl")
 
+function tril_to_full!(dense::Matrix{T}) where T
+    for i=1:size(dense,1)
+        Threads.@threads for j=i:size(dense,2)
+            @inbounds dense[i,j]=dense[j,i]
+        end
+    end
+end
+
+function test_mul(lq_dense, lq_dense_imp)
+    dnlp = lq_dense.dynamic_data
+    N    = dnlp.N
+    nu   = dnlp.nu
+
+    J     = get_jacobian(lq_dense)
+    J_imp = get_jacobian(lq_dense_imp)
+
+    Random.seed!(10)
+    x = rand(nu * N)
+    y = rand(size(J, 1))
+    x_imp = copy(x)
+    y_imp = copy(y)
+
+    LinearAlgebra.mul!(y, J, x)
+    LinearAlgebra.mul!(y_imp, J_imp, x_imp)
+
+    @test y ≈ y_imp atol = 1e-14
+
+    x = rand(nu * N)
+    y = rand(size(J, 1))
+    x_imp = copy(x)
+    y_imp = copy(y)
+
+    LinearAlgebra.mul!(x, J', y)
+    LinearAlgebra.mul!(x_imp, J_imp', y_imp)
+
+    @test x ≈ x_imp atol = 1e-14
+end
+
+function test_add_jtsj(lq_dense, lq_dense_imp)
+    dnlp = lq_dense.dynamic_data
+    N    = dnlp.N
+    nu   = dnlp.nu
+
+    H     = zeros(nu * N, nu * N)
+    H_imp = zeros(nu * N, nu * N)
+
+    Random.seed!(10)
+    J     = get_jacobian(lq_dense)
+    J_imp = get_jacobian(lq_dense_imp)
+    ΣJ    = similar(J); fill!(ΣJ, 0)
+
+    x     = rand(size(J, 1))
+
+    LinearAlgebra.mul!(ΣJ, Diagonal(x), J)
+    LinearAlgebra.mul!(H, J', ΣJ)
+
+    add_jtsj!(H_imp, J_imp, x)
+
+    tril_to_full!(H_imp)
+
+    @test H_imp ≈ H atol = 1e-10
+end
+
 N  = 3 # number of time steps
 ns = 2 # number of states
 nu = 1 # number of inputs
@@ -42,7 +105,6 @@ S = rand(ns, nu)
 
 K = rand(nu, ns)
 
-
 # Test with no bounds
 model     = build_QP_JuMP_model(Q,R,A,B, N;s0=s0)
 dnlp      = LQDynamicData(s0, A, B, Q, R, N)
@@ -66,33 +128,10 @@ solution_ref_dense_from_data  = madnlp(lq_dense_from_data, max_iter=100)
 @test solution_ref_sparse.solution[(ns * (N + 1) + 1):(ns * (N + 1) + nu*N)] ≈ solution_ref_dense.solution atol =  1e-6
 @test solution_ref_sparse_from_data.solution[(ns * (N + 1) + 1):(ns * (N + 1) + nu*N)] ≈ solution_ref_dense_from_data.solution atol =  1e-6
 
-
 # Test mul! operators and LQJacobianOperator
-
-Random.seed!(10)
-x = rand(nu * N)
-y = rand(size(lq_dense.data.A, 1))
-x_imp = copy(x)
-y_imp = copy(y)
-
-lq_dense_imp = DenseLQDynamicModel(dnlp; implicit=true)
-
-Jac = get_jacobian(lq_dense_imp)
-
-LinearAlgebra.mul!(y, lq_dense.data.A, x)
-LinearAlgebra.mul!(y_imp, Jac, x_imp)
-
-@test y ≈ y_imp atol = 1e-14
-
-x = rand(nu * N)
-y = rand(size(lq_dense.data.A, 1))
-x_imp = copy(x)
-y_imp = copy(y)
-
-LinearAlgebra.mul!(x, lq_dense.data.A', y)
-LinearAlgebra.mul!(x_imp, Jac', y_imp)
-
-@test x ≈ x_imp atol = 1e-14
+lq_dense_imp = DenseLQDynamicModel(dnlp; implicit = true)
+test_mul(lq_dense, lq_dense_imp)
+test_add_jtsj(lq_dense, lq_dense_imp)
 
 # Test with lower bounds
 model     = build_QP_JuMP_model(Q,R,A,B, N;s0=s0, sl = sl, ul = ul)
@@ -118,7 +157,6 @@ solution_ref_dense_from_data  = madnlp(lq_dense_from_data, max_iter=100)
 @test solution_ref_sparse_from_data.solution[(ns * (N + 1) + 1):(ns * (N + 1) + nu*N)] ≈ solution_ref_dense_from_data.solution atol =  1e-6
 
 
-
 # Test with upper bounds
 model     = build_QP_JuMP_model(Q,R,A,B, N;s0=s0, su = su, uu = uu)
 dnlp      = LQDynamicData(s0, A, B, Q, R, N; su = su, uu = uu)
@@ -141,7 +179,6 @@ solution_ref_dense_from_data  = madnlp(lq_dense_from_data, max_iter=100)
 
 @test solution_ref_sparse.solution[(ns * (N + 1) + 1):(ns * (N + 1) + nu*N)] ≈ solution_ref_dense.solution atol =  1e-6
 @test solution_ref_sparse_from_data.solution[(ns * (N + 1) + 1):(ns * (N + 1) + nu*N)] ≈ solution_ref_dense_from_data.solution atol =  1e-6
-
 
 
 # Test with upper and lower bounds
@@ -169,31 +206,9 @@ solution_ref_dense_from_data  = madnlp(lq_dense_from_data, max_iter=100)
 
 
 # Test mul! operators and LQJacobianOperator
-
-Random.seed!(10)
-x = rand(nu * N)
-y = rand(size(lq_dense.data.A, 1))
-x_imp = copy(x)
-y_imp = copy(y)
-
-lq_dense_imp = DenseLQDynamicModel(dnlp; implicit=true)
-
-Jac = get_jacobian(lq_dense_imp)
-
-LinearAlgebra.mul!(y, lq_dense.data.A, x)
-LinearAlgebra.mul!(y_imp, Jac, x_imp)
-
-@test y ≈ y_imp atol = 1e-14
-
-x = rand(nu * N)
-y = rand(size(lq_dense.data.A, 1))
-x_imp = copy(x)
-y_imp = copy(y)
-
-LinearAlgebra.mul!(x, lq_dense.data.A', y)
-LinearAlgebra.mul!(x_imp, Jac', y_imp)
-
-@test x ≈ x_imp atol = 1e-14
+lq_dense_imp = DenseLQDynamicModel(dnlp; implicit = true)
+test_mul(lq_dense, lq_dense_imp)
+test_add_jtsj(lq_dense, lq_dense_imp)
 
 
 # Test with Qf matrix
@@ -220,33 +235,10 @@ solution_ref_dense_from_data  = madnlp(lq_dense_from_data, max_iter=100)
 @test solution_ref_sparse_from_data.solution[(ns * (N + 1) + 1):(ns * (N + 1) + nu*N)] ≈ solution_ref_dense_from_data.solution atol =  1e-6
 
 
-
 # Test mul! operators and LQJacobianOperator
-
-Random.seed!(10)
-x = rand(nu * N)
-y = rand(size(lq_dense.data.A, 1))
-x_imp = copy(x)
-y_imp = copy(y)
-
-lq_dense_imp = DenseLQDynamicModel(dnlp; implicit=true)
-
-Jac = get_jacobian(lq_dense_imp)
-
-LinearAlgebra.mul!(y, lq_dense.data.A, x)
-LinearAlgebra.mul!(y_imp, Jac, x_imp)
-
-@test y ≈ y_imp atol = 1e-14
-
-x = rand(nu * N)
-y = rand(size(lq_dense.data.A, 1))
-x_imp = copy(x)
-y_imp = copy(y)
-
-LinearAlgebra.mul!(x, lq_dense.data.A', y)
-LinearAlgebra.mul!(x_imp, Jac', y_imp)
-
-@test x ≈ x_imp atol = 1e-14
+lq_dense_imp = DenseLQDynamicModel(dnlp; implicit = true)
+test_mul(lq_dense, lq_dense_imp)
+test_add_jtsj(lq_dense, lq_dense_imp)
 
 
 # Test get_u and get_s functions with no K matrix
@@ -285,31 +277,9 @@ solution_ref_dense_from_data  = madnlp(lq_dense_from_data, max_iter=100)
 
 
 # Test mul! operators and LQJacobianOperator
-
-Random.seed!(10)
-x = rand(nu * N)
-y = rand(size(lq_dense.data.A, 1))
-x_imp = copy(x)
-y_imp = copy(y)
-
-lq_dense_imp = DenseLQDynamicModel(dnlp; implicit=true)
-
-Jac = get_jacobian(lq_dense_imp)
-
-LinearAlgebra.mul!(y, lq_dense.data.A, x)
-LinearAlgebra.mul!(y_imp, Jac, x_imp)
-
-@test y ≈ y_imp atol = 1e-14
-
-x = rand(nu * N)
-y = rand(size(lq_dense.data.A, 1))
-x_imp = copy(x)
-y_imp = copy(y)
-
-LinearAlgebra.mul!(x, lq_dense.data.A', y)
-LinearAlgebra.mul!(x_imp, Jac', y_imp)
-
-@test x ≈ x_imp atol = 1e-14
+lq_dense_imp = DenseLQDynamicModel(dnlp; implicit = true)
+test_mul(lq_dense, lq_dense_imp)
+test_add_jtsj(lq_dense, lq_dense_imp)
 
 
 # Test edge case where one state is unbounded, other(s) is bounded
@@ -386,7 +356,6 @@ solution_ref_dense_from_data  = madnlp(lq_dense_from_data, max_iter=100)
 @test solution_ref_sparse_from_data.solution[(ns * (N + 1) + 1):(ns * (N + 1) + nu*N)] ≈ solution_ref_dense_from_data.solution atol =  1e-6
 
 
-
 # Test K matrix case with S
 model     = build_QP_JuMP_model(Q,R,A,B, N;s0=s0, sl = sl, ul = ul, su = su, uu = uu, E = E, F = F, gl = gl, gu = gu, K = K, S = S)
 dnlp      = LQDynamicData(s0, A, B, Q, R, N; sl = sl, ul = ul, su = su, uu = uu, E = E, F = F, gl = gl, gu = gu, K = K, S = S)
@@ -411,33 +380,10 @@ solution_ref_dense_from_data  = madnlp(lq_dense_from_data, max_iter=100)
 @test solution_ref_sparse_from_data.solution[(ns * (N + 1) + 1):(ns * (N + 1) + nu*N)] ≈ solution_ref_dense_from_data.solution atol =  1e-6
 
 
-
 # Test mul! operators and LQJacobianOperator
-
-Random.seed!(10)
-x = rand(nu * N)
-y = rand(size(lq_dense.data.A, 1))
-x_imp = copy(x)
-y_imp = copy(y)
-
-lq_dense_imp = DenseLQDynamicModel(dnlp; implicit=true)
-
-Jac = get_jacobian(lq_dense_imp)
-
-LinearAlgebra.mul!(y, lq_dense.data.A, x)
-LinearAlgebra.mul!(y_imp, Jac, x_imp)
-
-@test y ≈ y_imp atol = 1e-14
-
-x = rand(nu * N)
-y = rand(size(lq_dense.data.A, 1))
-x_imp = copy(x)
-y_imp = copy(y)
-
-LinearAlgebra.mul!(x, lq_dense.data.A', y)
-LinearAlgebra.mul!(x_imp, Jac', y_imp)
-
-@test x ≈ x_imp atol = 1e-14
+lq_dense_imp = DenseLQDynamicModel(dnlp; implicit = true)
+test_mul(lq_dense, lq_dense_imp)
+test_add_jtsj(lq_dense, lq_dense_imp)
 
 # Test K matrix case with S and with partial bounds on u
 
@@ -466,7 +412,6 @@ S = rand(ns, nu)
 
 K = rand(nu, ns)
 
-
 model     = build_QP_JuMP_model(Q,R,A,B, N;s0=s0, sl = sl, ul = ul_with_inf, su = su, uu = uu_with_inf, E = E, F = F, gl = gl, gu = gu, K = K, S = S)
 dnlp      = LQDynamicData(s0, A, B, Q, R, N; sl = sl, ul = ul_with_inf, su = su, uu = uu_with_inf, E = E, F = F, gl = gl, gu = gu, K = K, S = S)
 lq_sparse = SparseLQDynamicModel(dnlp)
@@ -491,31 +436,9 @@ solution_ref_dense_from_data  = madnlp(lq_dense_from_data, max_iter=100)
 
 
 # Test mul! operators and LQJacobianOperator
-
-Random.seed!(10)
-x = rand(nu * N)
-y = rand(size(lq_dense.data.A, 1))
-x_imp = copy(x)
-y_imp = copy(y)
-
-lq_dense_imp = DenseLQDynamicModel(dnlp; implicit=true)
-
-Jac = get_jacobian(lq_dense_imp)
-
-LinearAlgebra.mul!(y, lq_dense.data.A, x)
-LinearAlgebra.mul!(y_imp, Jac, x_imp)
-
-@test y ≈ y_imp atol = 1e-14
-
-x = rand(nu * N)
-y = rand(size(lq_dense.data.A, 1))
-x_imp = copy(x)
-y_imp = copy(y)
-
-LinearAlgebra.mul!(x, lq_dense.data.A', y)
-LinearAlgebra.mul!(x_imp, Jac', y_imp)
-
-@test x ≈ x_imp atol = 1e-14
+lq_dense_imp = DenseLQDynamicModel(dnlp; implicit = true)
+test_mul(lq_dense, lq_dense_imp)
+test_add_jtsj(lq_dense, lq_dense_imp)
 
 # Test K with no bounds
 model     = build_QP_JuMP_model(Q,R,A,B, N;s0=s0, E = E, F = F, gl = gl, gu = gu, K = K)
@@ -541,33 +464,10 @@ solution_ref_dense_from_data  = madnlp(lq_dense_from_data, max_iter=100)
 @test solution_ref_sparse_from_data.solution[(ns * (N + 1) + 1):(ns * (N + 1) + nu*N)] ≈ solution_ref_dense_from_data.solution atol =  1e-5
 
 
-
 # Test mul! operators and LQJacobianOperator
-
-Random.seed!(10)
-x = rand(nu * N)
-y = rand(size(lq_dense.data.A, 1))
-x_imp = copy(x)
-y_imp = copy(y)
-
-lq_dense_imp = DenseLQDynamicModel(dnlp; implicit=true)
-
-Jac = get_jacobian(lq_dense_imp)
-
-LinearAlgebra.mul!(y, lq_dense.data.A, x)
-LinearAlgebra.mul!(y_imp, Jac, x_imp)
-
-@test y ≈ y_imp atol = 1e-14
-
-x = rand(nu * N)
-y = rand(size(lq_dense.data.A, 1))
-x_imp = copy(x)
-y_imp = copy(y)
-
-LinearAlgebra.mul!(x, lq_dense.data.A', y)
-LinearAlgebra.mul!(x_imp, Jac', y_imp)
-
-@test x ≈ x_imp atol = 1e-14
+lq_dense_imp = DenseLQDynamicModel(dnlp; implicit = true)
+test_mul(lq_dense, lq_dense_imp)
+test_add_jtsj(lq_dense, lq_dense_imp)
 
 # Test get_u and get_s functions with K matrix
 s_values = value.(all_variables(model)[1:(ns * (N + 1))])
@@ -577,7 +477,6 @@ u_values = value.(all_variables(model)[(1 + ns * (N + 1)):(ns * (N + 1) + nu * N
 @test u_values ≈ get_u(solution_ref_sparse, lq_sparse) atol = 1e-7
 @test s_values ≈ get_s(solution_ref_dense, lq_dense) atol = 1e-7
 @test u_values ≈ get_u(solution_ref_dense, lq_dense) atol = 1e-7
-
 
 
 # Test get_* and set_* functions
@@ -604,7 +503,6 @@ set_Q!(lq_sparse, 1, 1, rand_val)
 Qtest[2, 1] = rand_val
 set_Q!(lq_dense, 2, 1, rand_val)
 @test get_Q(lq_dense) == Qtest
-
 
 rand_val = rand()
 gltest = copy(gl)

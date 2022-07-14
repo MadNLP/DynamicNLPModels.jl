@@ -8,7 +8,7 @@ import LinearOperators
 
 import SparseArrays: SparseMatrixCSC
 
-export LQDynamicData, SparseLQDynamicModel, DenseLQDynamicModel, get_u, get_s, get_jacobian
+export LQDynamicData, SparseLQDynamicModel, DenseLQDynamicModel, get_u, get_s, get_jacobian, add_jtsj!
 
 abstract type AbstractLQDynData{T,V} end
 """
@@ -369,16 +369,10 @@ Attributes
  - `nc` : number of algebraic constraints of the form gl <= Es + Fu <= gu
  - `nsc`: number of bounded state variables
  - `nuc`: number of bounded input variables (if `K` is defined)
- - `scaled_Jac`: placeholder to avoid allocaiton when calculating `Sigma J`
- - `J1Bx` : vector for storing multiplications when doing `Jx`
- - `J2Bx` : vector for storing multiplications when doing `Jx`
- - `J3Bx` : vector for storing multiplications when doing `Jx`
- - `J1BTx`: vector for storing multiplications when doing `J^T x`
- - `J2BTx`: vector for storing multiplications when doing `J^T x`
- - `J3BTx`: vector for storing multiplications when doing `J^T x`
- - `J1B`  : matrix for storing multiplicaitons when doing `J^T Sigma J`
- - `J2B`  : matrix for storing multiplicaitons when doing `J^T Sigma J`
- - `J3B`  : matrix for storing multiplicaitons when doing `J^T Sigma J`
+ - `SJ1`: placeholder for storing data when calculating `ΣJ`
+ - `SJ2`: placeholder for storing data when calculating `ΣJ`
+ - `SJ3`: placeholder for storing data when calculating `ΣJ`
+
 """
 struct LQJacobianOperator{T, V, M} <: LinearOperators.AbstractLinearOperator{T}
     Jac::M        # column of Jacobian block matrix
@@ -388,12 +382,10 @@ struct LQJacobianOperator{T, V, M} <: LinearOperators.AbstractLinearOperator{T}
     nsc::Int      # number of state variables that are constrained
     nuc::Int      # number of input variables that are constrained
 
-    scaled_Jac::M
-
     # Storage matices for building J^TΣJ
-    J1B::M
-    J2B::M
-    J3B::M
+    SJ1::M
+    SJ2::M
+    SJ3::M
 end
 
 
@@ -994,9 +986,9 @@ function _build_implicit_dense_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) w
     lcon = _init_similar(s0, nc * N + num_real_bounds_s * N, T)
     ucon = _init_similar(s0, nc * N + num_real_bounds_s * N, T)
 
-    J1B   = _init_similar(s0, nc, nu, T)
-    J2B   = _init_similar(s0, num_real_bounds_s, nu, T)
-    J3B   = _init_similar(s0, 0, nu, T)
+    SJ1  = _init_similar(s0, nc, nu, T)
+    SJ2  = _init_similar(s0, num_real_bounds_s, nu, T)
+    SJ3  = _init_similar(s0, 0, nu, T)
 
     dense_blocks = _build_block_matrices(A, B, K, N)
     block_A      = dense_blocks.A
@@ -1055,8 +1047,7 @@ function _build_implicit_dense_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) w
 
     J = LQJacobianOperator{T, V, M}(
         Jac, N, nu, nc, num_real_bounds_s, 0,
-        Jac,
-        J1B, J2B, J3B
+        SJ1, SJ2, SJ3
     )
 
     DenseLQDynamicModel(
@@ -1143,9 +1134,9 @@ function _build_implicit_dense_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) w
 
     I_mat = _init_similar(Q, nu, nu, T)
 
-    J1B   = _init_similar(s0, nc, nu, T)
-    J2B   = _init_similar(s0, num_real_bounds_s, nu, T)
-    J3B   = _init_similar(s0, num_real_bounds_u, nu, T)
+    SJ1   = _init_similar(s0, nc, nu, T)
+    SJ2   = _init_similar(s0, num_real_bounds_s, nu, T)
+    SJ3   = _init_similar(s0, num_real_bounds_u, nu, T)
 
     I_mat[LinearAlgebra.diagind(I_mat)] .= T(1)
 
@@ -1239,8 +1230,7 @@ function _build_implicit_dense_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) w
 
     J = LQJacobianOperator{T, V, M}(
         Jac, N, nu, nc, num_real_bounds_s, num_real_bounds_u,
-        Jac,
-        J1B, J2B, J3B
+        SJ1, SJ2, SJ3
     )
 
     DenseLQDynamicModel(
@@ -2170,7 +2160,7 @@ or returns the `LQJacobian Operator` from the adjoint of the `LQJacobianOperator
 """
 function get_jacobian(
     lqdm::DenseLQDynamicModel{T, V, M1, M2, M3, M4, MK}
-) where {T, V, M1, M2 <: LQJacobianOperator, M3, M4, MK}
+) where {T, V, M1, M2, M3, M4, MK}
     return lqdm.data.A
 end
 
@@ -2207,14 +2197,72 @@ end
 """
     LinearOperators.reset!(Jac::LQJacobianOperator{T, V, M})
 
-Resets the values of attributes `JB1`, `JB2`, and `JB3` to zero
+Resets the values of attributes `SJ1`, `SJ2`, and `SJ3` to zero
 """
 function LinearOperators.reset!(
     Jac::LQJacobianOperator{T, V, M}
 ) where {T, V <: AbstractVector{T}, M <: AbstractMatrix{T}}
-    fill!(Jac.JB1, T(0))
-    fill!(Jac.JB2, T(0))
-    fill!(Jac.JB3, T(0))
+    fill!(Jac.SJ1, T(0))
+    fill!(Jac.SJ2, T(0))
+    fill!(Jac.SJ3, T(0))
+end
+
+"""
+    add_jtsj!(H::M, Jac::LQJacobianOperator{T, V, M}, Σ::V)
+
+Generates `Jac' Σ Jac` and adds it to the matrix `H`.
+"""
+function add_jtsj!(
+    H::AbstractMatrix{T},
+    Jac::LQJacobianOperator{T, V, M},
+    Σ::V,
+) where {T, V <: AbstractVector{T}, M <: AbstractMatrix{T}}
+
+    J   = Jac.Jac
+    N   = Jac.N
+    nu  = Jac.nu
+    nc  = Jac.nc
+    nsc = Jac.nsc
+    nuc = Jac.nuc
+
+    ΣJ1 = Jac.SJ1
+    ΣJ2 = Jac.SJ2
+    ΣJ3 = Jac.SJ3
+
+    for i in 1:N
+        J1_left_range = (1 + (i - 1) * nc):(i * nc)
+        J2_left_range = (1 + nc * N + (i - 1) * nsc):(nc * N + i * nsc)
+        J3_left_range = (1 + (nc + nsc) * N + (i - 1) * nuc):((nc + nsc) * N + i * nuc)
+        left_block1 = view(J, J1_left_range, :)
+        left_block2 = view(J, J2_left_range, :)
+        left_block3 = view(J, J3_left_range, :)
+
+        for j in 1:(N + 1 - i)
+            J1_right_range = (1 + (j + i - 2) * nc):((j + i - 1) * nc)
+            J2_right_range = (1 + nc * N + (j + i - 2) * nsc):(nc * N + (j + i - 1) * nsc)
+            J3_right_range = (1 + (nc + nsc) * N + (j + i - 2) * nuc):((nc + nsc) * N + (j + i - 1) * nuc)
+
+            right_block1 = view(J, J1_right_range, :)
+            right_block2 = view(J, J2_right_range, :)
+            right_block3 = view(J, J3_right_range, :)
+
+            for k in 1:(N - j - i + 2)
+                Σ_range1 = (1 + (k + i + j + - 3) * nc):((k + i + j - 2) * nc)
+                Σ_range2 = (1 + nc * N + (k + i + j - 3) * nsc):(nc * N + (k + i + j - 2) * nsc)
+                Σ_range3 = (1 + (nc + nsc) * N + (k + i + j - 3) * nuc):((nc + nsc) * N + (k + i + j - 2) * nuc)
+                ΣJ1 .= right_block1 .* view(Σ, Σ_range1)
+                ΣJ2 .= right_block2 .* view(Σ, Σ_range2)
+                ΣJ3 .= right_block3 .* view(Σ, Σ_range3)
+
+                row_range = (1 + nu * (k + (j - 1) - 1)):(nu * (k + (j - 1)))
+                col_range = (1 + nu * (k - 1)):(nu * k)
+
+                LinearAlgebra.mul!(view(H, row_range, col_range), left_block1', ΣJ1, 1, 1)
+                LinearAlgebra.mul!(view(H, row_range, col_range), left_block2', ΣJ2, 1, 1)
+                LinearAlgebra.mul!(view(H, row_range, col_range), left_block3', ΣJ3, 1, 1)
+            end
+        end
+    end
 end
 
 end # module
