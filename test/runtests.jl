@@ -3,7 +3,7 @@ include("sparse_lq_test.jl")
 
 function tril_to_full!(dense::Matrix{T}) where T
     for i=1:size(dense,1)
-        Threads.@threads for j=i:size(dense,2)
+        for j=i:size(dense,2)
             @inbounds dense[i,j]=dense[j,i]
         end
     end

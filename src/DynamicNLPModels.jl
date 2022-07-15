@@ -2194,6 +2194,17 @@ function Base.isreal(
     return isreal(Jac.Jac)
 end
 
+function Base.show(
+    Jac::LQJacobianOperator{T, V, M}
+) where {T, V <: AbstractVector{T}, M <: AbstractMatrix{T}}
+    show(Jac.Jac)
+end
+
+function Base.display(
+    Jac::LQJacobianOperator{T, V, M}
+) where {T, V <: AbstractVector{T}, M <: AbstractMatrix{T}}
+    display(Jac.Jac)
+end
 """
     LinearOperators.reset!(Jac::LQJacobianOperator{T, V, M})
 
@@ -2213,9 +2224,11 @@ end
 Generates `Jac' Σ Jac` and adds it to the matrix `H`.
 """
 function add_jtsj!(
-    H::AbstractMatrix{T},
+    H::M,
     Jac::LQJacobianOperator{T, V, M},
     Σ::V,
+    alpha::Number = 1,
+    beta::Number = 1
 ) where {T, V <: AbstractVector{T}, M <: AbstractMatrix{T}}
 
     J   = Jac.Jac
@@ -2228,6 +2241,8 @@ function add_jtsj!(
     ΣJ1 = Jac.SJ1
     ΣJ2 = Jac.SJ2
     ΣJ3 = Jac.SJ3
+
+    LinearAlgebra.lmul!(beta, H)
 
     for i in 1:N
         J1_left_range = (1 + (i - 1) * nc):(i * nc)
@@ -2257,9 +2272,9 @@ function add_jtsj!(
                 row_range = (1 + nu * (k + (j - 1) - 1)):(nu * (k + (j - 1)))
                 col_range = (1 + nu * (k - 1)):(nu * k)
 
-                LinearAlgebra.mul!(view(H, row_range, col_range), left_block1', ΣJ1, 1, 1)
-                LinearAlgebra.mul!(view(H, row_range, col_range), left_block2', ΣJ2, 1, 1)
-                LinearAlgebra.mul!(view(H, row_range, col_range), left_block3', ΣJ3, 1, 1)
+                LinearAlgebra.mul!(view(H, row_range, col_range), left_block1', ΣJ1, alpha, 1)
+                LinearAlgebra.mul!(view(H, row_range, col_range), left_block2', ΣJ2, alpha, 1)
+                LinearAlgebra.mul!(view(H, row_range, col_range), left_block3', ΣJ3, alpha, 1)
             end
         end
     end
