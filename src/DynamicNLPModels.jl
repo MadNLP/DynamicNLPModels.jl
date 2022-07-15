@@ -363,7 +363,7 @@ to `LinearAlgebra.mul!()`.
 
 ---
 Attributes
- - `Jac`: Matrix of first `nu` columns of the Jacobian
+ - `truncated_jac`: Matrix of first `nu` columns of the Jacobian
  - `N`  : number of time steps
  - `nu` : number of inputs
  - `nc` : number of algebraic constraints of the form gl <= Es + Fu <= gu
@@ -375,12 +375,12 @@ Attributes
 
 """
 struct LQJacobianOperator{T, V, M} <: LinearOperators.AbstractLinearOperator{T}
-    Jac::M        # column of Jacobian block matrix
-    N::Int        # number of time steps
-    nu::Int       # number of inputs
-    nc::Int       # number of inequality constraints
-    nsc::Int      # number of state variables that are constrained
-    nuc::Int      # number of input variables that are constrained
+    truncated_jac::M  # column of Jacobian block matrix
+    N::Int            # number of time steps
+    nu::Int           # number of inputs
+    nc::Int           # number of inequality constraints
+    nsc::Int          # number of state variables that are constrained
+    nuc::Int          # number of input variables that are constrained
 
     # Storage matices for building J^TΣJ
     SJ1::M
@@ -2098,7 +2098,7 @@ function LinearAlgebra.mul!(y::V,
 ) where {T, V <: AbstractVector{T}, M <: AbstractMatrix{T}}
     fill!(y, zero(T))
 
-    J   = Jac.Jac
+    J   = Jac.truncated_jac
     N   = Jac.N
     nu  = Jac.nu
     nc  = Jac.nc
@@ -2126,7 +2126,7 @@ function LinearAlgebra.mul!(
 ) where {T, V <: AbstractVector{T}, M <: AbstractMatrix{T}}
     fill!(y, zero(T))
 
-    J   = get_jacobian(Jac).Jac
+    J   = get_jacobian(Jac).truncated_jac
     N   = get_jacobian(Jac).N
     nu  = get_jacobian(Jac).nu
     nc  = get_jacobian(Jac).nc
@@ -2173,13 +2173,13 @@ end
 function Base.length(
     Jac::LQJacobianOperator{T, V, M}
 ) where {T, V <: AbstractVector{T}, M <: AbstractMatrix{T}}
-    return length(Jac.Jac)
+    return length(Jac.truncated_jac)
 end
 
 function Base.size(
     Jac::LQJacobianOperator{T, V, M}
 ) where {T, V <: AbstractVector{T}, M <: AbstractMatrix{T}}
-    return size(Jac.Jac)
+    return size(Jac.truncated_jac)
 end
 
 function Base.eltype(
@@ -2191,19 +2191,19 @@ end
 function Base.isreal(
     Jac::LQJacobianOperator{T, V, M}
 ) where {T, V <: AbstractVector{T}, M <: AbstractMatrix{T}}
-    return isreal(Jac.Jac)
+    return isreal(Jac.truncated_jac)
 end
 
 function Base.show(
     Jac::LQJacobianOperator{T, V, M}
 ) where {T, V <: AbstractVector{T}, M <: AbstractMatrix{T}}
-    show(Jac.Jac)
+    show(Jac.truncated_jac)
 end
 
 function Base.display(
     Jac::LQJacobianOperator{T, V, M}
 ) where {T, V <: AbstractVector{T}, M <: AbstractMatrix{T}}
-    display(Jac.Jac)
+    display(Jac.truncated_jac)
 end
 """
     LinearOperators.reset!(Jac::LQJacobianOperator{T, V, M})
@@ -2218,10 +2218,18 @@ function LinearOperators.reset!(
     fill!(Jac.SJ3, T(0))
 end
 
+function NLPModels.jac_op(
+    lqdm::DenseLQDynamicModel{T, V, M1, M2, M3, M4, MK}, x::V
+) where {T, V <: AbstractVector{T}, M1, M2 <: LQJacobianOperator, M3, M4, MK}
+    return lqdm.data.A
+end
+
 """
-    add_jtsj!(H::M, Jac::LQJacobianOperator{T, V, M}, Σ::V)
+    add_jtsj!(H::M, Jac::LQJacobianOperator{T, V, M}, Σ::V, alpha::Number = 1, beta::Number = 1)
 
 Generates `Jac' Σ Jac` and adds it to the matrix `H`.
+
+`alpha` and `beta` are scalar multipliers such `beta H + alpha Jac' Σ Jac` is stored in `H`, overwriting the existing value of `H`
 """
 function add_jtsj!(
     H::M,
@@ -2231,7 +2239,7 @@ function add_jtsj!(
     beta::Number = 1
 ) where {T, V <: AbstractVector{T}, M <: AbstractMatrix{T}}
 
-    J   = Jac.Jac
+    J   = Jac.truncated_jac
     N   = Jac.N
     nu  = Jac.nu
     nc  = Jac.nc

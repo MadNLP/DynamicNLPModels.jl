@@ -565,7 +565,7 @@ DenseLQDynamicModel{Float32, GenericArray{Float32, 1}, GenericArray{Float32, 2},
 # Test LQJacobianOperator APIs
 lq_dense_imp = DenseLQDynamicModel(dnlp; implicit=true)
 
-@test length(get_jacobian(lq_dense_imp).Jac) == length(lq_dense_imp.data.A)
-@test size(get_jacobian(lq_dense_imp).Jac) == size(lq_dense_imp.data.A)
-@test isreal(get_jacobian(lq_dense_imp).Jac) == isreal(lq_dense_imp.data.A)
-@test eltype(get_jacobian(lq_dense_imp).Jac) == eltype(lq_dense_imp.data.A)
+@test length(get_jacobian(lq_dense_imp)) == length(lq_dense_imp.data.A)
+@test size(get_jacobian(lq_dense_imp)) == size(lq_dense_imp.data.A)
+@test isreal(get_jacobian(lq_dense_imp)) == isreal(lq_dense_imp.data.A)
+@test eltype(get_jacobian(lq_dense_imp)) == eltype(lq_dense_imp.data.A)
