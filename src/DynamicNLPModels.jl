@@ -2091,11 +2091,10 @@ function _init_similar(mat, dim1::Number, T=eltype(mat))
     return new_mat
 end
 
-
 function LinearAlgebra.mul!(y::V,
-    Jac::LQJacobianOperator{T, V, M},
+    Jac::LQJacobianOperator{T, V1, M},
     x::V
-) where {T, V <: AbstractVector{T}, M <: AbstractMatrix{T}}
+) where {T, V <: AbstractVector{T}, V1 <: AbstractVector{T},  M <: AbstractMatrix{T}}
     fill!(y, zero(T))
 
     J   = Jac.truncated_jac
@@ -2106,16 +2105,15 @@ function LinearAlgebra.mul!(y::V,
     nuc = Jac.nuc
 
     for i in 1:N
-        sub_B1 = @view J[(1 + (i - 1) * nc):(i * nc), :]
-        sub_B2 = @view J[(1 + nc * N + (i - 1) * nsc):(nc * N + i * nsc), :]
-        sub_B3 = @view J[(1 + nc * N + nsc * N + (i - 1) * nuc):(nc * N + nsc * N + nuc * i), :]
+        sub_B1 = @view J[1:((N - i + 1) * nc), :]
+        sub_B2 = @view J[(1 + nc * N):(nc * N + (N - i + 1) * nsc), :]
+        sub_B3 = @view J[(1 + (nc + nsc) * N):((nc + nsc) * N + (N - i + 1) * nuc), :]
 
-        for j in 1:(N - i + 1)
-            sub_x = view(x, (1 + (j - 1) * nu):(j * nu))
-            LinearAlgebra.mul!(view(y, (1 + nc * (j + i - 2)):(nc * (j + i - 1) )), sub_B1, sub_x, 1, 1)
-            LinearAlgebra.mul!(view(y, (1 + nc * N + nsc * (j + i - 2)):(nc * N + nsc * (j + i - 1))), sub_B2, sub_x, 1, 1)
-            LinearAlgebra.mul!(view(y, (1 + nc * N + nsc * N + nuc * (j + i- 2)):(nc * N + nsc * N + nuc * (j + i - 1))), sub_B3, sub_x, 1, 1)
-        end
+        sub_x = view(x, (1 + (i - 1) * nu):(i * nu))
+
+        LinearAlgebra.mul!(view(y, (1 + (i - 1) * nc):(N * nc)), sub_B1, sub_x, 1, 1)
+        LinearAlgebra.mul!(view(y, (1 + nc * N + (i - 1) * nsc):((nc + nsc) * N)), sub_B2, sub_x, 1, 1)
+        LinearAlgebra.mul!(view(y, (1 + (nc + nsc) * N + (i - 1) * nuc):((nc + nsc + nuc) * N)), sub_B3, sub_x, 1, 1)
     end
 end
 
@@ -2134,22 +2132,19 @@ function LinearAlgebra.mul!(
     nuc = get_jacobian(Jac).nuc
 
     for i in 1:N
-        sub_B1 = @view J[(1 + (i - 1) * nc):(i * nc), :]
-        sub_B2 = @view J[(1 + nc * N + (i - 1) * nsc):(nc * N + i * nsc), :]
-        sub_B3 = @view J[(1 + nc * N + nsc * N + (i - 1) * nuc):(nc * N + nsc * N + nuc * i), :]
+        sub_B1 = @view J[1:((N - i + 1) * nc), :]
+        sub_B2 = @view J[(1 + nc * N):(nc * N + (N - i + 1) * nsc), :]
+        sub_B3 = @view J[(1 + (nc + nsc) * N):((nc + nsc) * N + (N - i + 1) * nuc), :]
 
-        for j in 1:(N - i + 1)
-            x1 = view(x, (1 + (j + i - 2) * nc):((j + i - 1) * nc))
-            x2 = view(x, (1 + nc * N + (j + i - 2) * nsc):(nc * N + (j + i - 1) * nsc))
-            x3 = view(x, (1 + nc * N + nsc * N + (j + i - 2) * nuc):(nc * N + nsc * N + (j + i - 1) * nuc))
+        x1 = view(x, (1 + (i - 1) * nc):(N * nc))
+        x2 = view(x, (1 + nc * N + (i - 1) * nsc):((nc + nsc) * N))
+        x3 = view(x, (1 + nc * N + nsc * N + (i - 1) * nuc):((nc + nsc + nuc) * N))
 
-            LinearAlgebra.mul!(view(y, (1 + nu * (j - 1)):(nu * j )), sub_B1', x1, 1, 1)
-            LinearAlgebra.mul!(view(y, (1 + nu * (j - 1)):(nu * j )), sub_B2', x2, 1, 1)
-            LinearAlgebra.mul!(view(y, (1 + nu * (j - 1)):(nu * j )), sub_B3', x3, 1, 1)
-        end
+        LinearAlgebra.mul!(view(y, (1 + nu * (i - 1)):(nu * i)), sub_B1', x1, 1, 1)
+        LinearAlgebra.mul!(view(y, (1 + nu * (i - 1)):(nu * i)), sub_B2', x2, 1, 1)
+        LinearAlgebra.mul!(view(y, (1 + nu * (i - 1)):(nu * i)), sub_B3', x3, 1, 1)
     end
 end
-
 
 """
     get_jacobian(lqdm::DenseLQDynamicModel) -> LQJacobianOperator
