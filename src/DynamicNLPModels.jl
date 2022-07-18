@@ -2261,28 +2261,29 @@ function add_jtsj!(
         left_block3 = view(J, J3_left_range, :)
 
         for j in 1:(N + 1 - i)
-            J1_right_range = (1 + (j + i - 2) * nc):((j + i - 1) * nc)
-            J2_right_range = (1 + nc * N + (j + i - 2) * nsc):(nc * N + (j + i - 1) * nsc)
-            J3_right_range = (1 + (nc + nsc) * N + (j + i - 2) * nuc):((nc + nsc) * N + (j + i - 1) * nuc)
+            Σ_range1 = (1 + (N - j) * nc):((N - j + 1) * nc)
+            Σ_range2 = (1 + nc * N + (N - j) * nsc):(nc * N + (N - j + 1) * nsc)
+            Σ_range3 = (1 + (nc + nsc) * N + (N - j) * nuc):((nc + nsc) * N + (N - j + 1) * nuc)
 
-            right_block1 = view(J, J1_right_range, :)
-            right_block2 = view(J, J2_right_range, :)
-            right_block3 = view(J, J3_right_range, :)
+            ΣJ1 .= left_block1 .* view(Σ, Σ_range1)
+            ΣJ2 .= left_block2 .* view(Σ, Σ_range2)
+            ΣJ3 .= left_block3 .* view(Σ, Σ_range3)
 
             for k in 1:(N - j - i + 2)
-                Σ_range1 = (1 + (k + i + j + - 3) * nc):((k + i + j - 2) * nc)
-                Σ_range2 = (1 + nc * N + (k + i + j - 3) * nsc):(nc * N + (k + i + j - 2) * nsc)
-                Σ_range3 = (1 + (nc + nsc) * N + (k + i + j - 3) * nuc):((nc + nsc) * N + (k + i + j - 2) * nuc)
-                ΣJ1 .= right_block1 .* view(Σ, Σ_range1)
-                ΣJ2 .= right_block2 .* view(Σ, Σ_range2)
-                ΣJ3 .= right_block3 .* view(Σ, Σ_range3)
+                J1_right_range = (1 + ((k + i - 2)) * nc):((k + i - 1) * nc)
+                J2_right_range = (1 + nc * N + (k + i - 2) * nsc):(nc * N + (k + i - 1) * nsc)
+                J3_right_range = (1 + (nc + nsc) * N + (k + i - 2) * nuc):((nc + nsc) * N + (k + i - 1) * nuc)
 
-                row_range = (1 + nu * (k + (j - 1) - 1)):(nu * (k + (j - 1)))
-                col_range = (1 + nu * (k - 1)):(nu * k)
+                right_block1 = view(J, J1_right_range, :)
+                right_block2 = view(J, J2_right_range, :)
+                right_block3 = view(J, J3_right_range, :)
 
-                LinearAlgebra.mul!(view(H, row_range, col_range), left_block1', ΣJ1, alpha, 1)
-                LinearAlgebra.mul!(view(H, row_range, col_range), left_block2', ΣJ2, alpha, 1)
-                LinearAlgebra.mul!(view(H, row_range, col_range), left_block3', ΣJ3, alpha, 1)
+                row_range = (1 + nu * (N - i - j + 1)):(nu * (N - i -j + 2))
+                col_range = (1 + nu * (N - i - k - j + 2)):(nu * (N - i - k - j + 3))
+
+                LinearAlgebra.mul!(view(H, row_range, col_range), ΣJ1', right_block1, alpha, 1)
+                LinearAlgebra.mul!(view(H, row_range, col_range), ΣJ2', right_block2, alpha, 1)
+                LinearAlgebra.mul!(view(H, row_range, col_range), ΣJ3', right_block3, alpha, 1)
             end
         end
     end
