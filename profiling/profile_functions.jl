@@ -53,5 +53,6 @@ y_imp = copy(y)
 x_imp = copy(x)
 J_imp = get_jacobian(lqdm_imp)
 
+mul!(x_imp, J_imp, y_imp)
 @profile mul!(x_imp, J_imp, y_imp)
 pprof()
