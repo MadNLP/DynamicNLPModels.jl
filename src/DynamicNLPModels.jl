@@ -986,9 +986,9 @@ function _build_implicit_dense_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) w
     lcon = _init_similar(s0, nc * N + num_real_bounds_s * N, T)
     ucon = _init_similar(s0, nc * N + num_real_bounds_s * N, T)
 
-    SJ1  = _init_similar(s0, nc, nu, T)
-    SJ2  = _init_similar(s0, num_real_bounds_s, nu, T)
-    SJ3  = _init_similar(s0, 0, nu, T)
+    SJ1  = _init_similar(Q, nc, nu, T)
+    SJ2  = _init_similar(Q, num_real_bounds_s, nu, T)
+    SJ3  = _init_similar(Q, 0, nu, T)
 
     dense_blocks = _build_block_matrices(A, B, K, N)
     block_A      = dense_blocks.A
@@ -1134,9 +1134,9 @@ function _build_implicit_dense_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) w
 
     I_mat = _init_similar(Q, nu, nu, T)
 
-    SJ1   = _init_similar(s0, nc, nu, T)
-    SJ2   = _init_similar(s0, num_real_bounds_s, nu, T)
-    SJ3   = _init_similar(s0, num_real_bounds_u, nu, T)
+    SJ1   = _init_similar(Q, nc, nu, T)
+    SJ2   = _init_similar(Q, num_real_bounds_s, nu, T)
+    SJ3   = _init_similar(Q, num_real_bounds_u, nu, T)
 
     I_mat[LinearAlgebra.diagind(I_mat)] .= T(1)
 
