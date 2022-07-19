@@ -986,9 +986,9 @@ function _build_implicit_dense_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) w
     lcon = _init_similar(s0, nc * N + num_real_bounds_s * N, T)
     ucon = _init_similar(s0, nc * N + num_real_bounds_s * N, T)
 
-    SJ1  = _init_similar(s0, nc, nu, T)
-    SJ2  = _init_similar(s0, num_real_bounds_s, nu, T)
-    SJ3  = _init_similar(s0, 0, nu, T)
+    SJ1  = _init_similar(nc, nu, N, T)
+    SJ2  = _init_similar(num_real_bounds_s, nu, N, T)
+    SJ3  = _init_similar(0, nu, N, T)
 
     dense_blocks = _build_block_matrices(A, B, K, N)
     block_A      = dense_blocks.A
@@ -2079,6 +2079,11 @@ function _cmp_arr(op, A, B)
         !op(A[i], B[i]) && return true
     end
     return false
+end
+
+function _init_similar(dim1::Number, dim2::Number, dim3::Number, T::DataType)
+    new_mat = zeros(T, dim1, dim2, dim3); fill!(new_mat, zero(T))
+    return new_mat
 end
 
 function _init_similar(mat, dim1::Number, dim2::Number, T=eltype(mat))
