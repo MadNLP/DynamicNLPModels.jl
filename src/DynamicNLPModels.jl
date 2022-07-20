@@ -147,20 +147,20 @@ function LQDynamicData(
         error("size of Q is not consistent with length of s0")
     end
 
-    if _cmp_arr(<, sl, su)
+    if !all(sl .<= su)
         error("lower bound(s) on s is > upper bound(s)")
     end
-    if _cmp_arr(<, ul, uu)
+    if !all(ul .<= uu)
         error("lower bound(s) on u is > upper bound(s)")
     end
-    if _cmp_arr(>=, s0, sl) || _cmp_arr(<=, s0, su)
+    if !all(sl .<= s0) || !all(s0 .<= su)
         error("s0 is not within the given upper and lower bounds")
     end
 
     if size(E, 1) != size(F, 1)
         error("E and F have different numbers of rows")
     end
-    if _cmp_arr(<, gl, gu)
+    if !all(gl .<= gu)
         error("lower bound(s) on Es + Fu is > upper bound(s)")
     end
     if size(E, 2) != size(Q, 1)
@@ -2134,6 +2134,10 @@ function _init_similar(mat, dim1::Number, T=eltype(mat))
     return new_mat
 end
 
+function _dnlp_unsafe_wrap(tensor::A, dims::Tuple, shift=1) where {T, A <: AbstractArray{T}}
+    return unsafe_wrap(Matrix{T}, pointer(tensor, shift), dims)
+end
+
 function LinearAlgebra.mul!(y::V,
     Jac::LQJacobianOperator{T, V1, A},
     x::V
@@ -2151,23 +2155,45 @@ function LinearAlgebra.mul!(y::V,
     nuc = Jac.nuc
 
     for i in 1:N
-        sub_B1 = @view J1[:, :, i]
-        sub_B2 = @view J2[:, :, i]
-        sub_B3 = @view J3[:, :, i]
+        #sub_B1 = @view J1[:, :, 1:(N - i + 1)]
+        #sub_B2 = @view J2[:, :, 1:(N - i + 1)]
+        #sub_B3 = @view J3[:, :, 1:(N - i + 1)]
+        sub_B1 = _dnlp_unsafe_wrap(J1, (nc * (N - i + 1), nu), 1)
+        sub_B2 = _dnlp_unsafe_wrap(J2, (nsc * (N - i + 1), nu), 1)
+        sub_B3 = _dnlp_unsafe_wrap(J3, (nuc * (N - i + 1), nu), 1)
 
-        for j in 1:(N - i + 1)
-            sub_x = view(x, (1 + (j - 1) * nu):(j * nu))
-            LinearAlgebra.mul!(view(y, (1 + nc * (j + i - 2)):(nc * (j + i - 1) )), sub_B1, sub_x, 1, 1)
-            LinearAlgebra.mul!(view(y, (1 + nc * N + nsc * (j + i - 2)):(nc * N + nsc * (j + i - 1))), sub_B2, sub_x, 1, 1)
-            LinearAlgebra.mul!(view(y, (1 + nc * N + nsc * N + nuc * (j + i- 2)):(nc * N + nsc * N + nuc * (j + i - 1))), sub_B3, sub_x, 1, 1)
-        end
+        sub_x = view(x, (1 + (i - 1) * nu):(i * nu))
+
+        LinearAlgebra.mul!(view(y, (1 + (i - 1) * nc):(N * nc)), sub_B1, sub_x, 1, 1)
+        LinearAlgebra.mul!(view(y, (1 + nc * N + (i - 1) * nsc):((nc + nsc) * N)), sub_B2, sub_x, 1, 1)
+        LinearAlgebra.mul!(view(y, (1 + (nc + nsc) * N + (i - 1) * nuc):((nc + nsc + nuc) * N)), sub_B3, sub_x, 1, 1)
     end
+
+    #for i in 1:N
+    #    #sub_B1 = @view J1[:, :, i]
+    #    #sub_B2 = @view J2[:, :, i]
+    #    #sub_B3 = @view J3[:, :, i]
+    #    sub_B1  = _dnlp_unsafe_wrap(J1, (nc, nu), (1 + (i - 1) * (nc * nu)))
+    #    sub_B2  = _dnlp_unsafe_wrap(J2, (nsc, nu), (1 + (i - 1) * (nsc * nu)))
+    #    sub_B3  = _dnlp_unsafe_wrap(J3, (nuc, nu), (1 + (i - 1) * (nuc * nu)))
+#
+    #    for j in 1:(N - i + 1)
+    #        sub_x = view(x, (1 + (j - 1) * nu):(j * nu))
+    #        LinearAlgebra.mul!(view(y, (1 + nc * (j + i - 2)):(nc * (j + i - 1) )), sub_B1, sub_x, 1, 1)
+    #        LinearAlgebra.mul!(view(y, (1 + nc * N + nsc * (j + i - 2)):(nc * N + nsc * (j + i - 1))), sub_B2, sub_x, 1, 1)
+    #        LinearAlgebra.mul!(view(y, (1 + nc * N + nsc * N + nuc * (j + i- 2)):(nc * N + nsc * N + nuc * (j + i - 1))), sub_B3, sub_x, 1, 1)
+    #    end
+    #end
+end
+
+function _dnlp_unsafe_wrap(tensor::A, dims::Tuple, shift=1) where {T, A <: CUDA.CuArray{Float64, 3, CUDA.Mem.DeviceBuffer}}
+    return unsafe_wrap(A, pointer(tensor, shift), dims)
 end
 
 function LinearAlgebra.mul!(x::V,
     Jac::LQJacobianOperator{T, V1, A},
     y::V
-) where {T, V <: AbstractVector{T}, V1 <: AbstractVector{T}, A <: CUDA.CuArray{T, 3, CUDA.Mem.DeviceBuffer}}
+) where {T, V <: CUDA.CuArray{T, 1, CUDA.Mem.DeviceBuffer}, V1 <: CUDA.CuArray{T, 1, CUDA.Mem.DeviceBuffer}, A <: AbstractArray{T}}
 
     J1  = Jac.truncated_jac1
     J2  = Jac.truncated_jac2
@@ -2189,16 +2215,22 @@ function LinearAlgebra.mul!(x::V,
     fill!(x3, zero(T))
 
     for i in 1:N
-        y1[:, :, i] = @view y[(1 + (i - 1) * nu):(i * nu)]
+        y1 .= y[(1 + (i - 1) * nu):(i * nu)]
+
+        x1_wrap = _dnlp_unsafe_wrap(x1, (nc, 1, (N - i + 1)), (1 + nc * (i - 1)))
+        x2_wrap = _dnlp_unsafe_wrap(x2, (nsc, 1, (N - i + 1)), (1 + nsc * (i -1)))
+        x3_wrap = _dnlp_unsafe_wrap(x3, (nuc, 1, (N - i + 1)), (1 + nuc * (i - 1)))
+
+        #could alternatively use `view` here. it is possibly slower, but if it is, it isn't by much
+
+        CUDA.CUBLAS.gemm_strided_batched!('N', 'N', 1, J1[:, :, 1:(N - i + 1)], y1[:, :, i:N], 1, x1_wrap)
+        CUDA.CUBLAS.gemm_strided_batched!('N', 'N', 1, J2[:, :, 1:(N - i + 1)], y1[:, :, i:N], 1, x2_wrap)
+        CUDA.CUBLAS.gemm_strided_batched!('N', 'N', 1, J3[:, :, 1:(N - i + 1)], y1[:, :, i:N], 1, x3_wrap)
     end
 
-    CUDA.CUBLAS.gemm_strided_batched!('N', 'N', 1, Jac1, x1, 0, y1)
-    CUDA.CUBLAS.gemm_strided_batched!('N', 'N', 1, Jac2, x2, 1, y1)
-    CUDA.CUBLAS.gemm_strided_batched!('N', 'N', 1, Jac3, x3, 1, y1)
-
-    for i in 1:N
-        y[(1 + (i - 1) * nu):(i * nu)] = @view y1[:, :, i]
-    end
+    view(x, 1:(nc * N)) .= reshape(x1, nc * N)
+    view(x, (1 + nc * N):((nc + nsc) * N)) .= reshape(x2, nsc * N)
+    view(x, (1 + (nc + nsc) * N):((nc + nsc + nuc) * N)) .= reshape(x3, nuc * N)
 end
 
 
