@@ -3,12 +3,6 @@ using DynamicNLPModels, LinearAlgebra, Random, SparseArrays, CUDA
 
 include("build_thinplate.jl")
 
-function jtsj_mul!(H, J, x, SJ)
-    SJ .= x .* J
-
-    LinearAlgebra.mul!(H, J', SJ, 1, 1)
-end
-
 function build_lqdm(ns, nu, N; implicit=false)
 
     d = zeros(ns, N+1)
@@ -88,16 +82,16 @@ function dynamic_data_to_CUDA(dnlp::LQDynamicData)
     E = Ec, F = Fc, K = Kc, sl = slc, su = suc, ul = ulc, uu = uuc, gl = glc, gu = guc
     )
 end
-#ns_vals     = [10, 30, 50, 80, 100, 150, 300, 500, 800, 1200, 1600, 2500, 4000, 6000]
-ns_vals = [10]#, 30, 50, 100, 300, 500, 1000, 2500, 4000, 6000]
+
+ns_vals = [10, 30, 50, 80, 100, 300, 500, 800, 1200, 2000, 4000, 6000]
 mul_ns_cuda = []
 mul_ns_d    = []
 mul_ns_imp  = []
-counter = 0
+mul_ns_cuda2 = []
 for i in ns_vals
-    lqdm_d   = build_lqdm(i, 10, 50; implicit=false)
+    @time lqdm_d   = build_lqdm(i, 10, 50; implicit=false)
     println("built full Jacobian lqdm")
-    lqdm_imp = build_lqdm(i, 10, 50; implicit=true)
+    @time lqdm_imp = build_lqdm(i, 10, 50; implicit=true)
     println("built implicit Jacobian lqdm")
     dnlpCUDA = dynamic_data_to_CUDA(lqdm_d.dynamic_data)
     println("converted dynamic data to CUDA")
@@ -118,50 +112,18 @@ for i in ns_vals
     xcuda = CuArray{Float64}(x)
 
     J      = get_jacobian(lqdm_d)
+    J_cu   = CuArray{Float64}(J)
     J_imp  = get_jacobian(lqdm_imp)
 
-    #a = @elapsed mul!(x, J, y)
-    #b = @elapsed mul!(x_imp, J_imp, y_imp)
+    a = @elapsed mul!(x, J, y)
+    b = @elapsed mul!(x_imp, J_imp, y_imp)
     c = @elapsed mul!(xcuda, lqdm_CUDA.data.A, ycuda)
+    d = @elapsed mul!(xcuda, J_cu, ycuda)
     push!(mul_ns_cuda, c)
-    #push!(mul_ns_d, a)
-    #push!(mul_ns_imp, b)
+    push!(mul_ns_d, a)
+    push!(mul_ns_imp, b)
+    push!(mul_ns_cuda2, d)
     #println(CUDA.memory_status())
-    counter += 1
-    println(counter, "  ", i)
+    println(i)
     CUDA.reclaim()
 end
-
-using Plots, LaTeXStrings
-plot(ns_vals, mul_ns_d, label="mul! (matrix_CPU)", xaxis=:log, yaxis=:log, legend=:topleft)
-plot!(ns_vals, mul_ns_imp, label="mul! (LQJacOp_CPU)")
-plot!(ns_vals, mul_ns_cuda, label="mul! (LQJacOP, gemm_batched_strided)")
-xlabel!(L"Number of States ($N = 50, n_u = 10, n_c = n_s - 1$)")
-ylabel!("Time (s)")
-
-savefig("Jx_mul_comp.png")
-
-
-#mul_ns_cuda  = [.0001711, .0001616, 0.0001494, 0.0001537, 0.0001589, 0.0001545, 0.0001554, 0.0001697, 0.0001551, 0.0001709, .0001673]
-#ns_vals_cuda = [10, 30, 50, 80, 100, 150, 300, 500, 800, 1000, 1500]
-
-
-#=
-H     = zeros(nu * N, nu * N)
-H_imp = zeros(nu * N, nu * N)
-
-Random.seed!(10)
-J     = get_jacobian(lqdm_d)
-J_imp = get_jacobian(lqdm_imp)
-ΣJ    = similar(J); fill!(ΣJ, 0)
-
-x     = rand(size(J, 1))
-
-LinearAlgebra.mul!(ΣJ, Diagonal(x), J)
-LinearAlgebra.mul!(H, J', ΣJ)
-
-add_jtsj!(H_imp, J_imp, x)
-fill!(H_imp, 0.0)
-@profile add_jtsj!(H_imp, J_imp, x)
-pprof()
-=#
