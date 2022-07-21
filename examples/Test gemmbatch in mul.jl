@@ -82,8 +82,8 @@ function dynamic_data_to_CUDA(dnlp::LQDynamicData)
     E = Ec, F = Fc, K = Kc, sl = slc, su = suc, ul = ulc, uu = uuc, gl = glc, gu = guc
     )
 end
-
-ns_vals = [10, 30, 50, 80, 100, 300, 500, 800, 1200, 2000, 4000, 6000]
+#=
+ns_vals = [10, 100]
 mul_ns_cuda = []
 mul_ns_d    = []
 mul_ns_imp  = []
@@ -127,3 +127,60 @@ for i in ns_vals
     println(i)
     CUDA.reclaim()
 end
+
+=#
+
+ns_vals = [10, 30, 50, 80, 100, 300, 500 , 800, 2000, 4000, 6000]
+mulT_ns_cuda = []
+mulT_ns_d    = []
+mulT_ns_imp  = []
+mulT_ns_cuda2 = []
+for i in ns_vals
+    @time lqdm_d   = build_lqdm(i, 10, 50; implicit=false)
+    println("built full Jacobian lqdm")
+    @time lqdm_imp = build_lqdm(i, 10, 50; implicit=true)
+    println("built implicit Jacobian lqdm")
+    dnlpCUDA = dynamic_data_to_CUDA(lqdm_d.dynamic_data)
+    println("converted dynamic data to CUDA")
+    println()
+    println(CUDA.memory_status())
+    @time lqdm_CUDA = DenseLQDynamicModel(dnlpCUDA; implicit=true)
+    println("built CUDA Jacobian")
+    println(CUDA.memory_status())
+    println()
+
+    Random.seed!(10)
+    x = rand(size(lqdm_d.data.A, 1))
+    y = rand(size(lqdm_d.data.A, 2))
+    y_imp = copy(y)
+    x_imp = copy(x)
+
+    ycuda = CuArray{Float64}(y)
+    xcuda = CuArray{Float64}(x)
+
+    J      = get_jacobian(lqdm_d)
+    J_cu   = CuArray{Float64}(J)
+    J_imp  = get_jacobian(lqdm_imp)
+
+    a = @elapsed mul!(y, J', x)
+    b = @elapsed mul!(y_imp, J_imp', x_imp)
+    c = @elapsed mul!(ycuda, lqdm_CUDA.data.A', xcuda)
+    d = @elapsed mul!(ycuda, J_cu', xcuda)
+    push!(mulT_ns_cuda, c)
+    push!(mulT_ns_d, a)
+    push!(mulT_ns_imp, b)
+    push!(mulT_ns_cuda2, d)
+    #println(CUDA.memory_status())
+    println(i)
+    CUDA.reclaim()
+end
+
+println(ns_vals, "    ", mulT_ns_cuda, "    ", mulT_ns_cuda2, "    ", mulT_ns_d, "   ", mulT_ns_imp)
+
+#using Plots, LaTeXStrings
+#plot(ns_vals[2:end], mulT_ns_d[2:end], label="mul! (matrix_CPU)", xaxis=:log, yaxis=:log, legend=:topleft)
+#plot!(ns_vals[2:end], mulT_ns_imp[2:end], label="mul! (LQJacOp_CPU)")
+#plot!(ns_vals[2:end], mulT_ns_cuda[2:end], label="mul! (LQJacOP, gemm_batched_strided)")
+#plot!(ns_vals[2:end], mulT_ns_cuda2[2:end], label="mul!(Matrix_GPU)")
+#xlabel!(L"Number of States ($N = 50, n_u = 10, n_c = n_s - 1$)")
+#ylabel!("Time (s)")

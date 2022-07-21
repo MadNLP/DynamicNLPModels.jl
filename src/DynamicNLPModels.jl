@@ -2107,13 +2107,6 @@ function _set_sparse_J!(
     J_colptr[ns * (N + 1) + nu * N + 1] = length(J_nzval) + 1
 end
 
-function _cmp_arr(op, A, B)
-    for i = 1:length(A)
-        !op(A[i], B[i]) && return true
-    end
-    return false
-end
-
 function _init_similar(mat, dim1::Number, dim2::Number, dim3::Number, T::DataType)
     new_mat = similar(mat, dim1, dim2, dim3); fill!(new_mat, zero(T))
     return new_mat
@@ -2149,36 +2142,36 @@ function LinearAlgebra.mul!(y::V,
     nsc = Jac.nsc
     nuc = Jac.nuc
 
-    for i in 1:N
-        #sub_B1 = @view J1[:, :, 1:(N - i + 1)]
-        #sub_B2 = @view J2[:, :, 1:(N - i + 1)]
-        #sub_B3 = @view J3[:, :, 1:(N - i + 1)]
-        sub_B1 = _dnlp_unsafe_wrap(J1, (nc * (N - i + 1), nu), 1)
-        sub_B2 = _dnlp_unsafe_wrap(J2, (nsc * (N - i + 1), nu), 1)
-        sub_B3 = _dnlp_unsafe_wrap(J3, (nuc * (N - i + 1), nu), 1)
-
-        sub_x = view(x, (1 + (i - 1) * nu):(i * nu))
-
-        LinearAlgebra.mul!(view(y, (1 + (i - 1) * nc):(N * nc)), sub_B1, sub_x, 1, 1)
-        LinearAlgebra.mul!(view(y, (1 + nc * N + (i - 1) * nsc):((nc + nsc) * N)), sub_B2, sub_x, 1, 1)
-        LinearAlgebra.mul!(view(y, (1 + (nc + nsc) * N + (i - 1) * nuc):((nc + nsc + nuc) * N)), sub_B3, sub_x, 1, 1)
-    end
-
-    #for i in 1:N
-    #    #sub_B1 = @view J1[:, :, i]
-    #    #sub_B2 = @view J2[:, :, i]
-    #    #sub_B3 = @view J3[:, :, i]
-    #    sub_B1  = _dnlp_unsafe_wrap(J1, (nc, nu), (1 + (i - 1) * (nc * nu)))
-    #    sub_B2  = _dnlp_unsafe_wrap(J2, (nsc, nu), (1 + (i - 1) * (nsc * nu)))
-    #    sub_B3  = _dnlp_unsafe_wrap(J3, (nuc, nu), (1 + (i - 1) * (nuc * nu)))
+#    for i in 1:N
+#        #sub_B1 = @view J1[:, :, 1:(N - i + 1)]
+#        #sub_B2 = @view J2[:, :, 1:(N - i + 1)]
+#        #sub_B3 = @view J3[:, :, 1:(N - i + 1)]
+#        sub_B1 = _dnlp_unsafe_wrap(J1, (nc * (N - i + 1), nu), 1)
+#        sub_B2 = _dnlp_unsafe_wrap(J2, (nsc * (N - i + 1), nu), 1)
+#        sub_B3 = _dnlp_unsafe_wrap(J3, (nuc * (N - i + 1), nu), 1)
 #
-    #    for j in 1:(N - i + 1)
-    #        sub_x = view(x, (1 + (j - 1) * nu):(j * nu))
-    #        LinearAlgebra.mul!(view(y, (1 + nc * (j + i - 2)):(nc * (j + i - 1) )), sub_B1, sub_x, 1, 1)
-    #        LinearAlgebra.mul!(view(y, (1 + nc * N + nsc * (j + i - 2)):(nc * N + nsc * (j + i - 1))), sub_B2, sub_x, 1, 1)
-    #        LinearAlgebra.mul!(view(y, (1 + nc * N + nsc * N + nuc * (j + i- 2)):(nc * N + nsc * N + nuc * (j + i - 1))), sub_B3, sub_x, 1, 1)
-    #    end
-    #end
+#        sub_x = view(x, (1 + (i - 1) * nu):(i * nu))
+#
+#        LinearAlgebra.mul!(view(y, (1 + (i - 1) * nc):(N * nc)), sub_B1, sub_x, 1, 1)
+#        LinearAlgebra.mul!(view(y, (1 + nc * N + (i - 1) * nsc):((nc + nsc) * N)), sub_B2, sub_x, 1, 1)
+#        LinearAlgebra.mul!(view(y, (1 + (nc + nsc) * N + (i - 1) * nuc):((nc + nsc + nuc) * N)), sub_B3, sub_x, 1, 1)
+#    end
+
+    for i in 1:N
+        #sub_B1 = @view J1[:, :, i]
+        #sub_B2 = @view J2[:, :, i]
+        #sub_B3 = @view J3[:, :, i]
+        sub_B1  = _dnlp_unsafe_wrap(J1, (nc, nu), (1 + (i - 1) * (nc * nu)))
+        sub_B2  = _dnlp_unsafe_wrap(J2, (nsc, nu), (1 + (i - 1) * (nsc * nu)))
+        sub_B3  = _dnlp_unsafe_wrap(J3, (nuc, nu), (1 + (i - 1) * (nuc * nu)))
+
+        for j in 1:(N - i + 1)
+            sub_x = view(x, (1 + (j - 1) * nu):(j * nu))
+            LinearAlgebra.mul!(view(y, (1 + nc * (j + i - 2)):(nc * (j + i - 1) )), sub_B1, sub_x, 1, 1)
+            LinearAlgebra.mul!(view(y, (1 + nc * N + nsc * (j + i - 2)):(nc * N + nsc * (j + i - 1))), sub_B2, sub_x, 1, 1)
+            LinearAlgebra.mul!(view(y, (1 + nc * N + nsc * N + nuc * (j + i- 2)):(nc * N + nsc * N + nuc * (j + i - 1))), sub_B3, sub_x, 1, 1)
+        end
+    end
 end
 
 function _dnlp_unsafe_wrap(tensor::A, dims::Tuple, shift=1) where {T, A <: CUDA.CuArray{Float64, 3, CUDA.Mem.DeviceBuffer}}
@@ -2216,7 +2209,7 @@ function LinearAlgebra.mul!(x::V,
         x2_wrap = _dnlp_unsafe_wrap(x2, (nsc, 1, (N - i + 1)), (1 + nsc * (i -1)))
         x3_wrap = _dnlp_unsafe_wrap(x3, (nuc, 1, (N - i + 1)), (1 + nuc * (i - 1)))
 
-        #could alternatively use `view` here. it is possibly slower, but if it is, it isn't by much
+        #could alternatively use `view` here. It is possibly slower, but if it is, it isn't by much
 
         CUDA.CUBLAS.gemm_strided_batched!('N', 'N', 1, J1[:, :, 1:(N - i + 1)], y1[:, :, i:N], 1, x1_wrap)
         CUDA.CUBLAS.gemm_strided_batched!('N', 'N', 1, J2[:, :, 1:(N - i + 1)], y1[:, :, i:N], 1, x2_wrap)
@@ -2228,15 +2221,17 @@ function LinearAlgebra.mul!(x::V,
     view(x, (1 + (nc + nsc) * N):((nc + nsc + nuc) * N)) .= reshape(x3, nuc * N)
 end
 
-
 function LinearAlgebra.mul!(
     y::V,
-    Jac::LinearOperators.AdjointLinearOperator{T, LQJacobianOperator{T, V, M}},
+    Jac::LinearOperators.AdjointLinearOperator{T, LQJacobianOperator{T, V1, A}},
     x::V
-) where {T, V <: AbstractVector{T}, M <: AbstractMatrix{T}}
+) where {T, V <: AbstractVector{T}, V1 <: AbstractVector{T},  A <: AbstractArray{T}}
     fill!(y, zero(T))
 
-    J   = get_jacobian(Jac).truncated_jac
+    J1  = get_jacobian(Jac).truncated_jac1
+    J2  = get_jacobian(Jac).truncated_jac2
+    J3  = get_jacobian(Jac).truncated_jac3
+
     N   = get_jacobian(Jac).N
     nu  = get_jacobian(Jac).nu
     nc  = get_jacobian(Jac).nc
@@ -2244,18 +2239,65 @@ function LinearAlgebra.mul!(
     nuc = get_jacobian(Jac).nuc
 
     for i in 1:N
-        sub_B1 = @view J[1:((N - i + 1) * nc), :]
-        sub_B2 = @view J[(1 + nc * N):(nc * N + (N - i + 1) * nsc), :]
-        sub_B3 = @view J[(1 + (nc + nsc) * N):((nc + nsc) * N + (N - i + 1) * nuc), :]
+        #sub_B1 = @view J1[:, :, i]
+        #sub_B2 = @view J2[:, :, i]
+        #sub_B3 = @view J3[:, :, i]
+        sub_B1  = _dnlp_unsafe_wrap(J1, (nc, nu), (1 + (i - 1) * (nc * nu)))
+        sub_B2  = _dnlp_unsafe_wrap(J2, (nsc, nu), (1 + (i - 1) * (nsc * nu)))
+        sub_B3  = _dnlp_unsafe_wrap(J3, (nuc, nu), (1 + (i - 1) * (nuc * nu)))
 
-        x1 = view(x, (1 + (i - 1) * nc):(N * nc))
-        x2 = view(x, (1 + nc * N + (i - 1) * nsc):((nc + nsc) * N))
-        x3 = view(x, (1 + nc * N + nsc * N + (i - 1) * nuc):((nc + nsc + nuc) * N))
+        for j in 1:(N - i + 1)
 
-        LinearAlgebra.mul!(view(y, (1 + nu * (i - 1)):(nu * i)), sub_B1', x1, 1, 1)
-        LinearAlgebra.mul!(view(y, (1 + nu * (i - 1)):(nu * i)), sub_B2', x2, 1, 1)
-        LinearAlgebra.mul!(view(y, (1 + nu * (i - 1)):(nu * i)), sub_B3', x3, 1, 1)
+            x1 = view(x, (1 + (j + i - 2) * nc):((j + i - 1) * nc))
+            x2 = view(x, (1 + nc * N + (j + i - 2) * nsc):(nc * N + (j + i - 1) * nsc))
+            x3 = view(x, (1 + nc * N + nsc * N + (j + i - 2) * nuc):(nc * N + nsc * N + (j + i - 1) * nuc))
+
+            LinearAlgebra.mul!(view(y, (1 + nu * (j - 1)):(nu * j )), sub_B1', x1, 1, 1)
+            LinearAlgebra.mul!(view(y, (1 + nu * (j - 1)):(nu * j )), sub_B2', x2, 1, 1)
+            LinearAlgebra.mul!(view(y, (1 + nu * (j - 1)):(nu * j )), sub_B3', x3, 1, 1)
+        end
     end
+end
+
+
+function LinearAlgebra.mul!(
+    y::V,
+    Jac::LinearOperators.AdjointLinearOperator{T, LQJacobianOperator{T, V1, A}},
+    x::V
+) where {T, V <: CUDA.CuArray{T, 1, CUDA.Mem.DeviceBuffer}, V1 <: CUDA.CuArray{T, 1, CUDA.Mem.DeviceBuffer}, A <: AbstractArray{T}}
+    fill!(y, zero(T))
+
+    J1  = get_jacobian(Jac).truncated_jac1
+    J2  = get_jacobian(Jac).truncated_jac2
+    J3  = get_jacobian(Jac).truncated_jac3
+
+    N   = get_jacobian(Jac).N
+    nu  = get_jacobian(Jac).nu
+    nc  = get_jacobian(Jac).nc
+    nsc = get_jacobian(Jac).nsc
+    nuc = get_jacobian(Jac).nuc
+
+    x1 = get_jacobian(Jac).x1
+    x2 = get_jacobian(Jac).x2
+    x3 = get_jacobian(Jac).x3
+    y1 = get_jacobian(Jac).y
+
+
+    x1 .= reshape(x[1:(nc * N)], (nc, 1, N))
+    x2 .= reshape(x[(1 + nc * N):((nc + nsc) * N)], (nsc, 1, N))
+    x3 .= reshape(x[(1 + (nc + nsc) * N):((nc + nsc + nuc) * N)], (nuc, 1, N))
+
+    for i in 1:N
+        fill!(y1, zero(T))
+        y1_wrap = _dnlp_unsafe_wrap(y1, (nu, 1, ((N - i + 1))), 1)
+
+        CUDA.CUBLAS.gemm_strided_batched!('T', 'N', 1, J1[:, :, 1:(N - i + 1)], x1[:, :, i:N], 1, y1_wrap)
+        CUDA.CUBLAS.gemm_strided_batched!('T', 'N', 1, J2[:, :, 1:(N - i + 1)], x2[:, :, i:N], 1, y1_wrap)
+        CUDA.CUBLAS.gemm_strided_batched!('T', 'N', 1, J3[:, :, 1:(N - i + 1)], x3[:, :, i:N], 1, y1_wrap)
+
+        view(y, (1 + (i - 1) * nu):(i * nu)) .= sum(y1_wrap, dims=(2,3))
+    end
+
 end
 
 """
@@ -2272,8 +2314,8 @@ function get_jacobian(
 end
 
 function get_jacobian(
-    Jac::LinearOperators.AdjointLinearOperator{T, LQJacobianOperator{T, V, M}}
-) where {T, V <: AbstractVector{T}, M <: AbstractMatrix{T}}
+    Jac::LinearOperators.AdjointLinearOperator{T, LQJacobianOperator{T, V, A}}
+) where {T, V <: AbstractVector{T}, A <: AbstractArray{T}}
     return Jac'
 end
 
