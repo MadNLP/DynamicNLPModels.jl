@@ -1125,6 +1125,7 @@ function _build_implicit_dense_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) w
     nc = size(E, 1)
 
     dense_blocks = _build_block_matrices(A, B, K, N)
+
     block_A  = dense_blocks.A
     block_B  = dense_blocks.B
 
@@ -1132,6 +1133,7 @@ function _build_implicit_dense_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) w
 
     H  = H_blocks.H
     c0 = H_blocks.c0
+
 
     bool_vec_s        = (su .!= Inf .|| sl .!= -Inf)
     num_real_bounds_s   = sum(bool_vec_s)
@@ -1299,7 +1301,7 @@ function _build_block_matrices(
     A::M, B::M, K, N
 ) where {T, M <: AbstractMatrix{T}}
 
-    ns = size(A, 2)
+ns = size(A, 2)
     nu = size(B, 2)
 
     if K == nothing
@@ -1313,16 +1315,12 @@ function _build_block_matrices(
     A_k = copy(A)
     BK  = _init_similar(A, ns, ns, T)
 
-
     AB_klast = _init_similar(A, size(B, 1), size(B, 2), T)
     AB_k     = _init_similar(A, size(B, 1), size(B, 2), T)
 
-
     block_B[1:ns, :] = B
 
-    for i in 1:ns
-        block_A[i, i] = T(1)
-    end
+    block_A[LinearAlgebra.diagind(block_A)] .= T(1)
 
     LinearAlgebra.mul!(BK, B, K)
     LinearAlgebra.axpy!(1, BK, A_k)
@@ -1335,7 +1333,6 @@ function _build_block_matrices(
 
     block_B[(1 + ns):2 * ns, :] = AB_k
     AB_klast = copy(AB_k)
-
     # Fill the A and B matrices
     for i in 2:(N - 1)
 
@@ -1362,7 +1359,6 @@ function _build_block_matrices(
 end
 
 function _build_H_blocks(Q, R, block_A::M, block_B::M, S, Qf, K, s0, N) where {T, M <: AbstractMatrix{T}}
-
     ns = size(Q, 1)
     nu = size(R, 1)
 
@@ -1406,11 +1402,11 @@ function _build_H_blocks(Q, R, block_A::M, block_B::M, S, Qf, K, s0, N) where {T
 
     LinearAlgebra.axpy!(1.0, Q, quad_term)
     LinearAlgebra.axpy!(1.0, SK, quad_term)
-    LinearAlgebra.axpy!(1.0, SK', quad_term)
+    quad_term .+= SK'
     LinearAlgebra.axpy!(1.0, KTRK, quad_term)
 
     LinearAlgebra.copyto!(RK_ST, RK)
-    LinearAlgebra.axpy!(1.0, S', RK_ST)
+    RK_ST .+= S'
 
     LinearAlgebra.mul!(As0, block_A, s0)
 
@@ -1452,7 +1448,6 @@ function _build_H_blocks(Q, R, block_A::M, block_B::M, S, Qf, K, s0, N) where {T
 
         view(H, (1 + nu * (i - 1)):nu * i, (1 + nu * (i - 1)):nu * i) .+= R
     end
-
 
     for i in 1:N
         fill!(QB_block_vec, T(0))
