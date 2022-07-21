@@ -364,7 +364,9 @@ to `LinearAlgebra.mul!()`.
 
 ---
 Attributes
- - `truncated_jac`: Matrix of first `nu` columns of the Jacobian
+ - `truncated_jac1`: Matrix of first `nu` columns of the Jacobian corresponding to Ax + Bu constraints
+ - `truncated_jac2`: Matrix of first `nu` columns of the Jacobian corresponding to state variable bounds
+ - `truncated_jac3`: Matrix of first `nu` columns of the Jacobian corresponding to input variable bounds
  - `N`  : number of time steps
  - `nu` : number of inputs
  - `nc` : number of algebraic constraints of the form gl <= Es + Fu <= gu
@@ -375,7 +377,7 @@ Attributes
  - `SJ3`: placeholder for storing data when calculating `ΣJ`
 
 """
-struct LQJacobianOperator{T, V, A} <: LinearOperators.AbstractLinearOperator{T}
+struct LQJacobianOperator{T, M, A} <: LinearOperators.AbstractLinearOperator{T}
     # TODO: remove V from operator type
     truncated_jac1::A  # tensor of Jacobian blocks corresponding Ex + Fu constraints
     truncated_jac2::A  # tensor of Jacobian blocks corresponding to state variable limits
@@ -394,9 +396,9 @@ struct LQJacobianOperator{T, V, A} <: LinearOperators.AbstractLinearOperator{T}
     y::A
 
     # Storage tensors for building J^TΣJ
-    SJ1::A
-    SJ2::A
-    SJ3::A
+    SJ1::M
+    SJ2::M
+    SJ3::M
 end
 
 
@@ -1004,9 +1006,9 @@ function _build_implicit_dense_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) w
     x3  = _init_similar(Q, 0, 1, N, T)
     y   = _init_similar(Q, nu, 1, N, T)
 
-    SJ1  = _init_similar(Q, nc, nu, N, T)
-    SJ2  = _init_similar(Q, num_real_bounds_s, nu, N, T)
-    SJ3  = _init_similar(Q, 0, nu, N, T)
+    SJ1  = _init_similar(Q, nc, nu, T)
+    SJ2  = _init_similar(Q, num_real_bounds_s, nu, T)
+    SJ3  = _init_similar(Q, 0, nu, T)
 
     dense_blocks = _build_block_matrices(A, B, K, N)
     block_A      = dense_blocks.A
@@ -1066,7 +1068,7 @@ function _build_implicit_dense_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) w
     nh   = size(H, 1)
     nnzh = div(nh * (nh + 1), 2)
 
-    J = LQJacobianOperator{T, V, AbstractArray{T}}(
+    J = LQJacobianOperator{T, M, AbstractArray{T}}(
         Jac1, Jac2, Jac3,
         N, nu, nc, num_real_bounds_s, 0,
         x1, x2, x3, y,
@@ -1166,9 +1168,9 @@ function _build_implicit_dense_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) w
     x3  = _init_similar(Q, num_real_bounds_u, 1, N, T)
     y   = _init_similar(Q, nu, 1, N, T)
 
-    SJ1   = _init_similar(Q, nc, nu, N, T)
-    SJ2   = _init_similar(Q, num_real_bounds_s, nu, N, T)
-    SJ3   = _init_similar(Q, num_real_bounds_u, nu, N, T)
+    SJ1   = _init_similar(Q, nc, nu, T)
+    SJ2   = _init_similar(Q, num_real_bounds_s, nu, T)
+    SJ3   = _init_similar(Q, num_real_bounds_u, nu, T)
 
     I_mat[LinearAlgebra.diagind(I_mat)] .= T(1)
 
@@ -1266,7 +1268,7 @@ function _build_implicit_dense_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) w
     c = _init_similar(s0, nvar, T)
     c .= H_blocks.c
 
-    J = LQJacobianOperator{T, V, AbstractArray{T}}(
+    J = LQJacobianOperator{T, M, AbstractArray{T}}(
         Jac1, Jac2, Jac3,
         N, nu, nc, num_real_bounds_s, num_real_bounds_u,
         x1, x2, x3, y,
@@ -2127,9 +2129,9 @@ function _dnlp_unsafe_wrap(tensor::A, dims::Tuple, shift=1) where {T, A <: Abstr
 end
 
 function LinearAlgebra.mul!(y::V,
-    Jac::LQJacobianOperator{T, V1, A},
+    Jac::LQJacobianOperator{T, M, A},
     x::V
-) where {T, V <: AbstractVector{T}, V1 <: AbstractVector{T},  A <: AbstractArray{T}}
+) where {T, V <: AbstractVector{T}, M <: AbstractMatrix{T},  A <: AbstractArray{T}}
     fill!(y, zero(T))
 
     J1  = Jac.truncated_jac1
@@ -2179,9 +2181,9 @@ function _dnlp_unsafe_wrap(tensor::A, dims::Tuple, shift=1) where {T, A <: CUDA.
 end
 
 function LinearAlgebra.mul!(x::V,
-    Jac::LQJacobianOperator{T, V1, A},
+    Jac::LQJacobianOperator{T, M, A},
     y::V
-) where {T, V <: CUDA.CuArray{T, 1, CUDA.Mem.DeviceBuffer}, V1 <: CUDA.CuArray{T, 1, CUDA.Mem.DeviceBuffer}, A <: AbstractArray{T}}
+) where {T, V <: CUDA.CuArray{T, 1, CUDA.Mem.DeviceBuffer}, M <: AbstractMatrix{T}, A <: AbstractArray{T}}
 
     J1  = Jac.truncated_jac1
     J2  = Jac.truncated_jac2
@@ -2223,9 +2225,9 @@ end
 
 function LinearAlgebra.mul!(
     y::V,
-    Jac::LinearOperators.AdjointLinearOperator{T, LQJacobianOperator{T, V1, A}},
+    Jac::LinearOperators.AdjointLinearOperator{T, LQJacobianOperator{T, M, A}},
     x::V
-) where {T, V <: AbstractVector{T}, V1 <: AbstractVector{T},  A <: AbstractArray{T}}
+) where {T, V <: AbstractVector{T}, M <: AbstractMatrix{T},  A <: AbstractArray{T}}
     fill!(y, zero(T))
 
     J1  = get_jacobian(Jac).truncated_jac1
@@ -2262,9 +2264,9 @@ end
 
 function LinearAlgebra.mul!(
     y::V,
-    Jac::LinearOperators.AdjointLinearOperator{T, LQJacobianOperator{T, V1, A}},
+    Jac::LinearOperators.AdjointLinearOperator{T, LQJacobianOperator{T, M, A}},
     x::V
-) where {T, V <: CUDA.CuArray{T, 1, CUDA.Mem.DeviceBuffer}, V1 <: CUDA.CuArray{T, 1, CUDA.Mem.DeviceBuffer}, A <: AbstractArray{T}}
+) where {T, V <: CUDA.CuArray{T, 1, CUDA.Mem.DeviceBuffer}, M <: AbstractMatrix{T}, A <: AbstractArray{T}}
     fill!(y, zero(T))
 
     J1  = get_jacobian(Jac).truncated_jac1
@@ -2314,45 +2316,45 @@ function get_jacobian(
 end
 
 function get_jacobian(
-    Jac::LinearOperators.AdjointLinearOperator{T, LQJacobianOperator{T, V, A}}
-) where {T, V <: AbstractVector{T}, A <: AbstractArray{T}}
+    Jac::LinearOperators.AdjointLinearOperator{T, LQJacobianOperator{T, M, A}}
+) where {T, M <: AbstractMatrix{T}, A <: AbstractArray{T}}
     return Jac'
 end
 
 function Base.length(
-    Jac::LQJacobianOperator{T, V, M}
-) where {T, V <: AbstractVector{T}, M <: AbstractMatrix{T}}
-    return length(Jac.truncated_jac)
+    Jac::LQJacobianOperator{T, M, A}
+) where {T, M <: AbstractMatrix{T}, A <: AbstractArray{T}}
+    return length(Jac.truncated_jac1) + length(Jac.truncated_jac2) + length(Jac.truncated_jac3)
 end
 
 function Base.size(
-    Jac::LQJacobianOperator{T, V, M}
-) where {T, V <: AbstractVector{T}, M <: AbstractMatrix{T}}
+    Jac::LQJacobianOperator{T, M, A}
+) where {T, M <: AbstractMatrix{T}, A <: AbstractArray{T}}
     return (size(Jac.truncated_jac1, 1) + size(Jac.truncated_jac2, 1) + size(Jac.truncated_jac3, 1), size(Jac.truncated_jac1,2))
 end
 
 function Base.eltype(
-    Jac::LQJacobianOperator{T, V, M}
-) where {T, V <: AbstractVector{T}, M <: AbstractMatrix{T}}
+    Jac::LQJacobianOperator{T, M, A}
+) where {T, M <: AbstractMatrix{T}, A <: AbstractMatrix{T}}
     return T
 end
 
 function Base.isreal(
-    Jac::LQJacobianOperator{T, V, M}
-) where {T, V <: AbstractVector{T}, M <: AbstractMatrix{T}}
-    return isreal(Jac.truncated_jac)
+    Jac::LQJacobianOperator{T, M, A}
+) where {T, M <: AbstractMatrix{T}, A <: AbstractMatrix{T}}
+    return isreal(Jac.truncated_jac1) && isreal(Jac.truncated_jac2) && isreal(Jac.truncated_jac3)
 end
 
 function Base.show(
-    Jac::LQJacobianOperator{T, V, M}
-) where {T, V <: AbstractVector{T}, M <: AbstractMatrix{T}}
-    show(Jac.truncated_jac)
+    Jac::LQJacobianOperator{T, M, A}
+) where {T, M <: AbstractMatrix{T}, A <: AbstractMatrix{T}}
+    show(Jac.truncated_jac1)
 end
 
 function Base.display(
-    Jac::LQJacobianOperator{T, V, M}
-) where {T, V <: AbstractVector{T}, M <: AbstractMatrix{T}}
-    display(Jac.truncated_jac)
+    Jac::LQJacobianOperator{T, M, A}
+) where {T, M <: AbstractMatrix{T}, A <: AbstractMatrix{T}}
+    display(Jac.truncated_jac1)
 end
 """
     LinearOperators.reset!(Jac::LQJacobianOperator{T, V, M})
@@ -2360,8 +2362,8 @@ end
 Resets the values of attributes `SJ1`, `SJ2`, and `SJ3` to zero
 """
 function LinearOperators.reset!(
-    Jac::LQJacobianOperator{T, V, M}
-) where {T, V <: AbstractVector{T}, M <: AbstractMatrix{T}}
+    Jac::LQJacobianOperator{T, M, A}
+) where {T, M <: AbstractMatrix{T}, A <: AbstractMatrix{T}}
     fill!(Jac.SJ1, T(0))
     fill!(Jac.SJ2, T(0))
     fill!(Jac.SJ3, T(0))
@@ -2382,13 +2384,16 @@ Generates `Jac' Σ Jac` and adds it to the matrix `H`.
 """
 function add_jtsj!(
     H::M,
-    Jac::LQJacobianOperator{T, V, M},
+    Jac::LQJacobianOperator{T, M, A},
     Σ::V,
     alpha::Number = 1,
     beta::Number = 1
-) where {T, V <: AbstractVector{T}, M <: AbstractMatrix{T}}
+) where {T, V <: AbstractVector{T}, M <: AbstractMatrix{T}, A <: AbstractArray{T}}
 
-    J   = Jac.truncated_jac
+    J1  = Jac.truncated_jac1
+    J2  = Jac.truncated_jac2
+    J3  = Jac.truncated_jac3
+
     N   = Jac.N
     nu  = Jac.nu
     nc  = Jac.nc
@@ -2402,12 +2407,16 @@ function add_jtsj!(
     LinearAlgebra.lmul!(beta, H)
 
     for i in 1:N
-        J1_left_range = (1 + (i - 1) * nc):(i * nc)
-        J2_left_range = (1 + nc * N + (i - 1) * nsc):(nc * N + i * nsc)
-        J3_left_range = (1 + (nc + nsc) * N + (i - 1) * nuc):((nc + nsc) * N + i * nuc)
-        left_block1 = view(J, J1_left_range, :)
-        left_block2 = view(J, J2_left_range, :)
-        left_block3 = view(J, J3_left_range, :)
+        #J1_left_range = (1 + (i - 1) * nc):(i * nc)
+        #J2_left_range = (1 + nc * N + (i - 1) * nsc):(nc * N + i * nsc)
+        #J3_left_range = (1 + (nc + nsc) * N + (i - 1) * nuc):((nc + nsc) * N + i * nuc)
+        #left_block1 = view(J, J1_left_range, :)
+        #left_block2 = view(J, J2_left_range, :)
+        #left_block3 = view(J, J3_left_range, :)
+
+        left_block1 = _dnlp_unsafe_wrap(J1, (nc, nu), (1 + (i - 1) * (nc * nu)))
+        left_block2 = _dnlp_unsafe_wrap(J2, (nsc, nu), (1 + (i - 1) * (nsc * nu)))
+        left_block3 = _dnlp_unsafe_wrap(J3, (nuc, nu), (1 + (i - 1) * (nuc * nu)))
 
         for j in 1:(N + 1 - i)
             Σ_range1 = (1 + (N - j) * nc):((N - j + 1) * nc)
@@ -2419,13 +2428,17 @@ function add_jtsj!(
             ΣJ3 .= left_block3 .* view(Σ, Σ_range3)
 
             for k in 1:(N - j - i + 2)
-                J1_right_range = (1 + ((k + i - 2)) * nc):((k + i - 1) * nc)
-                J2_right_range = (1 + nc * N + (k + i - 2) * nsc):(nc * N + (k + i - 1) * nsc)
-                J3_right_range = (1 + (nc + nsc) * N + (k + i - 2) * nuc):((nc + nsc) * N + (k + i - 1) * nuc)
+                #J1_right_range = (1 + ((k + i - 2)) * nc):((k + i - 1) * nc)
+                #J2_right_range = (1 + nc * N + (k + i - 2) * nsc):(nc * N + (k + i - 1) * nsc)
+                #J3_right_range = (1 + (nc + nsc) * N + (k + i - 2) * nuc):((nc + nsc) * N + (k + i - 1) * nuc)
+#
+                #right_block1 = view(J1, J1_right_range, :)
+                #right_block2 = view(J2, J2_right_range, :)
+                #right_block3 = view(J3, J3_right_range, :)
 
-                right_block1 = view(J, J1_right_range, :)
-                right_block2 = view(J, J2_right_range, :)
-                right_block3 = view(J, J3_right_range, :)
+                right_block1 = _dnlp_unsafe_wrap(J1, (nc, nu), (1 + (k + i - 2) * (nc * nu)))
+                right_block2 = _dnlp_unsafe_wrap(J2, (nsc, nu), (1 + (k + i - 2) * (nsc * nu)))
+                right_block3 = _dnlp_unsafe_wrap(J3, (nuc, nu), (1 + (k + i - 2) * (nuc * nu)))
 
                 row_range = (1 + nu * (N - i - j + 1)):(nu * (N - i -j + 2))
                 col_range = (1 + nu * (N - i - k - j + 2)):(nu * (N - i - k - j + 3))
@@ -2433,6 +2446,80 @@ function add_jtsj!(
                 LinearAlgebra.mul!(view(H, row_range, col_range), ΣJ1', right_block1, alpha, 1)
                 LinearAlgebra.mul!(view(H, row_range, col_range), ΣJ2', right_block2, alpha, 1)
                 LinearAlgebra.mul!(view(H, row_range, col_range), ΣJ3', right_block3, alpha, 1)
+            end
+        end
+    end
+end
+
+
+function _dnlp_unsafe_wrap_to_mat(tensor::A, dims::Tuple, shift=1) where {T, A <: CUDA.CuArray{Float64, 3, CUDA.Mem.DeviceBuffer}}
+    return unsafe_wrap(CUDA.CuArray{Float64, 2, CUDA.Mem.DeviceBuffer}, pointer(tensor, shift), dims)
+end
+
+function add_jtsj!(
+    H::M,
+    Jac::LQJacobianOperator{T, M, A},
+    Σ::V,
+    alpha::Number = 1,
+    beta::Number = 1
+) where {T, V <: CUDA.CuVector, M <: AbstractMatrix{T}, A <: AbstractArray{T}}
+
+    J1  = Jac.truncated_jac1
+    J2  = Jac.truncated_jac2
+    J3  = Jac.truncated_jac3
+
+    N   = Jac.N
+    nu  = Jac.nu
+    nc  = Jac.nc
+    nsc = Jac.nsc
+    nuc = Jac.nuc
+
+    ΣJ1 = Jac.SJ1
+    ΣJ2 = Jac.SJ2
+    ΣJ3 = Jac.SJ3
+
+    LinearAlgebra.lmul!(beta, H)
+
+    for i in 1:N
+        #J1_left_range = (1 + (i - 1) * nc):(i * nc)
+        #J2_left_range = (1 + nc * N + (i - 1) * nsc):(nc * N + i * nsc)
+        #J3_left_range = (1 + (nc + nsc) * N + (i - 1) * nuc):((nc + nsc) * N + i * nuc)
+        #left_block1 = view(J, J1_left_range, :)
+        #left_block2 = view(J, J2_left_range, :)
+        #left_block3 = view(J, J3_left_range, :)
+
+        left_block1 = _dnlp_unsafe_wrap_to_mat(J1, (nc, nu), (1 + (i - 1) * (nc * nu)))
+        left_block2 = _dnlp_unsafe_wrap_to_mat(J2, (nsc, nu), (1 + (i - 1) * (nsc * nu)))
+        left_block3 = _dnlp_unsafe_wrap_to_mat(J3, (nuc, nu), (1 + (i - 1) * (nuc * nu)))
+
+        for j in 1:(N + 1 - i)
+            Σ_range1 = (1 + (N - j) * nc):((N - j + 1) * nc)
+            Σ_range2 = (1 + nc * N + (N - j) * nsc):(nc * N + (N - j + 1) * nsc)
+            Σ_range3 = (1 + (nc + nsc) * N + (N - j) * nuc):((nc + nsc) * N + (N - j + 1) * nuc)
+
+            ΣJ1 .= left_block1 .* view(Σ, Σ_range1)
+            ΣJ2 .= left_block2 .* view(Σ, Σ_range2)
+            ΣJ3 .= left_block3 .* view(Σ, Σ_range3)
+
+            for k in 1:(N - j - i + 2)
+                #J1_right_range = (1 + ((k + i - 2)) * nc):((k + i - 1) * nc)
+                #J2_right_range = (1 + nc * N + (k + i - 2) * nsc):(nc * N + (k + i - 1) * nsc)
+                #J3_right_range = (1 + (nc + nsc) * N + (k + i - 2) * nuc):((nc + nsc) * N + (k + i - 1) * nuc)
+#
+                #right_block1 = view(J1, J1_right_range, :)
+                #right_block2 = view(J2, J2_right_range, :)
+                #right_block3 = view(J3, J3_right_range, :)
+
+                right_block1 = _dnlp_unsafe_wrap_to_mat(J1, (nc, nu), (1 + (k + i - 2) * (nc * nu)))
+                right_block2 = _dnlp_unsafe_wrap_to_mat(J2, (nsc, nu), (1 + (k + i - 2) * (nsc * nu)))
+                right_block3 = _dnlp_unsafe_wrap_to_mat(J3, (nuc, nu), (1 + (k + i - 2) * (nuc * nu)))
+
+                row_range = (1 + nu * (N - i - j + 1)):(nu * (N - i -j + 2))
+                col_range = (1 + nu * (N - i - k - j + 2)):(nu * (N - i - k - j + 3))
+
+                LinearAlgebra.mul!(H[row_range, col_range], ΣJ1', right_block1, alpha, 1)
+                LinearAlgebra.mul!(H[row_range, col_range], ΣJ2', right_block2, alpha, 1)
+                LinearAlgebra.mul!(H[row_range, col_range], ΣJ3', right_block3, alpha, 1)
             end
         end
     end
