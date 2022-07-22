@@ -132,8 +132,8 @@ for i in ns_vals
 
     a = @elapsed jtsj_mul!(H, J, x, ΣJ)
     b = @elapsed add_jtsj!(H_imp, J_imp, x, 1, 1)
-    c = @elapsed add_jtsj!(Hcuda, J_cu_imp, xcuda, 1, 1)
-    d = @elapsed jtsj_mul!(Hcuda, J_cu, xcuda, ΣJcu)
+    c = CUDA.@elapsed add_jtsj!(Hcuda, J_cu_imp, xcuda, 1, 1)
+    d = CUDA.@elapsed jtsj_mul!(Hcuda, J_cu, xcuda, ΣJcu)
     push!(add_ns_d, a)
     push!(add_ns_imp, b)
     push!(add_ns_cuda, c)
