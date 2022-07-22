@@ -82,8 +82,8 @@ function dynamic_data_to_CUDA(dnlp::LQDynamicData)
     E = Ec, F = Fc, K = Kc, sl = slc, su = suc, ul = ulc, uu = uuc, gl = glc, gu = guc
     )
 end
-#=
-ns_vals = [10, 100]
+
+ns_vals = [10, 30, 50, 100, 300, 500, 1000, 2500, 4000, 6000]
 mul_ns_cuda = []
 mul_ns_d    = []
 mul_ns_imp  = []
@@ -128,8 +128,10 @@ for i in ns_vals
     CUDA.reclaim()
 end
 
-=#
+println(ns_vals, "    ", mul_ns_cuda, "   ", mul_ns_d, "   ", mul_ns_imp, "   ", mul_ns_cuda2)
 
+
+#=
 ns_vals = [10, 30, 50, 80, 100, 300, 500 , 800, 2000, 4000, 6000]
 mulT_ns_cuda = []
 mulT_ns_d    = []
@@ -176,7 +178,7 @@ for i in ns_vals
 end
 
 println(ns_vals, "    ", mulT_ns_cuda, "    ", mulT_ns_cuda2, "    ", mulT_ns_d, "   ", mulT_ns_imp)
-
+=#
 #using Plots, LaTeXStrings
 #plot(ns_vals[2:end], mulT_ns_d[2:end], label="mul! (matrix_CPU)", xaxis=:log, yaxis=:log, legend=:topleft)
 #plot!(ns_vals[2:end], mulT_ns_imp[2:end], label="mul! (LQJacOp_CPU)")

@@ -2207,15 +2207,35 @@ function LinearAlgebra.mul!(x::V,
     for i in 1:N
         y1 .= y[(1 + (i - 1) * nu):(i * nu)]
 
-        x1_wrap = _dnlp_unsafe_wrap(x1, (nc, 1, (N - i + 1)), (1 + nc * (i - 1)))
-        x2_wrap = _dnlp_unsafe_wrap(x2, (nsc, 1, (N - i + 1)), (1 + nsc * (i -1)))
-        x3_wrap = _dnlp_unsafe_wrap(x3, (nuc, 1, (N - i + 1)), (1 + nuc * (i - 1)))
+
+        #x1_wrap = _dnlp_unsafe_wrap(x1, (nc, 1, (N - i + 1)), (1 + nc * (i - 1)))
+        #x2_wrap = _dnlp_unsafe_wrap(x2, (nsc, 1, (N - i + 1)), (1 + nsc * (i -1)))
+        #x3_wrap = _dnlp_unsafe_wrap(x3, (nuc, 1, (N - i + 1)), (1 + nuc * (i - 1)))
+
+        x1_view = view(x1, :, :, i:N)
+        x2_view = view(x2, :, :, i:N)
+        x3_view = view(x3, :, :, i:N)
+
+        J1_view = view(J1, :, :, 1:(N - i + 1))
+        J2_view = view(J2, :, :, 1:(N - i + 1))
+        J3_view = view(J3, :, :, 1:(N - i + 1))
+
+        #J1_wrap = _dnlp_unsafe_wrap(J1, (nc, nu, (N - i + 1)), (1 + nc * nu * (i - 1)))
+        #J2_wrap = _dnlp_unsafe_wrap(J2, (nsc, nu, (N - i + 1)), (1 + nsc * nu * (i - 1)))
+        #J3_wrap = _dnlp_unsafe_wrap(J3, (nuc, nu, (N - i + 1)), (1 + nuc * nu * (i - 1)))
+
+        #y1_wrap = _dnlp_unsafe_wrap(y1, (nu, 1, (N - i + 1)), (1 + nu * (i - 1)))
+        y1_view = view(y1, :, :, i:N)
 
         #could alternatively use `view` here. It is possibly slower, but if it is, it isn't by much
+        #CUDA.CUBLAS.gemm_strided_batched!('N', 'N', 1, J1_wrap, y1_wrap, 1, x1_wrap)
+        #CUDA.CUBLAS.gemm_strided_batched!('N', 'N', 1, J2_wrap, y1_wrap, 1, x2_wrap)
+        #CUDA.CUBLAS.gemm_strided_batched!('N', 'N', 1, J3_wrap, y1_wrap, 1, x3_wrap)
 
-        CUDA.CUBLAS.gemm_strided_batched!('N', 'N', 1, J1[:, :, 1:(N - i + 1)], y1[:, :, i:N], 1, x1_wrap)
-        CUDA.CUBLAS.gemm_strided_batched!('N', 'N', 1, J2[:, :, 1:(N - i + 1)], y1[:, :, i:N], 1, x2_wrap)
-        CUDA.CUBLAS.gemm_strided_batched!('N', 'N', 1, J3[:, :, 1:(N - i + 1)], y1[:, :, i:N], 1, x3_wrap)
+        CUDA.CUBLAS.gemm_strided_batched!('N', 'N', 1, J1_view, y1_view, 1, x1_view)
+        CUDA.CUBLAS.gemm_strided_batched!('N', 'N', 1, J2_view, y1_view, 1, x2_view)
+        CUDA.CUBLAS.gemm_strided_batched!('N', 'N', 1, J3_view, y1_view, 1, x3_view)
+
     end
 
     view(x, 1:(nc * N)) .= reshape(x1, nc * N)
