@@ -1,14 +1,6 @@
 using Test, DynamicNLPModels, MadNLP, Random, JuMP, LinearAlgebra, SparseArrays, CUDA
 include("sparse_lq_test.jl")
 
-function tril_to_full!(dense::AbstractMatrix{T}) where T
-    for i=1:size(dense,1)
-        for j=i:size(dense,2)
-            @inbounds dense[i,j]=dense[j,i]
-        end
-    end
-end
-
 function test_mul(lq_dense, lq_dense_imp; cuda=false)
     dnlp = lq_dense.dynamic_data
     N    = dnlp.N
@@ -84,9 +76,7 @@ function test_add_jtsj(lq_dense, lq_dense_imp; cuda=false)
 
     add_jtsj!(H_imp, J_imp, x_imp)
 
-    tril_to_full!(H_imp)
-
-    @test Array(H_imp) ≈ H atol = 1e-10
+    @test LowerTriangular(Array(H_imp)) ≈ LowerTriangular(H) atol = 1e-10
 end
 
 function dynamic_data_to_CUDA(dnlp::LQDynamicData)
