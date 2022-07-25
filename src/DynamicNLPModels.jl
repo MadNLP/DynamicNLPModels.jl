@@ -375,7 +375,7 @@ Attributes
  - `SJ1`: placeholder for storing data when calculating `ΣJ`
  - `SJ2`: placeholder for storing data when calculating `ΣJ`
  - `SJ3`: placeholder for storing data when calculating `ΣJ`
-
+ - `H_sub_block`: placeholder for storing data when adding `J^T ΣJ` to the Hessian
 """
 struct LQJacobianOperator{T, M, A} <: LinearOperators.AbstractLinearOperator{T}
     # TODO: remove V from operator type
@@ -399,6 +399,9 @@ struct LQJacobianOperator{T, M, A} <: LinearOperators.AbstractLinearOperator{T}
     SJ1::M
     SJ2::M
     SJ3::M
+
+    # Storage block for adding J^TΣJ to H
+    H_sub_block::M
 end
 
 
@@ -1009,6 +1012,7 @@ function _build_implicit_dense_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) w
     SJ1  = _init_similar(Q, nc, nu, T)
     SJ2  = _init_similar(Q, num_real_bounds_s, nu, T)
     SJ3  = _init_similar(Q, 0, nu, T)
+    H_sub_block = _init_similar(Q, nu, nu, T)
 
     dense_blocks = _build_block_matrices(A, B, K, N)
     block_A      = dense_blocks.A
@@ -1072,7 +1076,7 @@ function _build_implicit_dense_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) w
         Jac1, Jac2, Jac3,
         N, nu, nc, num_real_bounds_s, 0,
         x1, x2, x3, y,
-        SJ1, SJ2, SJ3
+        SJ1, SJ2, SJ3, H_sub_block
     )
 
     DenseLQDynamicModel(
@@ -1147,7 +1151,6 @@ function _build_implicit_dense_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) w
     Jac1 = _init_similar(Q, nc, nu, N, T)
     Jac2 = _init_similar(Q, num_real_bounds_s, nu, N, T)
     Jac3 = _init_similar(Q, num_real_bounds_u, nu, N, T)
-    #Jac = _init_similar(Q, (nc + num_real_bounds_s + num_real_bounds_u) * N, nu, T)
 
     As0 = _init_similar(s0, ns * (N + 1), T)
     As0_bounds = _init_similar(s0, num_real_bounds_s * N, T)
@@ -1171,6 +1174,7 @@ function _build_implicit_dense_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) w
     SJ1   = _init_similar(Q, nc, nu, T)
     SJ2   = _init_similar(Q, num_real_bounds_s, nu, T)
     SJ3   = _init_similar(Q, num_real_bounds_u, nu, T)
+    H_sub_block = _init_similar(Q, nu, nu, T)
 
     I_mat[LinearAlgebra.diagind(I_mat)] .= T(1)
 
@@ -1272,7 +1276,7 @@ function _build_implicit_dense_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) w
         Jac1, Jac2, Jac3,
         N, nu, nc, num_real_bounds_s, num_real_bounds_u,
         x1, x2, x3, y,
-        SJ1, SJ2, SJ3
+        SJ1, SJ2, SJ3, H_sub_block
     )
 
     DenseLQDynamicModel(
@@ -2128,6 +2132,10 @@ function _dnlp_unsafe_wrap(tensor::A, dims::Tuple, shift=1) where {T, A <: Abstr
     return unsafe_wrap(Matrix{T}, pointer(tensor, shift), dims)
 end
 
+function _dnlp_unsafe_wrap(tensor::A, dims::Tuple, shift=1) where {T, A <: CUDA.CuArray{T, 3, CUDA.Mem.DeviceBuffer}}
+    return unsafe_wrap(CUDA.CuArray{T, 2, CUDA.Mem.DeviceBuffer}, pointer(tensor, shift), dims)
+end
+
 function LinearAlgebra.mul!(y::V,
     Jac::LQJacobianOperator{T, M, A},
     x::V
@@ -2144,25 +2152,7 @@ function LinearAlgebra.mul!(y::V,
     nsc = Jac.nsc
     nuc = Jac.nuc
 
-#    for i in 1:N
-#        #sub_B1 = @view J1[:, :, 1:(N - i + 1)]
-#        #sub_B2 = @view J2[:, :, 1:(N - i + 1)]
-#        #sub_B3 = @view J3[:, :, 1:(N - i + 1)]
-#        sub_B1 = _dnlp_unsafe_wrap(J1, (nc * (N - i + 1), nu), 1)
-#        sub_B2 = _dnlp_unsafe_wrap(J2, (nsc * (N - i + 1), nu), 1)
-#        sub_B3 = _dnlp_unsafe_wrap(J3, (nuc * (N - i + 1), nu), 1)
-#
-#        sub_x = view(x, (1 + (i - 1) * nu):(i * nu))
-#
-#        LinearAlgebra.mul!(view(y, (1 + (i - 1) * nc):(N * nc)), sub_B1, sub_x, 1, 1)
-#        LinearAlgebra.mul!(view(y, (1 + nc * N + (i - 1) * nsc):((nc + nsc) * N)), sub_B2, sub_x, 1, 1)
-#        LinearAlgebra.mul!(view(y, (1 + (nc + nsc) * N + (i - 1) * nuc):((nc + nsc + nuc) * N)), sub_B3, sub_x, 1, 1)
-#    end
-
     for i in 1:N
-        #sub_B1 = @view J1[:, :, i]
-        #sub_B2 = @view J2[:, :, i]
-        #sub_B3 = @view J3[:, :, i]
         sub_B1  = _dnlp_unsafe_wrap(J1, (nc, nu), (1 + (i - 1) * (nc * nu)))
         sub_B2  = _dnlp_unsafe_wrap(J2, (nsc, nu), (1 + (i - 1) * (nsc * nu)))
         sub_B3  = _dnlp_unsafe_wrap(J3, (nuc, nu), (1 + (i - 1) * (nuc * nu)))
@@ -2174,10 +2164,6 @@ function LinearAlgebra.mul!(y::V,
             LinearAlgebra.mul!(view(y, (1 + nc * N + nsc * N + nuc * (j + i- 2)):(nc * N + nsc * N + nuc * (j + i - 1))), sub_B3, sub_x, 1, 1)
         end
     end
-end
-
-function _dnlp_unsafe_wrap(tensor::A, dims::Tuple, shift=1) where {T, A <: CUDA.CuArray{Float64, 3, CUDA.Mem.DeviceBuffer}}
-    return unsafe_wrap(A, pointer(tensor, shift), dims)
 end
 
 function LinearAlgebra.mul!(x::V,
@@ -2207,11 +2193,6 @@ function LinearAlgebra.mul!(x::V,
     for i in 1:N
         y1 .= y[(1 + (i - 1) * nu):(i * nu)]
 
-
-        #x1_wrap = _dnlp_unsafe_wrap(x1, (nc, 1, (N - i + 1)), (1 + nc * (i - 1)))
-        #x2_wrap = _dnlp_unsafe_wrap(x2, (nsc, 1, (N - i + 1)), (1 + nsc * (i -1)))
-        #x3_wrap = _dnlp_unsafe_wrap(x3, (nuc, 1, (N - i + 1)), (1 + nuc * (i - 1)))
-
         x1_view = view(x1, :, :, i:N)
         x2_view = view(x2, :, :, i:N)
         x3_view = view(x3, :, :, i:N)
@@ -2220,17 +2201,7 @@ function LinearAlgebra.mul!(x::V,
         J2_view = view(J2, :, :, 1:(N - i + 1))
         J3_view = view(J3, :, :, 1:(N - i + 1))
 
-        #J1_wrap = _dnlp_unsafe_wrap(J1, (nc, nu, (N - i + 1)), 1)
-        #J2_wrap = _dnlp_unsafe_wrap(J2, (nsc, nu, (N - i + 1)), 1)
-        #J3_wrap = _dnlp_unsafe_wrap(J3, (nuc, nu, (N - i + 1)), 1)
-
-        #y1_wrap = _dnlp_unsafe_wrap(y1, (nu, 1, (N - i + 1)), (1 + nu * (i - 1)))
         y1_view = view(y1, :, :, i:N)
-
-        #could alternatively use `view` here. It is possibly slower, but if it is, it isn't by much
-        #CUDA.CUBLAS.gemm_strided_batched!('N', 'N', 1, J1_wrap, y1_wrap, 1, x1_wrap)
-        #CUDA.CUBLAS.gemm_strided_batched!('N', 'N', 1, J2_wrap, y1_wrap, 1, x2_wrap)
-        #CUDA.CUBLAS.gemm_strided_batched!('N', 'N', 1, J3_wrap, y1_wrap, 1, x3_wrap)
 
         CUDA.CUBLAS.gemm_strided_batched!('N', 'N', 1, J1_view, y1_view, 1, x1_view)
         CUDA.CUBLAS.gemm_strided_batched!('N', 'N', 1, J2_view, y1_view, 1, x2_view)
@@ -2261,9 +2232,6 @@ function LinearAlgebra.mul!(
     nuc = get_jacobian(Jac).nuc
 
     for i in 1:N
-        #sub_B1 = @view J1[:, :, i]
-        #sub_B2 = @view J2[:, :, i]
-        #sub_B3 = @view J3[:, :, i]
         sub_B1  = _dnlp_unsafe_wrap(J1, (nc, nu), (1 + (i - 1) * (nc * nu)))
         sub_B2  = _dnlp_unsafe_wrap(J2, (nsc, nu), (1 + (i - 1) * (nsc * nu)))
         sub_B3  = _dnlp_unsafe_wrap(J3, (nuc, nu), (1 + (i - 1) * (nuc * nu)))
@@ -2311,16 +2279,6 @@ function LinearAlgebra.mul!(
 
     for i in 1:N
         fill!(y1, zero(T))
-        #y1_wrap = _dnlp_unsafe_wrap(y1, (nu, 1, (N - i + 1)), 1)
-        #x1_wrap = _dnlp_unsafe_wrap(x1, (nc, 1, (N - i + 1)), (1 + nc * (i - 1)))
-        #x2_wrap = _dnlp_unsafe_wrap(x2, (nsc, 1, (N - i + 1)), (1 + nsc * (i - 1)))
-        #x3_wrap = _dnlp_unsafe_wrap(x3, (nuc, 1, (N - i + 1)), (1 + nuc * (i - 1)))
-        #J1_wrap = _dnlp_unsafe_wrap(J1, (nc, nu, (N - i + 1)), 1)
-        #J2_wrap = _dnlp_unsafe_wrap(J2, (nsc, nu, (N - i + 1)), 1)
-        #J3_wrap = _dnlp_unsafe_wrap(J3, (nuc, nu, (N - i + 1)), 1)
-        #CUDA.CUBLAS.gemm_strided_batched!('T', 'N', 1, J1_wrap, x1_wrap, 1, y1_wrap)
-        #CUDA.CUBLAS.gemm_strided_batched!('T', 'N', 1, J2_wrap, x2_wrap, 1, y1_wrap)
-        #CUDA.CUBLAS.gemm_strided_batched!('T', 'N', 1, J3_wrap, x3_wrap, 1, y1_wrap)
 
         y1_view = view(y1, :, :, 1:(N - i + 1))
 
@@ -2446,13 +2404,6 @@ function add_jtsj!(
     LinearAlgebra.lmul!(beta, H)
 
     for i in 1:N
-        #J1_left_range = (1 + (i - 1) * nc):(i * nc)
-        #J2_left_range = (1 + nc * N + (i - 1) * nsc):(nc * N + i * nsc)
-        #J3_left_range = (1 + (nc + nsc) * N + (i - 1) * nuc):((nc + nsc) * N + i * nuc)
-        #left_block1 = view(J, J1_left_range, :)
-        #left_block2 = view(J, J2_left_range, :)
-        #left_block3 = view(J, J3_left_range, :)
-
         left_block1 = _dnlp_unsafe_wrap(J1, (nc, nu), (1 + (i - 1) * (nc * nu)))
         left_block2 = _dnlp_unsafe_wrap(J2, (nsc, nu), (1 + (i - 1) * (nsc * nu)))
         left_block3 = _dnlp_unsafe_wrap(J3, (nuc, nu), (1 + (i - 1) * (nuc * nu)))
@@ -2467,14 +2418,6 @@ function add_jtsj!(
             ΣJ3 .= left_block3 .* view(Σ, Σ_range3)
 
             for k in 1:(N - j - i + 2)
-                #J1_right_range = (1 + ((k + i - 2)) * nc):((k + i - 1) * nc)
-                #J2_right_range = (1 + nc * N + (k + i - 2) * nsc):(nc * N + (k + i - 1) * nsc)
-                #J3_right_range = (1 + (nc + nsc) * N + (k + i - 2) * nuc):((nc + nsc) * N + (k + i - 1) * nuc)
-#
-                #right_block1 = view(J1, J1_right_range, :)
-                #right_block2 = view(J2, J2_right_range, :)
-                #right_block3 = view(J3, J3_right_range, :)
-
                 right_block1 = _dnlp_unsafe_wrap(J1, (nc, nu), (1 + (k + i - 2) * (nc * nu)))
                 right_block2 = _dnlp_unsafe_wrap(J2, (nsc, nu), (1 + (k + i - 2) * (nsc * nu)))
                 right_block3 = _dnlp_unsafe_wrap(J3, (nuc, nu), (1 + (k + i - 2) * (nuc * nu)))
@@ -2488,11 +2431,6 @@ function add_jtsj!(
             end
         end
     end
-end
-
-
-function _dnlp_unsafe_wrap_to_mat(tensor::A, dims::Tuple, shift=1) where {T, A <: CUDA.CuArray{Float64, 3, CUDA.Mem.DeviceBuffer}}
-    return unsafe_wrap(CUDA.CuArray{Float64, 2, CUDA.Mem.DeviceBuffer}, pointer(tensor, shift), dims)
 end
 
 function add_jtsj!(
@@ -2517,19 +2455,14 @@ function add_jtsj!(
     ΣJ2 = Jac.SJ2
     ΣJ3 = Jac.SJ3
 
+    H_sub_block = Jac.H_sub_block
+
     LinearAlgebra.lmul!(beta, H)
 
     for i in 1:N
-        #J1_left_range = (1 + (i - 1) * nc):(i * nc)
-        #J2_left_range = (1 + nc * N + (i - 1) * nsc):(nc * N + i * nsc)
-        #J3_left_range = (1 + (nc + nsc) * N + (i - 1) * nuc):((nc + nsc) * N + i * nuc)
-        #left_block1 = view(J, J1_left_range, :)
-        #left_block2 = view(J, J2_left_range, :)
-        #left_block3 = view(J, J3_left_range, :)
-
-        left_block1 = _dnlp_unsafe_wrap_to_mat(J1, (nc, nu), (1 + (i - 1) * (nc * nu)))
-        left_block2 = _dnlp_unsafe_wrap_to_mat(J2, (nsc, nu), (1 + (i - 1) * (nsc * nu)))
-        left_block3 = _dnlp_unsafe_wrap_to_mat(J3, (nuc, nu), (1 + (i - 1) * (nuc * nu)))
+        left_block1 = view(J1, :, :, i)
+        left_block2 = view(J2, :, :, i)
+        left_block3 = view(J3, :, :, i)
 
         for j in 1:(N + 1 - i)
             Σ_range1 = (1 + (N - j) * nc):((N - j + 1) * nc)
@@ -2541,24 +2474,21 @@ function add_jtsj!(
             ΣJ3 .= left_block3 .* view(Σ, Σ_range3)
 
             for k in 1:(N - j - i + 2)
-                #J1_right_range = (1 + ((k + i - 2)) * nc):((k + i - 1) * nc)
-                #J2_right_range = (1 + nc * N + (k + i - 2) * nsc):(nc * N + (k + i - 1) * nsc)
-                #J3_right_range = (1 + (nc + nsc) * N + (k + i - 2) * nuc):((nc + nsc) * N + (k + i - 1) * nuc)
-#
-                #right_block1 = view(J1, J1_right_range, :)
-                #right_block2 = view(J2, J2_right_range, :)
-                #right_block3 = view(J3, J3_right_range, :)
-
-                right_block1 = _dnlp_unsafe_wrap_to_mat(J1, (nc, nu), (1 + (k + i - 2) * (nc * nu)))
-                right_block2 = _dnlp_unsafe_wrap_to_mat(J2, (nsc, nu), (1 + (k + i - 2) * (nsc * nu)))
-                right_block3 = _dnlp_unsafe_wrap_to_mat(J3, (nuc, nu), (1 + (k + i - 2) * (nuc * nu)))
+                right_block1 = view(J1, :, :, (k + i - 1))
+                right_block2 = view(J2, :, :, (k + i - 1))
+                right_block3 = view(J3, :, :, (k + i - 1))
 
                 row_range = (1 + nu * (N - i - j + 1)):(nu * (N - i -j + 2))
                 col_range = (1 + nu * (N - i - k - j + 2)):(nu * (N - i - k - j + 3))
 
-                LinearAlgebra.mul!(H[row_range, col_range], ΣJ1', right_block1, alpha, 1)
-                LinearAlgebra.mul!(H[row_range, col_range], ΣJ2', right_block2, alpha, 1)
-                LinearAlgebra.mul!(H[row_range, col_range], ΣJ3', right_block3, alpha, 1)
+                LinearAlgebra.mul!(H_sub_block, ΣJ1', right_block1)
+                H[row_range, col_range] .+= alpha .* H_sub_block
+
+                LinearAlgebra.mul!(H_sub_block, ΣJ2', right_block2)
+                H[row_range, col_range] .+= alpha .* H_sub_block
+
+                LinearAlgebra.mul!(H_sub_block, ΣJ3', right_block3)
+                H[row_range, col_range] .+= alpha .* H_sub_block
             end
         end
     end
