@@ -395,10 +395,18 @@ struct LQJacobianOperator{T, M, A} <: LinearOperators.AbstractLinearOperator{T}
     x3::A
     y::A
 
-    # Storage tensors for building J^TΣJ
+    # Storage Matrices for building J^TΣJ
     SJ1::M
     SJ2::M
     SJ3::M
+
+    # Storage tensors for building J^T ΣJ
+    block_JT1::A
+    block_JT2::A
+    block_JT3::A
+    block_SJ1::A
+    block_SJ2::A
+    block_SJ3::A
 
     # Storage block for adding J^TΣJ to H
     H_sub_block::M
@@ -1041,6 +1049,14 @@ function _build_implicit_dense_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) w
     SJ1  = _init_similar(Q, nc, nu, T)
     SJ2  = _init_similar(Q, num_real_bounds_s, nu, T)
     SJ3  = _init_similar(Q, 0, nu, T)
+
+    block_JT1 = _init_similar(Q, nc, nu, N, T)
+    block_JT2 = _init_similar(Q, num_real_bounds_s, nu, N, T)
+    block_JT3 = _init_similar(Q, 0, nu, N, T)
+    block_SJ1 = _init_similar(Q, nc, nu, N, T)
+    block_SJ2 = _init_similar(Q, num_real_bounds_s, nu, N, T)
+    block_SJ3 = _init_similar(Q, 0, nu, N, T)
+
     H_sub_block = _init_similar(Q, nu, nu, T)
 
     dense_blocks = _build_block_matrices(A, B, K, N)
@@ -1105,9 +1121,10 @@ function _build_implicit_dense_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) w
         Jac1, Jac2, Jac3,
         N, nu, nc, num_real_bounds_s, 0,
         x1, x2, x3, y,
-        SJ1, SJ2, SJ3, H_sub_block
+        SJ1, SJ2, SJ3,
+        block_JT1, block_JT2, block_JT3,
+        block_SJ1, block_SJ2, block_SJ3, H_sub_block
     )
-
 
     DenseLQDynamicModel(
         NLPModels.NLPModelMeta(
@@ -1204,6 +1221,14 @@ function _build_implicit_dense_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) w
     SJ1   = _init_similar(Q, nc, nu, T)
     SJ2   = _init_similar(Q, num_real_bounds_s, nu, T)
     SJ3   = _init_similar(Q, num_real_bounds_u, nu, T)
+
+    block_JT1 = _init_similar(Q, nc, nu, N, T)
+    block_JT2 = _init_similar(Q, num_real_bounds_s, nu, N, T)
+    block_JT3 = _init_similar(Q, num_real_bounds_u, nu, N, T)
+    block_SJ1 = _init_similar(Q, nc, nu, N, T)
+    block_SJ2 = _init_similar(Q, num_real_bounds_s, nu, N, T)
+    block_SJ3 = _init_similar(Q, num_real_bounds_u, nu, N, T)
+
     H_sub_block = _init_similar(Q, nu, nu, T)
 
     I_mat[LinearAlgebra.diagind(I_mat)] .= T(1)
@@ -1304,9 +1329,11 @@ function _build_implicit_dense_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) w
 
     J = LQJacobianOperator{T, M, AbstractArray{T}}(
         Jac1, Jac2, Jac3,
-        N, nu, nc, num_real_bounds_s, num_real_bounds_u,
+        N, nu, nc, num_real_bounds_s, 0,
         x1, x2, x3, y,
-        SJ1, SJ2, SJ3, H_sub_block
+        SJ1, SJ2, SJ3,
+        block_JT1, block_JT2, block_JT3,
+        block_SJ1, block_SJ2, block_SJ3, H_sub_block
     )
 
     DenseLQDynamicModel(
@@ -2561,7 +2588,8 @@ end
 """
     LinearOperators.reset!(Jac::LQJacobianOperator{T, V, M})
 
-Resets the values of attributes `SJ1`, `SJ2`, and `SJ3` to zero
+Resets the values of attributes `SJ1`, `SJ2`, `SJ3`, `block_JT1`, `block_JT2`,
+`block_JT3`, `block_SJ1`, `block_SJ2`, and `block_SJ3` to zero
 """
 function LinearOperators.reset!(
     Jac::LQJacobianOperator{T, M, A}
@@ -2569,6 +2597,12 @@ function LinearOperators.reset!(
     fill!(Jac.SJ1, T(0))
     fill!(Jac.SJ2, T(0))
     fill!(Jac.SJ3, T(0))
+    fill!(Jac.block_JT1, T(0))
+    fill!(Jac.block_JT2, T(0))
+    fill!(Jac.block_JT3, T(0))
+    fill!(Jac.block_SJ1, T(0))
+    fill!(Jac.block_SJ2, T(0))
+    fill!(Jac.block_SJ3, T(0))
 end
 
 function NLPModels.jac_op(
@@ -2659,6 +2693,94 @@ function add_jtsj!(
                 LinearAlgebra.mul!(view(H, row_range, col_range), ΣJ2', right_block2, alpha, 1)
                 LinearAlgebra.mul!(view(H, row_range, col_range), ΣJ3', right_block3, alpha, 1)
             end
+        end
+    end
+end
+
+function add_jtsj!(
+    Hess::LQHessianOperator{T, V1, A},
+    Jac::LQJacobianOperator{T, M, A},
+    Σ::V2,
+    alpha::Number = 1,
+    beta::Number = 1
+) where {T, V1, V2 <: CUDA.CuVector, M <: AbstractMatrix{T}, A <: AbstractArray{T}}
+    H  = Hess.H
+    diag_list = Hess.diag_list
+
+    J1 = Jac.truncated_jac1
+    J2 = Jac.truncated_jac2
+    J3 = Jac.truncated_jac3
+
+    N   = Jac.N
+    nu  = Jac.nu
+    nc  = Jac.nc
+    nsc = Jac.nsc
+    nuc = Jac.nuc
+
+    SJ1 = Jac.SJ1
+    SJ2 = Jac.SJ2
+    SJ3 = Jac.SJ3
+
+    block_JT1 = Jac.block_JT1
+    block_JT2 = Jac.block_JT2
+    block_JT3 = Jac.block_JT3
+    block_SJ1 = Jac.block_SJ1
+    block_SJ2 = Jac.block_SJ2
+    block_SJ3 = Jac.block_SJ3
+
+    H .*= beta
+
+    split = cld(N, 2)
+
+    for i in 1:split
+        SJ1 .= @view J1[:, :, i]
+        SJ2 .= @view J2[:, :, i]
+        SJ3 .= @view J3[:, :, i]
+
+        for j in 1:(N - i + 1)
+            S_range1 = (1 + (j + i - 2) * nc):((j + i - 1) * nc)
+            S_range2 = (1 + nc * N + (j + i - 2) * nsc):(nc * N + (j + i - 1) * nc)
+            S_range3 = (1 + (nc + nsc) * N + (j + i - 2) * nuc):((nc + nsc) * N + (j + i - 1) * nuc)
+
+            CUDA.CUBLAS.dgmm!('L', SJ1, view(Σ, S_range1), view(block_SJ1, :, :, j))
+            CUDA.CUBLAS.dgmm!('L', SJ2, view(Σ, S_range2), view(block_SJ2, :, :, j))
+            CUDA.CUBLAS.dgmm!('L', SJ3, view(Σ, S_range3), view(block_SJ3, :, :, j))
+        end
+
+        for j in 1:i
+            block_JT1[:, :, 1:(N - i + 1)] .= @view J1[:, :, i - j + 1]
+            block_JT2[:, :, 1:(N - i + 1)] .= @view J2[:, :, i - j + 1]
+            block_JT3[:, :, 1:(N - i + 1)] .= @view J3[:, :, i - j + 1]
+
+            H_range = diag_list[j]:(diag_list[j] + N - i + 1)
+            H_view  = view(H, :, :, H_range)
+            CUDA.CUBLAS.gemm_strided_batched!('T', 'N', 1, view(block_JT1, :, :, 1:(N - i + 1)), view(block_SJ1, :, :, 1:(N - i + 1)), 1, H_view)
+            CUDA.CUBLAS.gemm_strided_batched!('T', 'N', 1, view(block_JT2, :, :, 1:(N - i + 1)), view(block_SJ1, :, :, 1:(N - i + 1)), 1, H_view)
+            CUDA.CUBLAS.gemm_strided_batched!('T', 'N', 1, view(block_JT3, :, :, 1:(N - i + 1)), view(block_SJ3, :, :, 1:(N - i + 1)), 1, H_view)
+        end
+    end
+
+    block_JT1 .= J1
+    block_JT2 .= J2
+    block_JT3 .= J3
+
+    for i in (split + 1):N
+
+        for j in i:N
+            S_range1 = (1 + (j - 1) * nc):(j * nc)
+            S_range2 = (1 + nc * N + (j - 1) * nsc):(nc * N + j * nsc)
+            S_range3 = (1 + (nc + nsc) * N + (j - 1) * nuc):((nc + nsc) * N + j * nuc)
+
+            CUDA.CUBLAS.dgmm!('L', view(J1, :, :, j), view(Σ, S_range1), SJ1)
+            CUDA.CUBLAS.dgmm!('L', view(J2, :, :, j), view(Σ, S_range2), SJ2)
+            CUDA.CUBLAS.dgmm!('L', view(J3, :, :, j), view(Σ, S_range3), SJ3)
+
+            block_SJ1[:, :, 1:(N + split - i)] .= SJ1
+            block_SJ2[:, :, 1:(N + split - i)] .= SJ2
+            block_SJ3[:, :, 1:(N + split - i)] .= SJ3
+
+            H_view = view(H, :, :, diag_list[i:-1:1])
+            CUDA.CUBLAS.gemm_strided_batched!('T', 'N', 1, view(block_JT1, :, :, 1:(N + split - i)), view(block_SJ1, :, :, 1:(N + split - i)), 1, H_view)
         end
     end
 end
