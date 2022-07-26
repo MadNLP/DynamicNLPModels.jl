@@ -79,6 +79,15 @@ function test_add_jtsj(lq_dense, lq_dense_imp; cuda=false)
     @test LowerTriangular(Array(H_imp)) ≈ LowerTriangular(H) atol = 1e-10
 end
 
+function test_LQHessOp(lq_dense, lq_dense_imp)
+    H_dense = get_hessian(lq_dense)
+    H_imp   = get_hessian(lq_dense_imp)
+
+    H_imp_mat = hess_tensor_to_matrix(H_imp)
+
+    @test LowerTriangular(Array(H_imp_mat)) ≈ LowerTriangular(H_dense) atol = 1e-10
+end
+
 function dynamic_data_to_CUDA(dnlp::LQDynamicData)
     s0c = CuVector{Float64}(undef, length(dnlp.s0))
     Ac  = CuArray{Float64}(undef, size(dnlp.A))
@@ -191,6 +200,7 @@ solution_ref_dense_from_data  = madnlp(lq_dense_from_data, max_iter=100)
 lq_dense_imp = DenseLQDynamicModel(dnlp; implicit = true)
 test_mul(lq_dense, lq_dense_imp)
 test_add_jtsj(lq_dense, lq_dense_imp)
+test_LQHessOp(lq_dense, lq_dense_imp)
 
 # Test with lower bounds
 model     = build_QP_JuMP_model(Q,R,A,B, N;s0=s0, sl = sl, ul = ul)
@@ -268,6 +278,7 @@ solution_ref_dense_from_data  = madnlp(lq_dense_from_data, max_iter=100)
 lq_dense_imp = DenseLQDynamicModel(dnlp; implicit = true)
 test_mul(lq_dense, lq_dense_imp)
 test_add_jtsj(lq_dense, lq_dense_imp)
+test_LQHessOp(lq_dense, lq_dense_imp)
 
 # Test mul! operators with CUDA
 if CUDA.has_cuda_gpu()
@@ -306,6 +317,7 @@ solution_ref_dense_from_data  = madnlp(lq_dense_from_data, max_iter=100)
 lq_dense_imp = DenseLQDynamicModel(dnlp; implicit = true)
 test_mul(lq_dense, lq_dense_imp)
 test_add_jtsj(lq_dense, lq_dense_imp)
+test_LQHessOp(lq_dense, lq_dense_imp)
 
 # Test mul! operators with CUDA
 if CUDA.has_cuda_gpu()
@@ -355,6 +367,7 @@ solution_ref_dense_from_data  = madnlp(lq_dense_from_data, max_iter=100)
 lq_dense_imp = DenseLQDynamicModel(dnlp; implicit = true)
 test_mul(lq_dense, lq_dense_imp)
 test_add_jtsj(lq_dense, lq_dense_imp)
+test_LQHessOp(lq_dense, lq_dense_imp)
 
 # Test mul! operators with CUDA
 if CUDA.has_cuda_gpu()
@@ -467,6 +480,7 @@ solution_ref_dense_from_data  = madnlp(lq_dense_from_data, max_iter=100)
 lq_dense_imp = DenseLQDynamicModel(dnlp; implicit = true)
 test_mul(lq_dense, lq_dense_imp)
 test_add_jtsj(lq_dense, lq_dense_imp)
+test_LQHessOp(lq_dense, lq_dense_imp)
 
 # Test mul! operators with CUDA
 if CUDA.has_cuda_gpu()
@@ -531,6 +545,7 @@ solution_ref_dense_from_data  = madnlp(lq_dense_from_data, max_iter=100)
 lq_dense_imp = DenseLQDynamicModel(dnlp; implicit = true)
 test_mul(lq_dense, lq_dense_imp)
 test_add_jtsj(lq_dense, lq_dense_imp)
+test_LQHessOp(lq_dense, lq_dense_imp)
 
 # Test mul! operators with CUDA
 if CUDA.has_cuda_gpu()
@@ -569,6 +584,7 @@ solution_ref_dense_from_data  = madnlp(lq_dense_from_data, max_iter=100)
 lq_dense_imp = DenseLQDynamicModel(dnlp; implicit = true)
 test_mul(lq_dense, lq_dense_imp)
 test_add_jtsj(lq_dense, lq_dense_imp)
+test_LQHessOp(lq_dense, lq_dense_imp)
 
 # Test mul! operators with CUDA
 if CUDA.has_cuda_gpu()
@@ -675,7 +691,13 @@ DenseLQDynamicModel{Float32, GenericArray{Float32, 1}, GenericArray{Float32, 2},
 # Test LQJacobianOperator APIs
 lq_dense_imp = DenseLQDynamicModel(dnlp; implicit=true)
 
-@test length(get_jacobian(lq_dense_imp)) == length(lq_dense_imp.data.A)
-@test size(get_jacobian(lq_dense_imp)) == size(lq_dense_imp.data.A)
-@test isreal(get_jacobian(lq_dense_imp)) == isreal(lq_dense_imp.data.A)
-@test eltype(get_jacobian(lq_dense_imp)) == eltype(lq_dense_imp.data.A)
+@test length(get_jacobian(lq_dense_imp)) == length(lq_dense_imp.data.A.truncated_jac1) + length(lq_dense_imp.data.A.truncated_jac2) + length(lq_dense_imp.data.A.truncated_jac3)
+@test size(get_jacobian(lq_dense_imp))   == (size(lq_dense_imp.data.A.truncated_jac1, 1) + size(lq_dense_imp.data.A.truncated_jac2, 1)
+    + size(lq_dense_imp.data.A.truncated_jac3, 1), size(lq_dense_imp.data.A.truncated_jac1, 2))
+@test isreal(get_jacobian(lq_dense_imp)) == isreal(lq_dense_imp.data.A.truncated_jac1)
+@test eltype(get_jacobian(lq_dense_imp)) == eltype(lq_dense_imp.data.A.truncated_jac1)
+
+@test length(get_hessian(lq_dense_imp)) == length(lq_dense_imp.data.H.H)
+@test size(get_hessian(lq_dense_imp))   == size(lq_dense_imp.data.H.H)
+@test isreal(get_hessian(lq_dense_imp)) == isreal(lq_dense_imp.data.H.H)
+@test eltype(get_hessian(lq_dense_imp)) == eltype(lq_dense_imp.data.H.H)

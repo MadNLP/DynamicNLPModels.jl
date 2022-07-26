@@ -9,7 +9,8 @@ import CUDA
 
 import SparseArrays: SparseMatrixCSC
 
-export LQDynamicData, SparseLQDynamicModel, DenseLQDynamicModel, get_u, get_s, get_jacobian, add_jtsj!
+export LQDynamicData, SparseLQDynamicModel, DenseLQDynamicModel
+export get_u, get_s, get_jacobian, get_hessian, add_jtsj!, hess_tensor_to_matrix
 
 abstract type AbstractLQDynData{T,V} end
 """
@@ -184,7 +185,6 @@ function LQDynamicData(
         end
     end
 
-
     ns = size(Q,1)
     nu = size(R,1)
 
@@ -355,7 +355,7 @@ function DenseLQDynamicModel(
 end
 
 """
-    LQJacobianOperator{T, V, M}
+    LQJacobianOperator{T, M, A}
 
 Struct for storing the implicit Jacobian matrix. All data for the Jacobian can be stored
 in the first `nu` columns of `J`. This struct contains the needed data and storage arrays for
@@ -402,6 +402,36 @@ struct LQJacobianOperator{T, M, A} <: LinearOperators.AbstractLinearOperator{T}
 
     # Storage block for adding J^TΣJ to H
     H_sub_block::M
+end
+
+"""
+    LQHessianOperator{T, V, A}
+
+Struct for storing the Hessian as a tensor within the `QPData`. Entries of the tensor are
+the nu x nu blocks of the Hessian matrix across the diagonal, allowing the blocks to be
+stored contiguously. For `N = 3`, there are 6 nu x nu blocks in the tensor, and the resulting
+Hessian looks like:
+__              __
+| H_1   -    -   |
+| H_4  H_2   -   |
+| H_6  H_5  H_3  |
+--              --
+
+---
+Attributes
+ - `H` : Hessian tensor
+ - `N` : Number of time steps
+ - `nu`: Number of inputs
+ - `nh`: Number of blocks in the Hessian (third dimension of the tensor)
+ - `diag_list`: Vector containing the index of the start of a new diagonal (e.g., for `N = 3`,
+ this list is equal to [1, 4, 6])
+"""
+struct LQHessianOperator{T, V, A} <: LinearOperators.AbstractLinearOperator{T}
+    H::A
+    N::Int
+    nu::Int
+    nh::Int
+    diag_list::V
 end
 
 
@@ -994,7 +1024,6 @@ function _build_implicit_dense_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) w
     Jac1       = _init_similar(Q, nc, nu, N, T)
     Jac2       = _init_similar(Q, num_real_bounds_s, nu, N, T)
     Jac3       = _init_similar(Q, 0, nu, N, T)
-    #Jac        = _init_similar(Q, nc * N + num_real_bounds_s * N, nu, T)
     As0        = _init_similar(s0, ns * (N + 1), T)
     As0_bounds = _init_similar(s0, num_real_bounds_s * N, T)
 
@@ -1018,7 +1047,7 @@ function _build_implicit_dense_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) w
     block_A      = dense_blocks.A
     block_B      = dense_blocks.B
 
-    H_blocks = _build_H_blocks(Q, R, block_A, block_B, S,Qf, K, s0, N)
+    H_blocks = _build_implicit_H_blocks(Q, R, block_A, block_B, S,Qf, K, s0, N)
 
     H  = H_blocks.H
     c0 = H_blocks.c0
@@ -1068,8 +1097,8 @@ function _build_implicit_dense_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) w
     end
 
     ncon = (nc + num_real_bounds_s) * N
-    nnzj = ncon * size(H, 2)
-    nh   = size(H, 1)
+    nnzj = ncon * nu * N
+    nh   = nu * N
     nnzh = div(nh * (nh + 1), 2)
 
     J = LQJacobianOperator{T, M, AbstractArray{T}}(
@@ -1078,6 +1107,7 @@ function _build_implicit_dense_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) w
         x1, x2, x3, y,
         SJ1, SJ2, SJ3, H_sub_block
     )
+
 
     DenseLQDynamicModel(
         NLPModels.NLPModelMeta(
@@ -1135,7 +1165,7 @@ function _build_implicit_dense_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) w
     block_A  = dense_blocks.A
     block_B  = dense_blocks.B
 
-    H_blocks = _build_H_blocks(Q, R, block_A, block_B, S, Qf, K, s0, N)
+    H_blocks = _build_implicit_H_blocks(Q, R, block_A, block_B, S, Qf, K, s0, N)
 
     H  = H_blocks.H
     c0 = H_blocks.c0
@@ -1265,8 +1295,8 @@ function _build_implicit_dense_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) w
 
     nvar = nu * N
     ncon = (nc + num_real_bounds_s + num_real_bounds_u) * N
-    nnzj = ncon * size(H, 1)
-    nh   = size(H, 1)
+    nnzj = ncon * nu * N
+    nh   = nu * N
     nnzh = div(nh * (nh + 1), 2)
 
     c = _init_similar(s0, nvar, T)
@@ -1448,7 +1478,6 @@ function _build_H_blocks(Q, R, block_A::M, block_B::M, S, Qf, K, s0, N) where {T
         for m in 1:(N - i)
             row_range = (1 + nu * (m - 1 + i)):(nu * (m + i))
             col_range = (1 + nu * (m - 1)):(nu * m)
-
             view(H, row_range, col_range) .+= RK_STB
         end
 
@@ -1485,6 +1514,135 @@ function _build_H_blocks(Q, R, block_A::M, block_B::M, S, Qf, K, s0, N) where {T
     h0 += LinearAlgebra.dot(As0[(ns * N + 1):ns * (N + 1)], QAs0)
 
     return (H = H, c = h, c0 = h0 / T(2))
+end
+
+function _build_implicit_H_blocks(Q, R, block_A::M, block_B::M, S, Qf, K, s0, N) where {T, M <: AbstractMatrix{T}}
+    ns = size(Q, 1)
+    nu = size(R, 1)
+
+    if K == nothing
+        K = _init_similar(Q, nu, ns, T)
+    end
+
+    H = _init_similar(block_A, nu, nu, div(N * (N +1), 2), T)
+
+    # quad term refers to the summation of Q, K^T RK, SK, and K^T S^T that is left and right multiplied by B in the Hessian
+    quad_term    = _init_similar(Q, ns, ns, T)
+
+    quad_term_B  = _init_similar(block_B, size(block_B, 1), size(block_B, 2), T)
+    QfB          = _init_similar(block_B, size(block_B, 1), size(block_B, 2), T)
+
+    quad_term_AB = _init_similar(block_A, ns, nu, T)
+    QfAB         = _init_similar(block_A, ns, nu, T)
+
+    RK_STB       = _init_similar(block_B, nu, nu, T)
+    BQB          = _init_similar(block_B, nu, nu, T)
+    BQfB         = _init_similar(block_B, nu, nu, T)
+    SK           = _init_similar(Q, ns, ns, T)
+    RK           = _init_similar(Q, nu, ns, T)
+    KTRK         = _init_similar(Q, ns, ns, T)
+    RK_ST        = _init_similar(Q, nu, ns, T)
+    As0          = _init_similar(s0, ns * (N + 1), T)
+
+    QB_block_vec = _init_similar(quad_term_B, ns * (N + 1), nu, T)
+    h            = _init_similar(s0, nu * N, T)
+    h0           = zero(T)
+
+    As0QB        = _init_similar(s0, nu, T)
+    QAs0         = _init_similar(s0, ns, T)
+    As0S         = _init_similar(s0, nu, T)
+    KTRKAs0      = _init_similar(s0, ns, T)
+    SKAs0        = _init_similar(s0, ns, T)
+
+    LinearAlgebra.mul!(SK, S, K)
+    LinearAlgebra.mul!(RK, R, K)
+    LinearAlgebra.mul!(KTRK, K', RK)
+
+    LinearAlgebra.axpy!(1.0, Q, quad_term)
+    LinearAlgebra.axpy!(1.0, SK, quad_term)
+    quad_term .+= SK'
+    LinearAlgebra.axpy!(1.0, KTRK, quad_term)
+
+    LinearAlgebra.copyto!(RK_ST, RK)
+    RK_ST .+= S'
+
+    LinearAlgebra.mul!(As0, block_A, s0)
+
+    indices = zeros(Int, N)
+    indices[1] = 1
+    for i in 2:N
+        indices[i] = indices[i - 1] + (N - i + 2)
+    end
+
+    for i in 1:N
+        B_row_range = (1 + (i - 1) * ns):(i * ns)
+        B_sub_block = view(block_B, B_row_range, :)
+
+        LinearAlgebra.mul!(quad_term_AB, quad_term, B_sub_block)
+        LinearAlgebra.mul!(QfAB, Qf, B_sub_block)
+
+        quad_term_B[(1 + (i - 1) * ns):(i * ns), :]  = quad_term_AB
+        QfB[(1 + (i - 1) * ns):(i * ns), :] = QfAB
+
+        for j in 1:(N + 1 - i)
+            right_block = block_B[(1 + (j - 1 + i - 1) * ns):((j + i - 1)* ns), :]
+            LinearAlgebra.mul!(BQB, quad_term_AB', right_block)
+            LinearAlgebra.mul!(BQfB, QfAB', right_block)
+
+            for k in 1:(N - j - i + 2)
+                row_range = (1 + nu * (k + (j - 1) - 1)):(nu * (k + (j - 1)))
+                col_range = (1 + nu * (k - 1)):(nu * k)
+
+                if k == N - j - i + 2
+                    view(H, :, :, indices[j] + k - 1) .+= BQfB
+                else
+                    view(H, :, :, indices[j] + k - 1) .+= BQB
+                end
+            end
+
+        end
+        LinearAlgebra.mul!(RK_STB, RK_ST, B_sub_block)
+        for m in 1:(N - i)
+            view(H, :, :, indices[i + 1] + m - 1) .+= RK_STB
+        end
+
+        view(H, :, :, i) .+= R
+    end
+
+    for i in 1:N
+        fill!(QB_block_vec, T(0))
+        rows_QB           = 1:(ns * (N - i))
+        rows_QfB          = (1 + ns * (N - i)):(ns * (N - i + 1))
+
+        QB_block_vec[(1 + ns * i):(ns * N), :]     = quad_term_B[rows_QB, :]
+        QB_block_vec[(1 + ns * N):ns * (N + 1), :] = QfB[rows_QfB, :]
+
+        LinearAlgebra.mul!(As0QB, QB_block_vec', As0)
+        LinearAlgebra.mul!(As0S, RK_ST, As0[(ns * (i - 1) + 1):ns * i])
+
+        h[(1 + nu * (i - 1)):nu * i] = As0QB
+        view(h, (1 + nu * (i - 1)):nu * i) .+= As0S
+
+        LinearAlgebra.mul!(QAs0, Q, As0[(ns * (i - 1) + 1):ns * i])
+        LinearAlgebra.mul!(KTRKAs0, KTRK, As0[(ns * (i - 1) + 1):ns * i])
+        LinearAlgebra.mul!(SKAs0, SK, As0[(ns * (i - 1) + 1):ns * i])
+
+        h0 += LinearAlgebra.dot(As0[(ns * (i - 1) + 1):ns * i], QAs0)
+        h0 += LinearAlgebra.dot(As0[(ns * (i - 1) + 1):ns * i], KTRKAs0)
+        h0 += T(2) * LinearAlgebra.dot(As0[(ns * (i - 1) + 1):ns * i], SKAs0)
+    end
+
+    LinearAlgebra.mul!(QAs0, Qf, As0[(ns * N + 1):ns * (N + 1)])
+    LinearAlgebra.mul!(KTRKAs0, KTRK, As0[(ns * N + 1):ns * (N + 1)])
+    LinearAlgebra.mul!(SKAs0, SK, As0[(ns * N + 1):ns * (N + 1)])
+
+    h0 += LinearAlgebra.dot(As0[(ns * N + 1):ns * (N + 1)], QAs0)
+
+    HessOp = LQHessianOperator{T, AbstractVector{Int}, AbstractArray{T}}(
+        H, N, nu, size(H, 3), indices
+    )
+
+    return (H = HessOp, c = h, c0 = h0 / T(2))
 end
 
 
@@ -2249,7 +2407,6 @@ function LinearAlgebra.mul!(
     end
 end
 
-
 function LinearAlgebra.mul!(
     y::V,
     Jac::LinearOperators.AdjointLinearOperator{T, LQJacobianOperator{T, M, A}},
@@ -2318,10 +2475,34 @@ function get_jacobian(
     return Jac'
 end
 
+function get_hessian(
+    lqdm::DenseLQDynamicModel{T, V, M1, M2, M3, M4, MK}
+) where {T, V, M1, M2, M3, M4, MK}
+    return lqdm.data.H
+end
+
 function Base.length(
     Jac::LQJacobianOperator{T, M, A}
 ) where {T, M <: AbstractMatrix{T}, A <: AbstractArray{T}}
     return length(Jac.truncated_jac1) + length(Jac.truncated_jac2) + length(Jac.truncated_jac3)
+end
+
+function Base.length(
+    Hess::LQHessianOperator{T, V, A}
+) where {T, V <: AbstractVector, A <: AbstractArray{T}}
+    return length(Hess.H)
+end
+
+function Base.size(
+    Hess::LQHessianOperator{T, V, A}
+) where {T, V <: AbstractVector, A <: AbstractArray{T}}
+    return size(Hess.H)
+end
+
+function Base.size(
+    Hess::LQHessianOperator{T, V, A}, dim
+) where {T, V <: AbstractVector, A <: AbstractArray{T}}
+    return size(Hess.H, dim)
 end
 
 function Base.size(
@@ -2336,16 +2517,40 @@ function Base.eltype(
     return T
 end
 
+function Base.eltype(
+    Hess::LQHessianOperator{T, V, A}
+) where {T, V <: AbstractVector, A <: AbstractArray{T}}
+    return T
+end
+
 function Base.isreal(
     Jac::LQJacobianOperator{T, M, A}
 ) where {T, M <: AbstractMatrix{T}, A <: AbstractMatrix{T}}
     return isreal(Jac.truncated_jac1) && isreal(Jac.truncated_jac2) && isreal(Jac.truncated_jac3)
 end
 
+function Base.isreal(
+    Hess::LQHessianOperator{T, V, A}
+) where {T, V <: AbstractVector, A <: AbstractArray{T}}
+    return isreal(Hess.H)
+end
+
 function Base.show(
     Jac::LQJacobianOperator{T, M, A}
 ) where {T, M <: AbstractMatrix{T}, A <: AbstractMatrix{T}}
     show(Jac.truncated_jac1)
+end
+
+function Base.show(
+    Hess::LQHessianOperator{T, V, A}
+) where {T, V <: AbstractVector, A <: AbstractArray{T}}
+    return show(Hess.H)
+end
+
+function Base.display(
+    Hess::LQHessianOperator{T, V, A}
+) where {T, V <: AbstractVector, A <: AbstractArray{T}}
+    return display(Hess.H)
 end
 
 function Base.display(
@@ -2370,6 +2575,31 @@ function NLPModels.jac_op(
     lqdm::DenseLQDynamicModel{T, V, M1, M2, M3, M4, MK}, x::V
 ) where {T, V <: AbstractVector{T}, M1, M2 <: LQJacobianOperator, M3, M4, MK}
     return lqdm.data.A
+end
+
+function NLPModels.hess_op(
+    lqdm::DenseLQDynamicModel{T, V, M1, M2, M3, M4, MK}, x::V
+) where {T, V <: AbstractVector{T}, M1 <: LQHessianOperator, M2, M3, M4, MK}
+    return lqdm.data.H
+end
+
+function hess_tensor_to_matrix(Hess::LQHessianOperator{T, V, A}
+) where {T, V, A <: AbstractArray{T}}
+    N  = Hess.N
+    nu = Hess.nu
+    diag_list = Hess.diag_list
+
+    H = zeros(T, nu * N, nu * N)
+
+    for i in 1:N
+        for j in 1:(N - i + 1)
+            H_row = (1 + nu * (i + j - 2)):(nu * (i + j - 1))
+            H_col = (1 + nu * (j - 1)):(nu * j)
+            view(H, H_row, H_col) .= Hess.H[:, :, diag_list[i] + j - 1]
+        end
+    end
+
+    return H
 end
 
 """
