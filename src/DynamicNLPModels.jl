@@ -1074,7 +1074,7 @@ function _build_implicit_dense_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) w
 
     _set_G_blocks!(G, dl, du, block_B, block_A, s0, E, F, K, N)
     for i in 1:N
-        Jac1[:, :, i] = @view G[(1 + nc * (i - 1)):(nc * i), :]
+        Jac1[:, :, i] .= @view G[(1 + nc * (i - 1)):(nc * i), :]
     end
 
     LinearAlgebra.mul!(As0, block_A, s0)
@@ -1086,13 +1086,13 @@ function _build_implicit_dense_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) w
     if num_real_bounds_s == length(sl)
         As0_bounds .= As0[(1 + ns):ns * (N + 1)]
         for i in 1:N
-            Jac2[:, :, i] = @view block_B[(1 + ns * (i - 1)):(ns * i), :]
+            Jac2[:, :, i] .= @view block_B[(1 + ns * (i - 1)):(ns * i), :]
         end
     else
         for i in 1:N
             row_range = (1 + (i - 1) * num_real_bounds_s):(i * num_real_bounds_s)
             As0_bounds[row_range] .= As0[(1 + ns * i):(ns * (i + 1))][bool_vec_s]
-            Jac2[:, :, i] = @view block_B[(1 + (i - 1) * ns):(i * ns), :][bool_vec_s, :]
+            Jac2[:, :, i] .= @view block_B[(1 + (i - 1) * ns):(i * ns), :][bool_vec_s, :]
         end
         sl = sl[bool_vec_s]
         su = su[bool_vec_s]
@@ -1108,8 +1108,8 @@ function _build_implicit_dense_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) w
     ucon[1:length(du)] = du
 
     if length(lcon2) > 0
-        lcon[(1 + length(dl)):(length(dl) + num_real_bounds_s * N)] = lcon2
-        ucon[(1 + length(du)):(length(du) + num_real_bounds_s * N)] = ucon2
+        lcon[(1 + length(dl)):(length(dl) + num_real_bounds_s * N)] .= lcon2
+        ucon[(1 + length(du)):(length(du) + num_real_bounds_s * N)] .= ucon2
     end
 
     ncon = (nc + num_real_bounds_s) * N
@@ -1239,7 +1239,7 @@ function _build_implicit_dense_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) w
     _set_G_blocks!(G, dl, du, block_B, block_A, s0, E, F, K, N)
 
     for i in 1:N
-        Jac1[:, :, i] = @view G[(1 + nc * (i - 1)):(nc * i), :]
+        Jac1[:, :, i] .= @view G[(1 + nc * (i - 1)):(nc * i), :]
     end
 
     LinearAlgebra.mul!(As0, block_A, s0)
@@ -1249,13 +1249,13 @@ function _build_implicit_dense_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) w
     if num_real_bounds_s == length(sl)
         As0_bounds .= As0[(1 + ns):ns * (N + 1)]
         for i in 1:N
-            Jac2[:, :, i] = @view block_B[(1 + ns * (i - 1)):(ns * i), :]
+            Jac2[:, :, i] .= @view block_B[(1 + ns * (i - 1)):(ns * i), :]
         end
     else
         for i in 1:N
             row_range = (1 + (i - 1) * num_real_bounds_s):(i * num_real_bounds_s)
             As0_bounds[row_range] .= As0[(1 + ns * i):(ns * (i + 1))][bool_vec_s]
-            Jac2[:, :, i] = @view block_B[(1 + (i - 1) * ns):(i * ns), :][bool_vec_s, :]
+            Jac2[:, :, i] .= @view block_B[(1 + (i - 1) * ns):(i * ns), :][bool_vec_s, :]
         end
         sl = sl[bool_vec_s]
         su = su[bool_vec_s]
@@ -1271,22 +1271,22 @@ function _build_implicit_dense_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) w
             LinearAlgebra.mul!(KB, K, B_sub_block)
         end
 
-        KBI[(1 + nu * (i - 1)):(nu * i),:] = KB
+        KBI[(1 + nu * (i - 1)):(nu * i),:] .= KB
         LinearAlgebra.mul!(KAs0_block, K, As0[(1 + ns * (i - 1)):ns * i])
-        KAs0[(1 + nu * (i - 1)):nu * i] = KAs0_block
+        KAs0[(1 + nu * (i - 1)):nu * i] .= KAs0_block
     end
 
     offset_u = nc * N + num_real_bounds_s * N
     if num_real_bounds_u == length(ul)
         KAs0_bounds .= KAs0
         for i in 1:N
-            Jac3[:, :, i] = @view KBI[(1 + (i - 1) * nu):(i * nu), :]
+            Jac3[:, :, i] .= @view KBI[(1 + (i - 1) * nu):(i * nu), :]
         end
     else
         for i in 1:N
             row_range              = (1 + (i - 1) * num_real_bounds_u):(i * num_real_bounds_u)
-            KAs0_bounds[row_range] = KAs0[(1 + nu * (i - 1)):(nu * i)][bool_vec_u]
-            Jac3[:, :, i] = @view KBI[(1 + (i - 1) * nu):(i * nu), :][bool_vec_u, :]
+            KAs0_bounds[row_range] .= KAs0[(1 + nu * (i - 1)):(nu * i)][bool_vec_u]
+            Jac3[:, :, i] .= @view KBI[(1 + (i - 1) * nu):(i * nu), :][bool_vec_u, :]
         end
 
         ul = ul[bool_vec_u]
@@ -1305,17 +1305,17 @@ function _build_implicit_dense_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) w
     LinearAlgebra.axpy!(-1, KAs0_bounds, lcon3)
     LinearAlgebra.axpy!(-1, KAs0_bounds, ucon3)
 
-    lcon[1:length(dl)] = dl
-    ucon[1:length(du)] = du
+    lcon[1:length(dl)] .= dl
+    ucon[1:length(du)] .= du
 
     if length(lcon2) > 0
-        lcon[(length(dl) + 1):(length(dl) + length(lcon2))] = lcon2
-        ucon[(length(du) + 1):(length(du) + length(ucon2))] = ucon2
+        lcon[(length(dl) + 1):(length(dl) + length(lcon2))] .= lcon2
+        ucon[(length(du) + 1):(length(du) + length(ucon2))] .= ucon2
     end
 
     if length(lcon3) > 0
-        lcon[(length(dl) + length(lcon2) + 1):(length(dl) + length(lcon2) + length(lcon3))] = lcon3
-        ucon[(length(du) + length(ucon2) + 1):(length(du) + length(ucon2) + length(ucon3))] = ucon3
+        lcon[(length(dl) + length(lcon2) + 1):(length(dl) + length(lcon2) + length(lcon3))] .= lcon3
+        ucon[(length(du) + length(ucon2) + 1):(length(du) + length(ucon2) + length(ucon3))] .= ucon3
     end
 
     nvar = nu * N
@@ -1329,7 +1329,7 @@ function _build_implicit_dense_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) w
 
     J = LQJacobianOperator{T, M, AbstractArray{T}}(
         Jac1, Jac2, Jac3,
-        N, nu, nc, num_real_bounds_s, 0,
+        N, nu, nc, num_real_bounds_s, num_real_bounds_u,
         x1, x2, x3, y,
         SJ1, SJ2, SJ3,
         block_JT1, block_JT2, block_JT3,
@@ -1381,7 +1381,7 @@ ns = size(A, 2)
     AB_klast = _init_similar(A, size(B, 1), size(B, 2), T)
     AB_k     = _init_similar(A, size(B, 1), size(B, 2), T)
 
-    block_B[1:ns, :] = B
+    block_B[1:ns, :] .= B
 
     block_A[LinearAlgebra.diagind(block_A)] .= T(1)
 
@@ -1391,10 +1391,10 @@ ns = size(A, 2)
     A_klast  = copy(A_k)
     A_knext  = copy(A_k)
 
-    block_A[(ns + 1):ns *2, :] = A_k
+    block_A[(ns + 1):ns *2, :] .= A_k
     LinearAlgebra.mul!(AB_k, A_k, B, 1, 0)
 
-    block_B[(1 + ns):2 * ns, :] = AB_k
+    block_B[(1 + ns):2 * ns, :] .= AB_k
     AB_klast = copy(AB_k)
     # Fill the A and B matrices
     for i in 2:(N - 1)
@@ -1403,9 +1403,9 @@ ns = size(A, 2)
 
         LinearAlgebra.mul!(A_knext, A_k, A_klast)
 
-        block_A[(ns * i + 1):ns * (i + 1),:] = A_knext
+        block_A[(ns * i + 1):ns * (i + 1),:] .= A_knext
 
-        block_B[(1 + (i) * ns):((i + 1) * ns), :] = AB_k
+        block_B[(1 + (i) * ns):((i + 1) * ns), :] .= AB_k
 
         AB_klast = copy(AB_k)
         A_klast  = copy(A_knext)
@@ -1413,7 +1413,7 @@ ns = size(A, 2)
 
     LinearAlgebra.mul!(A_knext, A_k, A_klast)
 
-    block_A[(ns * N + 1):ns * (N + 1), :] = A_knext
+    block_A[(ns * N + 1):ns * (N + 1), :] .= A_knext
 
     DenseLQDynamicBlocks{T, M}(
         block_A,
@@ -1480,7 +1480,7 @@ function _build_H_blocks(Q, R, block_A::M, block_B::M, S, Qf, K, s0, N) where {T
         LinearAlgebra.mul!(quad_term_AB, quad_term, B_sub_block)
         LinearAlgebra.mul!(QfAB, Qf, B_sub_block)
 
-        quad_term_B[(1 + (i - 1) * ns):(i * ns), :]  = quad_term_AB
+        quad_term_B[(1 + (i - 1) * ns):(i * ns), :]  .= quad_term_AB
         QfB[(1 + (i - 1) * ns):(i * ns), :] = QfAB
 
         for j in 1:(N + 1 - i)
@@ -2732,14 +2732,14 @@ function add_jtsj!(
 
     split = cld(N, 2)
 
-    for i in 1:split
+    for i in 1:N
         SJ1 .= @view J1[:, :, i]
         SJ2 .= @view J2[:, :, i]
         SJ3 .= @view J3[:, :, i]
 
         for j in 1:(N - i + 1)
             S_range1 = (1 + (j + i - 2) * nc):((j + i - 1) * nc)
-            S_range2 = (1 + nc * N + (j + i - 2) * nsc):(nc * N + (j + i - 1) * nc)
+            S_range2 = (1 + nc * N + (j + i - 2) * nsc):(nc * N + (j + i - 1) * nsc)
             S_range3 = (1 + (nc + nsc) * N + (j + i - 2) * nuc):((nc + nsc) * N + (j + i - 1) * nuc)
 
             CUDA.CUBLAS.dgmm!('L', SJ1, view(Σ, S_range1), view(block_SJ1, :, :, j))
@@ -2752,37 +2752,49 @@ function add_jtsj!(
             block_JT2[:, :, 1:(N - i + 1)] .= @view J2[:, :, i - j + 1]
             block_JT3[:, :, 1:(N - i + 1)] .= @view J3[:, :, i - j + 1]
 
-            H_range = diag_list[j]:(diag_list[j] + N - i + 1)
+            H_range = diag_list[j]:(diag_list[j] + N - i)
             H_view  = view(H, :, :, H_range)
-            CUDA.CUBLAS.gemm_strided_batched!('T', 'N', 1, view(block_JT1, :, :, 1:(N - i + 1)), view(block_SJ1, :, :, 1:(N - i + 1)), 1, H_view)
-            CUDA.CUBLAS.gemm_strided_batched!('T', 'N', 1, view(block_JT2, :, :, 1:(N - i + 1)), view(block_SJ1, :, :, 1:(N - i + 1)), 1, H_view)
-            CUDA.CUBLAS.gemm_strided_batched!('T', 'N', 1, view(block_JT3, :, :, 1:(N - i + 1)), view(block_SJ3, :, :, 1:(N - i + 1)), 1, H_view)
+
+            CUDA.CUBLAS.gemm_strided_batched!('T', 'N', alpha, view(block_JT1, :, :, 1:(N - i + 1)), view(block_SJ1, :, :, 1:(N - i + 1)), 1, H_view)
+            CUDA.CUBLAS.gemm_strided_batched!('T', 'N', alpha, view(block_JT2, :, :, 1:(N - i + 1)), view(block_SJ2, :, :, 1:(N - i + 1)), 1, H_view)
+            CUDA.CUBLAS.gemm_strided_batched!('T', 'N', alpha, view(block_JT3, :, :, 1:(N - i + 1)), view(block_SJ3, :, :, 1:(N - i + 1)), 1, H_view)
         end
     end
 
-    block_JT1 .= J1
-    block_JT2 .= J2
-    block_JT3 .= J3
-
-    for i in (split + 1):N
-
-        for j in i:N
-            S_range1 = (1 + (j - 1) * nc):(j * nc)
-            S_range2 = (1 + nc * N + (j - 1) * nsc):(nc * N + j * nsc)
-            S_range3 = (1 + (nc + nsc) * N + (j - 1) * nuc):((nc + nsc) * N + j * nuc)
-
-            CUDA.CUBLAS.dgmm!('L', view(J1, :, :, j), view(Σ, S_range1), SJ1)
-            CUDA.CUBLAS.dgmm!('L', view(J2, :, :, j), view(Σ, S_range2), SJ2)
-            CUDA.CUBLAS.dgmm!('L', view(J3, :, :, j), view(Σ, S_range3), SJ3)
-
-            block_SJ1[:, :, 1:(N + split - i)] .= SJ1
-            block_SJ2[:, :, 1:(N + split - i)] .= SJ2
-            block_SJ3[:, :, 1:(N + split - i)] .= SJ3
-
-            H_view = view(H, :, :, diag_list[i:-1:1])
-            CUDA.CUBLAS.gemm_strided_batched!('T', 'N', 1, view(block_JT1, :, :, 1:(N + split - i)), view(block_SJ1, :, :, 1:(N + split - i)), 1, H_view)
-        end
-    end
+#    block_JT1 .= J1
+#    block_JT2 .= J2
+#    block_JT3 .= J3
+#
+#    for i in (split + 1):N
+#
+#        for j in i:N
+#            S_range1 = (1 + (j - 1) * nc):(j * nc)
+#            S_range2 = (1 + nc * N + (j - 1) * nsc):(nc * N + j * nsc)
+#            S_range3 = (1 + (nc + nsc) * N + (j - 1) * nuc):((nc + nsc) * N + j * nuc)
+#
+#            CUDA.CUBLAS.dgmm!('L', view(J1, :, :, j), view(Σ, S_range1), SJ1)
+#            CUDA.CUBLAS.dgmm!('L', view(J2, :, :, j), view(Σ, S_range2), SJ2)
+#            CUDA.CUBLAS.dgmm!('L', view(J3, :, :, j), view(Σ, S_range3), SJ3)
+#
+#            block_SJ1[:, :, 1:(N + split - i)] .= SJ1
+#            block_SJ2[:, :, 1:(N + split - i)] .= SJ2
+#            block_SJ3[:, :, 1:(N + split - i)] .= SJ3
+#
+#            H_view = view(H, :, :, diag_list[i:-1:1])
+#            println()
+#            println(i, "   ", j)
+#            println(size(H_view))
+#            println(size(view(block_SJ1, :, :, 1:(N + split - i + 1))))
+#            println(size(view(block_JT1, :, :, 1:(N + split - i + 1))))
+#
+#            println(typeof(H_view))
+#            println(typeof(view(block_SJ1, :, :, 1:(N + split - i + 1))))
+#            println(typeof(view(block_JT1, :, :, 1:(N + split - i + 1))))
+#            CUDA.CUBLAS.gemm_batched!('T', 'N', alpha, view(block_JT1, :, :, 1:(N + split - i + 1)), view(block_SJ1, :, :, 1:(N + split - i + 1)), 1, H_view)
+#            CUDA.CUBLAS.gemm_batched!('T', 'N', alpha, view(block_JT2, :, :, 1:(N + split - i + 1)), view(block_SJ2, :, :, 1:(N + split - i + 1)), 1, H_view)
+#            CUDA.CUBLAS.gemm_batched!('T', 'N', alpha, view(block_JT3, :, :, 1:(N + split - i + 1)), view(block_SJ3, :, :, 1:(N + split - i + 1)), 1, H_view)
+#        end
+#    end
 end
 
 function add_jtsj!(
