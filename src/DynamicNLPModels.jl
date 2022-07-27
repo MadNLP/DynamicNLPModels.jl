@@ -375,6 +375,12 @@ Attributes
  - `SJ1`: placeholder for storing data when calculating `ΣJ`
  - `SJ2`: placeholder for storing data when calculating `ΣJ`
  - `SJ3`: placeholder for storing data when calculating `ΣJ`
+ - `block_JT1`: placeholder for storing transpose data when building `J^T ΣJ`
+ - `block_JT2`: placeholder for storing transpose data when building `J^T ΣJ`
+ - `block_JT3`: placeholder for storing transpose data when building `J^T ΣJ`
+ - `block_SJ1`: placeholder for storing ΣJ data when building `J^T ΣJ`
+ - `block_SJ2`: placeholder for storing ΣJ data when building `J^T ΣJ`
+ - `block_SJ3`: placeholder for storing ΣJ data when building `J^T ΣJ`
  - `H_sub_block`: placeholder for storing data when adding `J^T ΣJ` to the Hessian
 """
 struct LQJacobianOperator{T, M, A} <: LinearOperators.AbstractLinearOperator{T}
