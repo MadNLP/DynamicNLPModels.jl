@@ -32,23 +32,23 @@ function SparseLQDynamicModel(dnlp::LQDynamicData{T,V,M}) where {T, V <: Abstrac
 end
 
 function SparseLQDynamicModel(
-s0::V,
-A::M,
-B::M,
-Q::M,
-R::M,
-N;
-Qf::M = Q,
-S::M  = _init_similar(Q, size(Q, 1), size(R, 1), T),
-E::M  = _init_similar(Q, 0, length(s0), T),
-F::M  = _init_similar(Q, 0, size(R, 1), T),
-K::MK = nothing,
-sl::V = (similar(s0) .= -Inf),
-su::V = (similar(s0) .=  Inf),
-ul::V = (similar(s0, size(R, 1)) .= -Inf),
-uu::V = (similar(s0, size(R, 1)) .=  Inf),
-gl::V = (similar(s0, size(E, 1)) .= -Inf),
-gu::V = (similar(s0, size(F, 1)) .= Inf)
+    s0::V,
+    A::M,
+    B::M,
+    Q::M,
+    R::M,
+    N;
+    Qf::M = Q,
+    S::M  = _init_similar(Q, size(Q, 1), size(R, 1), T),
+    E::M  = _init_similar(Q, 0, length(s0), T),
+    F::M  = _init_similar(Q, 0, size(R, 1), T),
+    K::MK = nothing,
+    sl::V = (similar(s0) .= -Inf),
+    su::V = (similar(s0) .=  Inf),
+    ul::V = (similar(s0, size(R, 1)) .= -Inf),
+    uu::V = (similar(s0, size(R, 1)) .=  Inf),
+    gl::V = (similar(s0, size(E, 1)) .= -Inf),
+    gu::V = (similar(s0, size(F, 1)) .= Inf)
 ) where {T, V <: AbstractVector{T}, M <: AbstractMatrix{T}, MK <: Union{Nothing, AbstractMatrix{T}}}
 
 dnlp = LQDynamicData(
@@ -60,7 +60,9 @@ SparseLQDynamicModel(dnlp)
 end
 
 
-function _build_sparse_lq_dynamic_model(dnlp::LQDynamicData{T, V, M, MK}) where {T, V <: AbstractVector{T}, M  <: AbstractMatrix{T}, MK <: Nothing}
+function _build_sparse_lq_dynamic_model(
+    dnlp::LQDynamicData{T, V, M, MK}
+) where {T, V <: AbstractVector{T}, M  <: AbstractMatrix{T}, MK <: Nothing}
     s0 = dnlp.s0
     A  = dnlp.A
     B  = dnlp.B
@@ -161,7 +163,9 @@ function _build_sparse_lq_dynamic_model(dnlp::LQDynamicData{T, V, M, MK}) where 
 
 end
 
-function _build_sparse_lq_dynamic_model(dnlp::LQDynamicData{T, V, M, MK}) where {T, V <: AbstractVector{T}, M  <: AbstractMatrix{T}, MK <: AbstractMatrix}
+function _build_sparse_lq_dynamic_model(
+    dnlp::LQDynamicData{T, V, M, MK}
+) where {T, V <: AbstractVector{T}, M  <: AbstractMatrix{T}, MK <: AbstractMatrix}
     s0 = dnlp.s0
     A  = dnlp.A
     B  = dnlp.B

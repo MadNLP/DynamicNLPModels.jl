@@ -70,7 +70,9 @@ DenseLQDynamicModel(dnlp; implicit = implicit)
 end
 
 
-function _build_dense_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) where {T, V <: AbstractVector{T}, M <: AbstractMatrix{T}, MK <: Nothing}
+function _build_dense_lq_dynamic_model(
+    dnlp::LQDynamicData{T,V,M,MK}
+) where {T, V <: AbstractVector{T}, M <: AbstractMatrix{T}, MK <: Nothing}
     s0 = dnlp.s0
     A  = dnlp.A
     B  = dnlp.B
@@ -196,7 +198,9 @@ function _build_dense_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) where {T, 
     )
 end
 
-function _build_dense_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) where {T, V <: AbstractVector{T}, M <: AbstractMatrix{T}, MK <: AbstractMatrix{T}}
+function _build_dense_lq_dynamic_model(
+    dnlp::LQDynamicData{T,V,M,MK}
+) where {T, V <: AbstractVector{T}, M <: AbstractMatrix{T}, MK <: AbstractMatrix{T}}
     s0 = dnlp.s0
     A  = dnlp.A
     B  = dnlp.B
@@ -378,7 +382,9 @@ function _build_dense_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) where {T, 
     )
 end
 
-function _build_implicit_dense_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) where {T, V <: AbstractVector{T}, M <: AbstractMatrix{T}, MK <: Nothing}
+function _build_implicit_dense_lq_dynamic_model(
+    dnlp::LQDynamicData{T,V,M,MK}
+) where {T, V <: AbstractVector{T}, M <: AbstractMatrix{T}, MK <: Nothing}
     s0 = dnlp.s0
     A  = dnlp.A
     B  = dnlp.B
@@ -522,7 +528,9 @@ function _build_implicit_dense_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) w
     )
 end
 
-function _build_implicit_dense_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) where {T, V <: AbstractVector{T}, M <: AbstractMatrix{T}, MK <: AbstractMatrix{T}}
+function _build_implicit_dense_lq_dynamic_model(
+    dnlp::LQDynamicData{T,V,M,MK}
+) where {T, V <: AbstractVector{T}, M <: AbstractMatrix{T}, MK <: AbstractMatrix{T}}
     s0 = dnlp.s0
     A  = dnlp.A
     B  = dnlp.B
@@ -782,7 +790,10 @@ function _build_block_matrices(
     )
 end
 
-function _build_H_blocks(Q, R, block_A::M, block_B::M, S, Qf, K, s0, N) where {T, M <: AbstractMatrix{T}}
+function _build_H_blocks(
+    Q, R, block_A::M, block_B::M,
+    S, Qf, K, s0, N
+) where {T, M <: AbstractMatrix{T}}
     ns = size(Q, 1)
     nu = size(R, 1)
 
@@ -908,7 +919,10 @@ function _build_H_blocks(Q, R, block_A::M, block_B::M, S, Qf, K, s0, N) where {T
 end
 
 
-function _set_G_blocks!(G, dl, du, block_B::M, block_A::M, s0, E, F, K::MK, N) where {T, M <: AbstractMatrix{T}, MK <: Nothing}
+function _set_G_blocks!(
+    G, dl, du, block_B::M, block_A::M,
+    s0, E, F, K::MK, N
+) where {T, M <: AbstractMatrix{T}, MK <: Nothing}
     ns = size(E, 2)
     nu = size(F, 2)
     nc = size(E, 1)
@@ -938,7 +952,10 @@ function _set_G_blocks!(G, dl, du, block_B::M, block_A::M, s0, E, F, K::MK, N) w
 
 end
 
-function _set_G_blocks!(G, dl, du, block_B, block_A, s0, E, F, K::MK, N) where {T, MK <: AbstractMatrix{T}}
+function _set_G_blocks!(
+    G, dl, du, block_B, block_A,
+    s0, E, F, K::MK, N
+) where {T, MK <: AbstractMatrix{T}}
     ns = size(E, 2)
     nu = size(F, 2)
     nc = size(E, 1)

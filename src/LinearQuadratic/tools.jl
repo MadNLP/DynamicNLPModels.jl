@@ -8,8 +8,8 @@ Query the solution `u` from the solver. If `K = nothing`, the solution for `u` i
 If `K <: AbstractMatrix`, `solution_ref.solution` returns `v`, and `get_u` solves for `u` using the `K` matrix (and the `A` and `B` matrices if `lqdm <: DenseLQDynamicModel`)
 """
 function get_u(
-solver_status,
-lqdm::SparseLQDynamicModel{T, V, M1, M2, M3, MK}
+    solver_status,
+    lqdm::SparseLQDynamicModel{T, V, M1, M2, M3, MK}
 ) where {T, V <: AbstractVector{T}, M1 <: AbstractMatrix{T}, M2 <: AbstractMatrix{T}, M3 <: AbstractMatrix{T}, MK <: AbstractMatrix{T}}
 
 solution = solver_status.solution
@@ -41,8 +41,8 @@ return u
 end
 
 function get_u(
-solver_status,
-lqdm::DenseLQDynamicModel{T, V, M1, M2, M3, M4, MK}
+    solver_status,
+    lqdm::DenseLQDynamicModel{T, V, M1, M2, M3, M4, MK}
 ) where {T, V <: AbstractVector{T}, M1 <: AbstractMatrix{T}, M2 <: AbstractMatrix{T}, M3 <: AbstractMatrix{T}, M4 <: AbstractMatrix{T}, MK <: AbstractMatrix{T}}
 
 dnlp = lqdm.dynamic_data
@@ -87,8 +87,8 @@ return u
 end
 
 function get_u(
-solver_status,
-lqdm::SparseLQDynamicModel{T, V, M1, M2, M3, MK}
+    solver_status,
+    lqdm::SparseLQDynamicModel{T, V, M1, M2, M3, MK}
 ) where {T, V <: AbstractVector{T}, M1 <: AbstractMatrix{T}, M2 <: AbstractMatrix{T}, M3 <: AbstractMatrix{T}, MK <: Nothing}
 
 solution = solver_status.solution
@@ -101,8 +101,8 @@ return u
 end
 
 function get_u(
-solver_status,
-lqdm::DenseLQDynamicModel{T, V, M1, M2, M3, M4, MK}
+    solver_status,
+    lqdm::DenseLQDynamicModel{T, V, M1, M2, M3, M4, MK}
 ) where {T, V <: AbstractVector{T}, M1 <: AbstractMatrix{T}, M2 <: AbstractMatrix{T}, M3 <: AbstractMatrix{T}, M4 <: AbstractMatrix{T}, MK <: Nothing}
 
 return copy(solver_status.solution)
@@ -117,8 +117,8 @@ If `lqdm <: DenseLQDynamicModel`, then `solution_ref.solution` returns `u` (if `
 transforming `u` or `v` into `s` using `A`, `B`, and `K` matrices.
 """
 function get_s(
-solver_status,
-lqdm::SparseLQDynamicModel{T, V, M1, M2, M3, MK}
+    solver_status,
+    lqdm::SparseLQDynamicModel{T, V, M1, M2, M3, MK}
 ) where {T, V <: AbstractVector{T}, M1 <: AbstractMatrix{T}, M2 <: AbstractMatrix{T}, M3 <: AbstractMatrix{T}, MK <: Union{Nothing, AbstractMatrix}}
 
 solution = solver_status.solution
@@ -128,9 +128,10 @@ N        = lqdm.dynamic_data.N
 s = solution[1:(ns * (N + 1))]
 return s
 end
+
 function get_s(
-solver_status,
-lqdm::DenseLQDynamicModel{T,V, M1, M2, M3, M4, MK}
+    solver_status,
+    lqdm::DenseLQDynamicModel{T,V, M1, M2, M3, M4, MK}
 ) where {T, V <: AbstractVector{T}, M1 <: AbstractMatrix{T}, M2 <: AbstractMatrix{T}, M3 <: AbstractMatrix{T}, M4 <: AbstractMatrix{T}, MK <: Union{Nothing, AbstractMatrix}}
 
 dnlp = lqdm.dynamic_data
