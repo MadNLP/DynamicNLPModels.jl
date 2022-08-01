@@ -7,6 +7,7 @@ import SparseArrays
 import LinearOperators
 import CUDA
 
+import CUDA: CUBLAS
 import SparseArrays: SparseMatrixCSC
 
 export LQDynamicData, SparseLQDynamicModel, DenseLQDynamicModel, get_u, get_s, get_jacobian, add_jtsj!
@@ -378,7 +379,6 @@ Attributes
  - `H_sub_block`: placeholder for storing data when adding `J^T ΣJ` to the Hessian
 """
 struct LQJacobianOperator{T, M, A} <: LinearOperators.AbstractLinearOperator{T}
-    # TODO: remove V from operator type
     truncated_jac1::A  # tensor of Jacobian blocks corresponding Ex + Fu constraints
     truncated_jac2::A  # tensor of Jacobian blocks corresponding to state variable limits
     truncated_jac3::A  # tensor of Jacobian blocks corresponding to input variable limits
@@ -994,7 +994,7 @@ function _build_implicit_dense_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) w
     Jac1       = _init_similar(Q, nc, nu, N, T)
     Jac2       = _init_similar(Q, num_real_bounds_s, nu, N, T)
     Jac3       = _init_similar(Q, 0, nu, N, T)
-    #Jac        = _init_similar(Q, nc * N + num_real_bounds_s * N, nu, T)
+
     As0        = _init_similar(s0, ns * (N + 1), T)
     As0_bounds = _init_similar(s0, num_real_bounds_s * N, T)
 
@@ -1281,22 +1281,22 @@ function _build_implicit_dense_lq_dynamic_model(dnlp::LQDynamicData{T,V,M,MK}) w
 
     DenseLQDynamicModel(
         NLPModels.NLPModelMeta(
-        nvar,
-        x0   = _init_similar(s0, nvar, T),
-        ncon = ncon,
-        lcon = lcon,
-        ucon = ucon,
-        nnzj = nnzj,
-        nnzh = nnzh,
-        lin = 1:ncon,
-        islp = (ncon == 0);
+            nvar,
+            x0   = _init_similar(s0, nvar, T),
+            ncon = ncon,
+            lcon = lcon,
+            ucon = ucon,
+            nnzj = nnzj,
+            nnzh = nnzh,
+            lin = 1:ncon,
+            islp = (ncon == 0);
         ),
         NLPModels.Counters(),
         QuadraticModels.QPData(
-        c0,
-        c,
-        H,
-        J
+            c0,
+            c,
+            H,
+            J
         ),
         dnlp,
         dense_blocks
@@ -1307,7 +1307,7 @@ function _build_block_matrices(
     A::M, B::M, K, N
 ) where {T, M <: AbstractMatrix{T}}
 
-ns = size(A, 2)
+    ns = size(A, 2)
     nu = size(B, 2)
 
     if K == nothing
@@ -1408,6 +1408,8 @@ function _build_H_blocks(Q, R, block_A::M, block_B::M, S, Qf, K, s0, N) where {T
 
     LinearAlgebra.axpy!(1.0, Q, quad_term)
     LinearAlgebra.axpy!(1.0, SK, quad_term)
+    # axpy!(1.0, SK', quad_term) includes scalar operations because of the adjoint
+    # .+= is more efficient with adjoint
     quad_term .+= SK'
     LinearAlgebra.axpy!(1.0, KTRK, quad_term)
 
@@ -2203,15 +2205,14 @@ function LinearAlgebra.mul!(x::V,
 
         y1_view = view(y1, :, :, i:N)
 
-        CUDA.CUBLAS.gemm_strided_batched!('N', 'N', 1, J1_view, y1_view, 1, x1_view)
-        CUDA.CUBLAS.gemm_strided_batched!('N', 'N', 1, J2_view, y1_view, 1, x2_view)
-        CUDA.CUBLAS.gemm_strided_batched!('N', 'N', 1, J3_view, y1_view, 1, x3_view)
-
+        CUBLAS.gemm_strided_batched!('N', 'N', 1, J1_view, y1_view, 1, x1_view)
+        CUBLAS.gemm_strided_batched!('N', 'N', 1, J2_view, y1_view, 1, x2_view)
+        CUBLAS.gemm_strided_batched!('N', 'N', 1, J3_view, y1_view, 1, x3_view)
     end
 
-    view(x, 1:(nc * N)) .= reshape(x1, nc * N)
-    view(x, (1 + nc * N):((nc + nsc) * N)) .= reshape(x2, nsc * N)
-    view(x, (1 + (nc + nsc) * N):((nc + nsc + nuc) * N)) .= reshape(x3, nuc * N)
+    x[1:(nc * N)] .= reshape(x1, nc * N)
+    x[(1 + nc * N):((nc + nsc) * N)] .= reshape(x2, nsc * N)
+    x[(1 + (nc + nsc) * N):((nc + nsc + nuc) * N)] .= reshape(x3, nuc * N)
 end
 
 function LinearAlgebra.mul!(
@@ -2221,15 +2222,17 @@ function LinearAlgebra.mul!(
 ) where {T, V <: AbstractVector{T}, M <: AbstractMatrix{T},  A <: AbstractArray{T}}
     fill!(y, zero(T))
 
-    J1  = get_jacobian(Jac).truncated_jac1
-    J2  = get_jacobian(Jac).truncated_jac2
-    J3  = get_jacobian(Jac).truncated_jac3
+    jac_op = get_jacobian(Jac)
 
-    N   = get_jacobian(Jac).N
-    nu  = get_jacobian(Jac).nu
-    nc  = get_jacobian(Jac).nc
-    nsc = get_jacobian(Jac).nsc
-    nuc = get_jacobian(Jac).nuc
+    J1  = jac_op.truncated_jac1
+    J2  = jac_op.truncated_jac2
+    J3  = jac_op.truncated_jac3
+
+    N   = jac_op.N
+    nu  = jac_op.nu
+    nc  = jac_op.nc
+    nsc = jac_op.nsc
+    nuc = jac_op.nuc
 
     for i in 1:N
         sub_B1  = _dnlp_unsafe_wrap(J1, (nc, nu), (1 + (i - 1) * (nc * nu)))
@@ -2257,20 +2260,22 @@ function LinearAlgebra.mul!(
 ) where {T, V <: CUDA.CuArray{T, 1, CUDA.Mem.DeviceBuffer}, M <: AbstractMatrix{T}, A <: AbstractArray{T}}
     fill!(y, zero(T))
 
-    J1  = get_jacobian(Jac).truncated_jac1
-    J2  = get_jacobian(Jac).truncated_jac2
-    J3  = get_jacobian(Jac).truncated_jac3
+    jac_op = get_jacobian(Jac)
 
-    N   = get_jacobian(Jac).N
-    nu  = get_jacobian(Jac).nu
-    nc  = get_jacobian(Jac).nc
-    nsc = get_jacobian(Jac).nsc
-    nuc = get_jacobian(Jac).nuc
+    J1  = jac_op.truncated_jac1
+    J2  = jac_op.truncated_jac2
+    J3  = jac_op.truncated_jac3
 
-    x1 = get_jacobian(Jac).x1
-    x2 = get_jacobian(Jac).x2
-    x3 = get_jacobian(Jac).x3
-    y1 = get_jacobian(Jac).y
+    N   = jac_op.N
+    nu  = jac_op.nu
+    nc  = jac_op.nc
+    nsc = jac_op.nsc
+    nuc = jac_op.nuc
+
+    x1 = jac_op.x1
+    x2 = jac_op.x2
+    x3 = jac_op.x3
+    y1 = jac_op.y
 
 
     x1 .= reshape(x[1:(nc * N)], (nc, 1, N))
@@ -2290,9 +2295,9 @@ function LinearAlgebra.mul!(
         J2_view = view(J2, :, :, 1:(N - i + 1))
         J3_view = view(J3, :, :, 1:(N - i + 1))
 
-        CUDA.CUBLAS.gemm_strided_batched!('T', 'N', 1, J1_view, x1_view, 1, y1_view)
-        CUDA.CUBLAS.gemm_strided_batched!('T', 'N', 1, J2_view, x2_view, 1, y1_view)
-        CUDA.CUBLAS.gemm_strided_batched!('T', 'N', 1, J3_view, x3_view, 1, y1_view)
+        CUBLAS.gemm_strided_batched!('T', 'N', 1, J1_view, x1_view, 1, y1_view)
+        CUBLAS.gemm_strided_batched!('T', 'N', 1, J2_view, x2_view, 1, y1_view)
+        CUBLAS.gemm_strided_batched!('T', 'N', 1, J3_view, x3_view, 1, y1_view)
 
         view(y, (1 + (i - 1) * nu):(i * nu)) .= sum(y1_view, dims=(2,3))
     end
