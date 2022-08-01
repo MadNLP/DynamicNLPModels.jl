@@ -12,32 +12,32 @@ function get_u(
     lqdm::SparseLQDynamicModel{T, V, M1, M2, M3, MK}
 ) where {T, V <: AbstractVector{T}, M1 <: AbstractMatrix{T}, M2 <: AbstractMatrix{T}, M3 <: AbstractMatrix{T}, MK <: AbstractMatrix{T}}
 
-solution = solver_status.solution
-ns       = lqdm.dynamic_data.ns
-nu       = lqdm.dynamic_data.nu
-N        = lqdm.dynamic_data.N
-K        = lqdm.dynamic_data.K
+    solution = solver_status.solution
+    ns       = lqdm.dynamic_data.ns
+    nu       = lqdm.dynamic_data.nu
+    N        = lqdm.dynamic_data.N
+    K        = lqdm.dynamic_data.K
 
-u = zeros(T, nu * N)
+    u = zeros(T, nu * N)
 
-for i in 1:N
-    start_v = (i - 1) * nu + 1
-    end_v   = i * nu
-    start_s = (i - 1) * ns + 1
-    end_s   = i * ns
+    for i in 1:N
+        start_v = (i - 1) * nu + 1
+        end_v   = i * nu
+        start_s = (i - 1) * ns + 1
+        end_s   = i * ns
 
-    Ks = zeros(T, size(K, 1), 1)
+        Ks = zeros(T, size(K, 1), 1)
 
-    s = solution[start_s:end_s]
-    v = solution[(ns * (N + 1) + start_v):(ns * (N + 1) + end_v)]
+        s = solution[start_s:end_s]
+        v = solution[(ns * (N + 1) + start_v):(ns * (N + 1) + end_v)]
 
-    LinearAlgebra.mul!(Ks, K, s)
-    LinearAlgebra.axpy!(1, v, Ks)
+        LinearAlgebra.mul!(Ks, K, s)
+        LinearAlgebra.axpy!(1, v, Ks)
 
-    u[start_v:end_v] = Ks
-end
+        u[start_v:end_v] = Ks
+    end
 
-return u
+    return u
 end
 
 function get_u(
@@ -45,45 +45,45 @@ function get_u(
     lqdm::DenseLQDynamicModel{T, V, M1, M2, M3, M4, MK}
 ) where {T, V <: AbstractVector{T}, M1 <: AbstractMatrix{T}, M2 <: AbstractMatrix{T}, M3 <: AbstractMatrix{T}, M4 <: AbstractMatrix{T}, MK <: AbstractMatrix{T}}
 
-dnlp = lqdm.dynamic_data
+    dnlp = lqdm.dynamic_data
 
-N    = dnlp.N
-ns   = dnlp.ns
-nu   = dnlp.nu
-K    = dnlp.K
+    N    = dnlp.N
+    ns   = dnlp.ns
+    nu   = dnlp.nu
+    K    = dnlp.K
 
-block_A = lqdm.blocks.A
-block_B = lqdm.blocks.B
+    block_A = lqdm.blocks.A
+    block_B = lqdm.blocks.B
 
-v = solver_status.solution
+    v = solver_status.solution
 
-As0 = zeros(T, ns * (N + 1))
-Bv  = zeros(T, ns)
-s   = zeros(T, ns * (N + 1))
+    As0 = zeros(T, ns * (N + 1))
+    Bv  = zeros(T, ns)
+    s   = zeros(T, ns * (N + 1))
 
-for i in 1:N
-    B_row_range = (1 + (i - 1) * ns):(i * ns)
-    B_sub_block = view(block_B, B_row_range, :)
+    for i in 1:N
+        B_row_range = (1 + (i - 1) * ns):(i * ns)
+        B_sub_block = view(block_B, B_row_range, :)
 
-    for j in 1:(N - i + 1)
-        v_sub_vec   = v[(1 + nu * (j - 1)):nu * j]
-        LinearAlgebra.mul!(Bv, B_sub_block, v_sub_vec)
+        for j in 1:(N - i + 1)
+            v_sub_vec   = v[(1 + nu * (j - 1)):nu * j]
+            LinearAlgebra.mul!(Bv, B_sub_block, v_sub_vec)
 
-        s[(1 + ns * (i + j - 1)):(ns * (i + j))] .+= Bv
+            s[(1 + ns * (i + j - 1)):(ns * (i + j))] .+= Bv
+        end
     end
-end
 
-LinearAlgebra.mul!(As0, block_A, dnlp.s0)
-LinearAlgebra.axpy!(1, As0, s)
+    LinearAlgebra.mul!(As0, block_A, dnlp.s0)
+    LinearAlgebra.axpy!(1, As0, s)
 
-Ks = _init_similar(dnlp.s0, size(K, 1), T)
-u = copy(v)
-for i in 1:N
-    LinearAlgebra.mul!(Ks, K, s[(1 + ns * (i - 1)):ns * i])
-    u[(1 + nu * (i - 1)):nu * i] .+= Ks
-end
+    Ks = _init_similar(dnlp.s0, size(K, 1), T)
+    u = copy(v)
+    for i in 1:N
+        LinearAlgebra.mul!(Ks, K, s[(1 + ns * (i - 1)):ns * i])
+        u[(1 + nu * (i - 1)):nu * i] .+= Ks
+    end
 
-return u
+    return u
 end
 
 function get_u(
@@ -91,21 +91,20 @@ function get_u(
     lqdm::SparseLQDynamicModel{T, V, M1, M2, M3, MK}
 ) where {T, V <: AbstractVector{T}, M1 <: AbstractMatrix{T}, M2 <: AbstractMatrix{T}, M3 <: AbstractMatrix{T}, MK <: Nothing}
 
-solution = solver_status.solution
-ns       = lqdm.dynamic_data.ns
-nu       = lqdm.dynamic_data.nu
-N        = lqdm.dynamic_data.N
+    solution = solver_status.solution
+    ns       = lqdm.dynamic_data.ns
+    nu       = lqdm.dynamic_data.nu
+    N        = lqdm.dynamic_data.N
 
-u = solution[(ns * (N + 1) + 1):end]
-return u
+    u = solution[(ns * (N + 1) + 1):end]
+    return u
 end
 
 function get_u(
     solver_status,
     lqdm::DenseLQDynamicModel{T, V, M1, M2, M3, M4, MK}
 ) where {T, V <: AbstractVector{T}, M1 <: AbstractMatrix{T}, M2 <: AbstractMatrix{T}, M3 <: AbstractMatrix{T}, M4 <: AbstractMatrix{T}, MK <: Nothing}
-
-return copy(solver_status.solution)
+    return copy(solver_status.solution)
 end
 
 """
@@ -121,12 +120,12 @@ function get_s(
     lqdm::SparseLQDynamicModel{T, V, M1, M2, M3, MK}
 ) where {T, V <: AbstractVector{T}, M1 <: AbstractMatrix{T}, M2 <: AbstractMatrix{T}, M3 <: AbstractMatrix{T}, MK <: Union{Nothing, AbstractMatrix}}
 
-solution = solver_status.solution
-ns       = lqdm.dynamic_data.ns
-N        = lqdm.dynamic_data.N
+    solution = solver_status.solution
+    ns       = lqdm.dynamic_data.ns
+    N        = lqdm.dynamic_data.N
 
-s = solution[1:(ns * (N + 1))]
-return s
+    s = solution[1:(ns * (N + 1))]
+    return s
 end
 
 function get_s(
@@ -134,85 +133,85 @@ function get_s(
     lqdm::DenseLQDynamicModel{T,V, M1, M2, M3, M4, MK}
 ) where {T, V <: AbstractVector{T}, M1 <: AbstractMatrix{T}, M2 <: AbstractMatrix{T}, M3 <: AbstractMatrix{T}, M4 <: AbstractMatrix{T}, MK <: Union{Nothing, AbstractMatrix}}
 
-dnlp = lqdm.dynamic_data
+    dnlp = lqdm.dynamic_data
 
-N    = dnlp.N
-ns   = dnlp.ns
-nu   = dnlp.nu
+    N    = dnlp.N
+    ns   = dnlp.ns
+    nu   = dnlp.nu
 
-block_A = lqdm.blocks.A
-block_B = lqdm.blocks.B
+    block_A = lqdm.blocks.A
+    block_B = lqdm.blocks.B
 
-v = solver_status.solution
+    v = solver_status.solution
 
-As0 = zeros(T, ns * (N + 1))
-Bv  = zeros(T, ns)
-s   = zeros(T, ns * (N + 1))
+    As0 = zeros(T, ns * (N + 1))
+    Bv  = zeros(T, ns)
+    s   = zeros(T, ns * (N + 1))
 
-for i in 1:N
-    B_row_range = (1 + (i - 1) * ns):(i * ns)
-    B_sub_block = view(block_B, B_row_range, :)
+    for i in 1:N
+        B_row_range = (1 + (i - 1) * ns):(i * ns)
+        B_sub_block = view(block_B, B_row_range, :)
 
-    for j in 1:(N - i + 1)
-        v_sub_vec   = v[(1 + nu * (j - 1)):nu * j]
-        LinearAlgebra.mul!(Bv, B_sub_block, v_sub_vec)
+        for j in 1:(N - i + 1)
+            v_sub_vec   = v[(1 + nu * (j - 1)):nu * j]
+            LinearAlgebra.mul!(Bv, B_sub_block, v_sub_vec)
 
-        s[(1 + ns * (i + j - 1)):(ns * (i + j))] .+= Bv
+            s[(1 + ns * (i + j - 1)):(ns * (i + j))] .+= Bv
+        end
     end
-end
 
-LinearAlgebra.mul!(As0, block_A, dnlp.s0)
-LinearAlgebra.axpy!(1, As0, s)
+    LinearAlgebra.mul!(As0, block_A, dnlp.s0)
+    LinearAlgebra.axpy!(1, As0, s)
 
-return s
+    return s
 end
 
 for field in fieldnames(LQDynamicData)
-method = Symbol("get_", field)
-@eval begin
-    @doc """
-        $($method)(LQDynamicData)
-        $($method)(SparseLQDynamicModel)
-        $($method)(DenseLQDynamicModel)
-    Return the value $($(QuoteNode(field))) from LQDynamicData or SparseLQDynamicModel.dynamic_data or DenseLQDynamicModel.dynamic_data
-    """
-    $method(dyn_data::LQDynamicData) = getproperty(dyn_data, $(QuoteNode(field)))
-end
-@eval $method(dyn_model::SparseLQDynamicModel) = $method(dyn_model.dynamic_data)
-@eval $method(dyn_model::DenseLQDynamicModel)  = $method(dyn_model.dynamic_data)
-@eval export $method
+    method = Symbol("get_", field)
+    @eval begin
+        @doc """
+            $($method)(LQDynamicData)
+            $($method)(SparseLQDynamicModel)
+            $($method)(DenseLQDynamicModel)
+        Return the value $($(QuoteNode(field))) from LQDynamicData or SparseLQDynamicModel.dynamic_data or DenseLQDynamicModel.dynamic_data
+        """
+        $method(dyn_data::LQDynamicData) = getproperty(dyn_data, $(QuoteNode(field)))
+    end
+    @eval $method(dyn_model::SparseLQDynamicModel) = $method(dyn_model.dynamic_data)
+    @eval $method(dyn_model::DenseLQDynamicModel)  = $method(dyn_model.dynamic_data)
+    @eval export $method
 end
 
 for field in [:A, :B, :Q, :R, :Qf, :E, :F, :S, :K]
-method = Symbol("set_", field, "!")
-@eval begin
-    @doc """
-        $($method)(LQDynamicData, row, col, val)
-        $($method)(SparseLQDynamicModel, row, col, val)
-        $($method)(DenseLQDynamicModel, row, col, val)
-    Set the value of entry $($(QuoteNode(field)))[row, col] to val for LQDynamicData, SparseLQDynamicModel.dynamic_data, or DenseLQDynamicModel.dynamic_data
-    """
-    $method(dyn_data::LQDynamicData, row, col, val) = (dyn_data.$field[row, col] = val)
-end
-@eval $method(dyn_model::SparseLQDynamicModel, row, col, val) = (dyn_model.dynamic_data.$field[row, col] = val)
-@eval $method(dyn_model::DenseLQDynamicModel, row, col, val)  = (dyn_model.dynamic_data.$field[row, col] = val)
-@eval export $method
+    method = Symbol("set_", field, "!")
+    @eval begin
+        @doc """
+            $($method)(LQDynamicData, row, col, val)
+            $($method)(SparseLQDynamicModel, row, col, val)
+            $($method)(DenseLQDynamicModel, row, col, val)
+        Set the value of entry $($(QuoteNode(field)))[row, col] to val for LQDynamicData, SparseLQDynamicModel.dynamic_data, or DenseLQDynamicModel.dynamic_data
+        """
+        $method(dyn_data::LQDynamicData, row, col, val) = (dyn_data.$field[row, col] = val)
+    end
+    @eval $method(dyn_model::SparseLQDynamicModel, row, col, val) = (dyn_model.dynamic_data.$field[row, col] = val)
+    @eval $method(dyn_model::DenseLQDynamicModel, row, col, val)  = (dyn_model.dynamic_data.$field[row, col] = val)
+    @eval export $method
 end
 
 for field in [:s0, :sl, :su, :ul, :uu, :gl, :gu]
-method = Symbol("set_", field, "!")
-@eval begin
-    @doc """
-        $($method)(LQDynamicData, index, val)
-        $($method)(SparseLQDynamicModel, index, val)
-        $($method)(DenseLQDynamicModel, index, val)
-    Set the value of entry $($(QuoteNode(field)))[index] to val for LQDynamicData, SparseLQDynamicModel.dynamic_data, or DenseLQDynamicModel.dynamic_data
-    """
-    $method(dyn_data::LQDynamicData, index, val) = (dyn_data.$field[index] = val)
-end
-@eval $method(dyn_model::SparseLQDynamicModel, index, val) = (dyn_model.dynamic_data.$field[index] = val)
-@eval $method(dyn_model::DenseLQDynamicModel, index, val)  = (dyn_model.dynamic_data.$field[index] = val)
-@eval export $method
+    method = Symbol("set_", field, "!")
+    @eval begin
+        @doc """
+            $($method)(LQDynamicData, index, val)
+            $($method)(SparseLQDynamicModel, index, val)
+            $($method)(DenseLQDynamicModel, index, val)
+        Set the value of entry $($(QuoteNode(field)))[index] to val for LQDynamicData, SparseLQDynamicModel.dynamic_data, or DenseLQDynamicModel.dynamic_data
+        """
+        $method(dyn_data::LQDynamicData, index, val) = (dyn_data.$field[index] = val)
+    end
+    @eval $method(dyn_model::SparseLQDynamicModel, index, val) = (dyn_model.dynamic_data.$field[index] = val)
+    @eval $method(dyn_model::DenseLQDynamicModel, index, val)  = (dyn_model.dynamic_data.$field[index] = val)
+    @eval export $method
 end
 
 
@@ -279,10 +278,10 @@ function NLPModels.hess_coord!(
     NLPModels.increment!(qp, :neval_hess)
     count = 1
     for j = 1:(qp.meta.nvar)
-      for i = j:(qp.meta.nvar)
-        vals[count] = obj_weight * qp.data.H[i, j]
-        count += 1
-      end
+        for i = j:(qp.meta.nvar)
+            vals[count] = obj_weight * qp.data.H[i, j]
+            count += 1
+        end
     end
     return vals
   end
@@ -316,14 +315,14 @@ function NLPModels.jac_structure!(
     qp::DenseLQDynamicModel{T, V, M1, M2, M3},
     rows::AbstractVector{<:Integer},
     cols::AbstractVector{<:Integer},
-  ) where {T, V, M1<: Matrix, M2 <: Matrix, M3 <: Matrix}
+) where {T, V, M1<: Matrix, M2 <: Matrix, M3 <: Matrix}
     count = 1
     for j = 1:(qp.meta.nvar)
-      for i = 1:(qp.meta.ncon)
-        rows[count] = i
-        cols[count] = j
-        count += 1
-      end
+        for i = 1:(qp.meta.ncon)
+            rows[count] = i
+            cols[count] = j
+            count += 1
+        end
     end
     return rows, cols
 end
@@ -346,10 +345,10 @@ function NLPModels.jac_coord!(
     NLPModels.increment!(qp, :neval_jac)
     count = 1
     for j = 1:(qp.meta.nvar)
-      for i = 1:(qp.meta.ncon)
-        vals[count] = qp.data.A[i, j]
-        count += 1
-      end
+        for i = 1:(qp.meta.ncon)
+            vals[count] = qp.data.A[i, j]
+            count += 1
+        end
     end
     return vals
 end

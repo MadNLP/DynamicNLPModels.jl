@@ -117,7 +117,7 @@ function LQDynamicData(
     uu::V = (similar(s0, size(R, 1)) .=  Inf),
     gl::V = (similar(s0, size(E, 1)) .= -Inf),
     gu::V = (similar(s0, size(F, 1)) .= Inf)
-    ) where {T,V <: AbstractVector{T}, M <: AbstractMatrix{T}, MK <: Union{Nothing, AbstractMatrix{T}}}
+) where {T,V <: AbstractVector{T}, M <: AbstractMatrix{T}, MK <: Union{Nothing, AbstractMatrix{T}}}
 
     if size(Q, 1) != size(Q, 2)
         error("Q matrix is not square")
@@ -186,10 +186,10 @@ end
 abstract type AbstractDynamicModel{T,V} <: QuadraticModels.AbstractQuadraticModel{T, V} end
 
 struct SparseLQDynamicModel{T, V, M1, M2, M3, MK} <:  AbstractDynamicModel{T,V}
-  meta::NLPModels.NLPModelMeta{T, V}
-  counters::NLPModels.Counters
-  data::QuadraticModels.QPData{T, V, M1, M2}
-  dynamic_data::LQDynamicData{T, V, M3, MK}
+    meta::NLPModels.NLPModelMeta{T, V}
+    counters::NLPModels.Counters
+    data::QuadraticModels.QPData{T, V, M1, M2}
+    dynamic_data::LQDynamicData{T, V, M3, MK}
 end
 
 """

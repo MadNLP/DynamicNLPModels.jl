@@ -33,40 +33,41 @@ Keyword argument `implicit = false` determines how the Jacobian is stored within
 Jacobian matrix is stored. If `implicit = true`, only the first `nu` columns of the Jacobian are stored with the Linear Operator `LQJacobianOperator`.
 """
 function DenseLQDynamicModel(dnlp::LQDynamicData{T,V,M}; implicit = false) where {T, V <: AbstractVector{T}, M  <: AbstractMatrix{T}, MK <: Union{Nothing, AbstractMatrix{T}}}
-if implicit
-    _build_implicit_dense_lq_dynamic_model(dnlp)
-else
-    _build_dense_lq_dynamic_model(dnlp)
-end
+    if implicit
+        _build_implicit_dense_lq_dynamic_model(dnlp)
+    else
+        _build_dense_lq_dynamic_model(dnlp)
+    end
 end
 
 function DenseLQDynamicModel(
-s0::V,
-A::M,
-B::M,
-Q::M,
-R::M,
-N;
-Qf::M = Q,
-S::M  = _init_similar(Q, size(Q, 1), size(R, 1), T),
-E::M  = _init_similar(Q, 0, length(s0), T),
-F::M  = _init_similar(Q, 0, size(R, 1), T),
-K::MK = nothing,
-sl::V = (similar(s0) .= -Inf),
-su::V = (similar(s0) .=  Inf),
-ul::V = (similar(s0, size(R, 1)) .= -Inf),
-uu::V = (similar(s0, size(R, 1)) .=  Inf),
-gl::V = (similar(s0, size(E, 1)) .= -Inf),
-gu::V = (similar(s0, size(F, 1)) .= Inf),
-implicit = false
+    s0::V,
+    A::M,
+    B::M,
+    Q::M,
+    R::M,
+    N;
+    Qf::M = Q,
+    S::M  = _init_similar(Q, size(Q, 1), size(R, 1), T),
+    E::M  = _init_similar(Q, 0, length(s0), T),
+    F::M  = _init_similar(Q, 0, size(R, 1), T),
+    K::MK = nothing,
+    sl::V = (similar(s0) .= -Inf),
+    su::V = (similar(s0) .=  Inf),
+    ul::V = (similar(s0, size(R, 1)) .= -Inf),
+    uu::V = (similar(s0, size(R, 1)) .=  Inf),
+    gl::V = (similar(s0, size(E, 1)) .= -Inf),
+    gu::V = (similar(s0, size(F, 1)) .= Inf),
+    implicit = false
 ) where {T, V <: AbstractVector{T}, M <: AbstractMatrix{T}, MK <: Union{Nothing, AbstractMatrix{T}}}
 
-dnlp = LQDynamicData(
-    s0, A, B, Q, R, N;
-    Qf = Qf, S = S, E = E, F = F, K = K,
-    sl = sl, su = su, ul = ul, uu = uu, gl = gl, gu = gu)
+    dnlp = LQDynamicData(
+        s0, A, B, Q, R, N;
+        Qf = Qf, S = S, E = E, F = F, K = K,
+        sl = sl, su = su, ul = ul, uu = uu, gl = gl, gu = gu
+    )
 
-DenseLQDynamicModel(dnlp; implicit = implicit)
+    DenseLQDynamicModel(dnlp; implicit = implicit)
 end
 
 

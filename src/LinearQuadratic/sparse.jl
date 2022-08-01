@@ -51,12 +51,13 @@ function SparseLQDynamicModel(
     gu::V = (similar(s0, size(F, 1)) .= Inf)
 ) where {T, V <: AbstractVector{T}, M <: AbstractMatrix{T}, MK <: Union{Nothing, AbstractMatrix{T}}}
 
-dnlp = LQDynamicData(
-    s0, A, B, Q, R, N;
-    Qf = Qf, S = S, E = E, F = F, K = K,
-    sl = sl, su = su, ul = ul, uu = uu, gl = gl, gu = gu)
+    dnlp = LQDynamicData(
+        s0, A, B, Q, R, N;
+        Qf = Qf, S = S, E = E, F = F, K = K,
+        sl = sl, su = su, ul = ul, uu = uu, gl = gl, gu = gu
+    )
 
-SparseLQDynamicModel(dnlp)
+    SparseLQDynamicModel(dnlp)
 end
 
 
@@ -457,7 +458,6 @@ function _set_sparse_J!(
     ns = size(A, 2)
     nu = size(B, 2)
     nc = size(E, 1)
-
 
     # Set the first block column of A, E, and K
     for j in 1:ns
