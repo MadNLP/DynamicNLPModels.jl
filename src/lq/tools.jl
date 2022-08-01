@@ -76,7 +76,7 @@ end
 LinearAlgebra.mul!(As0, block_A, dnlp.s0)
 LinearAlgebra.axpy!(1, As0, s)
 
-Ks = _init_similar(dnlp.s0, ns, T)
+Ks = _init_similar(dnlp.s0, size(K, 1), T)
 u = copy(v)
 for i in 1:N
     LinearAlgebra.mul!(Ks, K, s[(1 + ns * (i - 1)):ns * i])
