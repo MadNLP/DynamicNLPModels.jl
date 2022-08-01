@@ -614,60 +614,6 @@ function add_jtsj!(
     Σ::V,
     alpha::Number = 1,
     beta::Number = 1
-) where {T, V <: AbstractVector{T}, M <: AbstractMatrix{T}, A <: AbstractArray{T}}
-
-    J1  = Jac.truncated_jac1
-    J2  = Jac.truncated_jac2
-    J3  = Jac.truncated_jac3
-
-    N   = Jac.N
-    nu  = Jac.nu
-    nc  = Jac.nc
-    nsc = Jac.nsc
-    nuc = Jac.nuc
-
-    ΣJ1 = Jac.SJ1
-    ΣJ2 = Jac.SJ2
-    ΣJ3 = Jac.SJ3
-
-    LinearAlgebra.lmul!(beta, H)
-
-    for i in 1:N
-        left_block1 = _dnlp_unsafe_wrap(J1, (nc, nu), (1 + (i - 1) * (nc * nu)))
-        left_block2 = _dnlp_unsafe_wrap(J2, (nsc, nu), (1 + (i - 1) * (nsc * nu)))
-        left_block3 = _dnlp_unsafe_wrap(J3, (nuc, nu), (1 + (i - 1) * (nuc * nu)))
-
-        for j in 1:(N + 1 - i)
-            Σ_range1 = (1 + (N - j) * nc):((N - j + 1) * nc)
-            Σ_range2 = (1 + nc * N + (N - j) * nsc):(nc * N + (N - j + 1) * nsc)
-            Σ_range3 = (1 + (nc + nsc) * N + (N - j) * nuc):((nc + nsc) * N + (N - j + 1) * nuc)
-
-            ΣJ1 .= left_block1 .* view(Σ, Σ_range1)
-            ΣJ2 .= left_block2 .* view(Σ, Σ_range2)
-            ΣJ3 .= left_block3 .* view(Σ, Σ_range3)
-
-            for k in 1:(N - j - i + 2)
-                right_block1 = _dnlp_unsafe_wrap(J1, (nc, nu), (1 + (k + i - 2) * (nc * nu)))
-                right_block2 = _dnlp_unsafe_wrap(J2, (nsc, nu), (1 + (k + i - 2) * (nsc * nu)))
-                right_block3 = _dnlp_unsafe_wrap(J3, (nuc, nu), (1 + (k + i - 2) * (nuc * nu)))
-
-                row_range = (1 + nu * (N - i - j + 1)):(nu * (N - i -j + 2))
-                col_range = (1 + nu * (N - i - k - j + 2)):(nu * (N - i - k - j + 3))
-
-                LinearAlgebra.mul!(view(H, row_range, col_range), ΣJ1', right_block1, alpha, 1)
-                LinearAlgebra.mul!(view(H, row_range, col_range), ΣJ2', right_block2, alpha, 1)
-                LinearAlgebra.mul!(view(H, row_range, col_range), ΣJ3', right_block3, alpha, 1)
-            end
-        end
-    end
-end
-
-function add_jtsj!(
-    H::M,
-    Jac::LQJacobianOperator{T, M, A},
-    Σ::V,
-    alpha::Number = 1,
-    beta::Number = 1
 ) where {T, V <: CUDA.CuVector, M <: AbstractMatrix{T}, A <: AbstractArray{T}}
 
     J1  = Jac.truncated_jac1
@@ -718,6 +664,103 @@ function add_jtsj!(
 
                 LinearAlgebra.mul!(H_sub_block, ΣJ3', right_block3)
                 H[row_range, col_range] .+= alpha .* H_sub_block
+            end
+        end
+    end
+end
+
+function add_jtsj!(
+    H::M,
+    Jac::LQJacobianOperator{T, M, A},
+    Σ::AbstractVector{T},
+    alpha::Number = 1,
+    beta::Number = 1
+) where {T, M <: AbstractMatrix{T}, A <: AbstractArray{T}}
+    J1  = Jac.truncated_jac1
+    J2  = Jac.truncated_jac2
+    J3  = Jac.truncated_jac3
+    N   = Jac.N
+    nu  = Jac.nu
+    nc  = Jac.nc
+    nsc = Jac.nsc
+    nuc = Jac.nuc
+
+    ΣJ1 = Jac.SJ1
+    ΣJ2 = Jac.SJ2
+    ΣJ3 = Jac.SJ3
+
+    if beta != 1
+        for i in 1:(nu * N)
+            for j in 1:(nu * N)
+                H[i, j] = H[i, j] * beta
+            end
+        end
+    end
+
+    for i in 1:N
+        right_block1 = J1[:, :, i]
+        right_block2 = J2[:, :, i]
+        right_block3 = J3[:, :, i]
+        #println()
+        #println("Iteration $i")
+        if i <= cld(N, 2)
+            for (j_ind, j) in enumerate(i:-1:1)
+                left_block1 = J1[:, :, j]
+                left_block2 = J2[:, :, j]
+                left_block3 = J3[:, :, j]
+
+                for (k_ind, k) in enumerate(i:N)
+                    row_range = (1 + (k_ind + j_ind - 2) * nu):((k_ind + j_ind - 1) * nu)
+                    col_range = (1 + (k_ind - 1) * nu):(k_ind * nu)
+
+                    #println("leftblock = ", j, " sigma = ", k, " rightblock = ", i, " row = ", (k_ind + j_ind - 1), " col = ", k_ind)
+
+                    for (mJ, mH) in enumerate(col_range)
+                        for (lJ, lH) in enumerate(row_range)
+                            for o in 1:nc
+                                H[lH, mH] += left_block1[o, lJ] * right_block1[o, mJ] * alpha * Σ[o + (k - 1) * nc]
+                            end
+
+                            for o in 1:nsc
+                                H[lH, mH] += left_block2[o, lJ] * right_block2[o, mJ] * alpha * Σ[o + (k - 1) * nsc + nc * N]
+                            end
+
+                            for o in 1:nuc
+                                H[lH, mH] += left_block3[o, lJ] * right_block3[o, mJ] * alpha * Σ[o + (k - 1) * nuc + (nsc + nc) * N]
+                            end
+                        end
+                    end
+                end
+                #println()
+            end
+        else
+            for (j_ind, j) in enumerate(i:N)
+                for (k_ind, k) in enumerate(i:-1:1)
+                    left_block1 = J1[:, :, k]
+                    left_block2 = J2[:, :, k]
+                    left_block3 = J3[:, :, k]
+
+                    row_range = (1 + (k_ind + j_ind - 2) * nu):((k_ind + j_ind -1) * nu)
+                    col_range = (1 + (j_ind - 1) * nu):(j_ind * nu)
+                    #println("leftblock = ", k, " sigma = ", j, " rightblock = ", i, " row = ", k_ind + j_ind - 1, " col = ", j_ind)
+
+                    for (mJ, mH) in enumerate(col_range)
+                        for (lJ, lH) in enumerate(row_range)
+                            for o in 1:nc
+                                H[lH, mH] += left_block1[o, lJ] * right_block1[o, mJ] * alpha * Σ[o + (j - 1) * nc]
+                            end
+
+                            for o in 1:nsc
+                                H[lH, mH] += left_block2[o, lJ] * right_block2[o, mJ] * alpha * Σ[o + (j - 1) * nsc + nc * N]
+                            end
+
+                            for o in 1:nuc
+                                H[lH, mH] += left_block3[o, lJ] * right_block3[o, mJ] * alpha * Σ[o + (j - 1) * nuc + (nsc + nc) * N]
+                            end
+                        end
+                    end
+                end
+                #println()
             end
         end
     end
