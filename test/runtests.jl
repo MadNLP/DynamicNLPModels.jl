@@ -1,7 +1,7 @@
 using Test, DynamicNLPModels, MadNLP, Random, JuMP, LinearAlgebra, SparseArrays, CUDA
 include("sparse_lq_test.jl")
 
-function test_mul(lq_dense, lq_dense_imp)
+function test_mul(lq_dense, lq_dense_imp; cuda=false)
     dnlp = lq_dense.dynamic_data
     N    = dnlp.N
     nu   = dnlp.nu
@@ -13,10 +13,15 @@ function test_mul(lq_dense, lq_dense_imp)
     x = rand(nu * N)
     y = rand(size(J, 1))
 
-    x_imp = similar(lq_dense_imp.dynamic_data.s0, length(x))
-    y_imp = similar(lq_dense_imp.dynamic_data.s0, length(y))
-    LinearAlgebra.copyto!(x_imp, x)
-    LinearAlgebra.copyto!(y_imp, y)
+    if cuda
+        x_imp = CuArray(x)
+        y_imp = CuArray(y)
+        copyto!(x_imp, x)
+        copyto!(y_imp, y)
+    else
+        x_imp = copy(x)
+        y_imp = copy(y)
+    end
 
     LinearAlgebra.mul!(y, J, x)
     LinearAlgebra.mul!(y_imp, J_imp, x_imp)
@@ -26,10 +31,15 @@ function test_mul(lq_dense, lq_dense_imp)
     x = rand(nu * N)
     y = rand(size(J, 1))
 
-    x_imp = similar(lq_dense_imp.dynamic_data.s0, length(x))
-    y_imp = similar(lq_dense_imp.dynamic_data.s0, length(y))
-    LinearAlgebra.copyto!(x_imp, x)
-    LinearAlgebra.copyto!(y_imp, y)
+    if cuda
+        x_imp = CuArray(x)
+        y_imp = CuArray(y)
+        copyto!(x_imp, x)
+        copyto!(y_imp, y)
+    else
+        x_imp = copy(x)
+        y_imp = copy(y)
+    end
 
     LinearAlgebra.mul!(x, J', y)
     LinearAlgebra.mul!(x_imp, J_imp', y_imp)
@@ -37,7 +47,7 @@ function test_mul(lq_dense, lq_dense_imp)
     @test x ≈ Vector(x_imp) atol = 1e-14
 end
 
-function test_add_jtsj(lq_dense, lq_dense_imp)
+function test_add_jtsj(lq_dense, lq_dense_imp; cuda=false)
     dnlp = lq_dense.dynamic_data
     N    = dnlp.N
     nu   = dnlp.nu
@@ -51,9 +61,15 @@ function test_add_jtsj(lq_dense, lq_dense_imp)
 
     x     = rand(size(J, 1))
 
-    H_imp = similar(lq_dense_imp.data.H, nu * N, nu * N); fill!(H_imp, 0)
-    x_imp = similar(lq_dense_imp.dynamic_data.s0, length(x));
-    LinearAlgebra.copyto!(x_imp, x)
+    if cuda
+        H_imp = CuArray(H)
+        x_imp = CuArray(x)
+        copyto!(H_imp, H)
+        copyto!(x_imp, x)
+    else
+        H_imp = zeros(nu * N, nu * N)
+        x_imp = copy(x)
+    end
 
     LinearAlgebra.mul!(ΣJ, Diagonal(x), J)
     LinearAlgebra.mul!(H, J', ΣJ)
@@ -106,36 +122,6 @@ function dynamic_data_to_CUDA(dnlp::LQDynamicData)
     LQDynamicData(s0c, Ac, Bc, Qc, Rc, dnlp.N; Qf = Qfc, S = Sc,
     E = Ec, F = Fc, K = Kc, sl = slc, su = suc, ul = ulc, uu = uuc, gl = glc, gu = guc
     )
-end
-
-function runtests(model, dnlp, lq_sparse, lq_dense, lq_sparse_from_data, lq_dense_from_data)
-    optimize!(model)
-    solution_ref_sparse           = madnlp(lq_sparse, max_iter=100)
-    solution_ref_dense            = madnlp(lq_dense, max_iter=100)
-    solution_ref_sparse_from_data = madnlp(lq_sparse_from_data, max_iter=100)
-    solution_ref_dense_from_data  = madnlp(lq_dense_from_data, max_iter=100)
-
-    @test objective_value(model) ≈ solution_ref_sparse.objective atol = 1e-7
-    @test objective_value(model) ≈ solution_ref_dense.objective atol = 1e-7
-    @test objective_value(model) ≈ solution_ref_sparse_from_data.objective atol = 1e-7
-    @test objective_value(model) ≈ solution_ref_dense_from_data.objective atol = 1e-7
-
-    @test solution_ref_sparse.solution[(ns * (N + 1) + 1):(ns * (N + 1) + nu*N)] ≈ solution_ref_dense.solution atol =  1e-6
-    @test solution_ref_sparse_from_data.solution[(ns * (N + 1) + 1):(ns * (N + 1) + nu*N)] ≈ solution_ref_dense_from_data.solution atol =  1e-6
-
-    lq_dense_imp = DenseLQDynamicModel(dnlp; implicit = true)
-
-    imp_test_set = [lq_dense_imp]
-
-    if CUDA.has_cuda_gpu()
-        dnlp_cuda     = dynamic_data_to_CUDA(dnlp)
-        lq_dense_cuda = DenseLQDynamicModel(dnlp_cuda; implicit=true)
-        push!(imp_test_set, lq_dense_cuda)
-    end
-
-    @testset "Test mul and add_jtsj!" for lq_imp in imp_test_set
-        test_mul!(lq_dense, lq_imp)
-    end
 end
 
 N  = 3 # number of time steps
@@ -288,8 +274,8 @@ if CUDA.has_cuda_gpu()
     dnlp_cuda     = dynamic_data_to_CUDA(dnlp)
     lq_dense_cuda = DenseLQDynamicModel(dnlp_cuda; implicit=true)
 
-    test_mul(lq_dense, lq_dense_cuda)
-    test_add_jtsj(lq_dense, lq_dense_cuda)
+    test_mul(lq_dense, lq_dense_cuda; cuda=true)
+    test_add_jtsj(lq_dense, lq_dense_cuda; cuda=true)
 end
 
 # Test with Qf matrix
@@ -326,8 +312,8 @@ if CUDA.has_cuda_gpu()
     dnlp_cuda     = dynamic_data_to_CUDA(dnlp)
     lq_dense_cuda = DenseLQDynamicModel(dnlp_cuda; implicit=true)
 
-    test_mul(lq_dense, lq_dense_cuda)
-    test_add_jtsj(lq_dense, lq_dense_cuda)
+    test_mul(lq_dense, lq_dense_cuda; cuda=true)
+    test_add_jtsj(lq_dense, lq_dense_cuda; cuda=true)
 end
 
 # Test get_u and get_s functions with no K matrix
@@ -375,8 +361,8 @@ if CUDA.has_cuda_gpu()
     dnlp_cuda     = dynamic_data_to_CUDA(dnlp)
     lq_dense_cuda = DenseLQDynamicModel(dnlp_cuda; implicit=true)
 
-    test_mul(lq_dense, lq_dense_cuda)
-    test_add_jtsj(lq_dense, lq_dense_cuda)
+    test_mul(lq_dense, lq_dense_cuda; cuda=true)
+    test_add_jtsj(lq_dense, lq_dense_cuda; cuda=true)
 end
 
 # Test edge case where one state is unbounded, other(s) is bounded
@@ -487,8 +473,8 @@ if CUDA.has_cuda_gpu()
     dnlp_cuda     = dynamic_data_to_CUDA(dnlp)
     lq_dense_cuda = DenseLQDynamicModel(dnlp_cuda; implicit=true)
 
-    test_mul(lq_dense, lq_dense_cuda)
-    test_add_jtsj(lq_dense, lq_dense_cuda)
+    test_mul(lq_dense, lq_dense_cuda; cuda=true)
+    test_add_jtsj(lq_dense, lq_dense_cuda; cuda=true)
 end
 
 # Test K matrix case with S and with partial bounds on u
@@ -551,8 +537,8 @@ if CUDA.has_cuda_gpu()
     dnlp_cuda     = dynamic_data_to_CUDA(dnlp)
     lq_dense_cuda = DenseLQDynamicModel(dnlp_cuda; implicit=true)
 
-    test_mul(lq_dense, lq_dense_cuda)
-    test_add_jtsj(lq_dense, lq_dense_cuda)
+    test_mul(lq_dense, lq_dense_cuda; cuda=true)
+    test_add_jtsj(lq_dense, lq_dense_cuda; cuda=true)
 end
 
 # Test K with no bounds
@@ -589,8 +575,8 @@ if CUDA.has_cuda_gpu()
     dnlp_cuda     = dynamic_data_to_CUDA(dnlp)
     lq_dense_cuda = DenseLQDynamicModel(dnlp_cuda; implicit=true)
 
-    test_mul(lq_dense, lq_dense_cuda)
-    test_add_jtsj(lq_dense, lq_dense_cuda)
+    test_mul(lq_dense, lq_dense_cuda; cuda=true)
+    test_add_jtsj(lq_dense, lq_dense_cuda; cuda=true)
 end
 
 # Test get_u and get_s functions with K matrix
@@ -643,17 +629,16 @@ gltest[3] = rand_val
 set_gl!(lq_dense, 3, rand_val)
 @test get_gl(lq_dense) == gltest
 
-
 # Test non-default vector/matrix on GenericArrays
 s0 = randn(Float32,2)
-A = randn(Float32,2,2)
-B = randn(Float32,2,2)
-Q = randn(Float32,2,2)
-R = randn(Float32,2,2)
-S = randn(Float32,2,2)
-K = randn(Float32,2,2)
-E = randn(Float32,2,2)
-F = randn(Float32,2,2)
+A  = randn(Float32,2,2)
+B  = randn(Float32,2,2)
+Q  = randn(Float32,2,2)
+R  = randn(Float32,2,2)
+S  = randn(Float32,2,2)
+K  = randn(Float32,2,2)
+E  = randn(Float32,2,2)
+F  = randn(Float32,2,2)
 gl = randn(Float32,2)
 gu = gl .+ 2
 sl = s0 .- 1
@@ -662,14 +647,14 @@ ul = randn(Float32,2)
 uu = ul .+ 2
 
 s0 = Test.GenericArray(s0)
-A = Test.GenericArray(A)
-B = Test.GenericArray(B)
-Q = Test.GenericArray(Q)
-R = Test.GenericArray(R)
-S = Test.GenericArray(S)
-K = Test.GenericArray(K)
-E = Test.GenericArray(E)
-F = Test.GenericArray(F)
+A  = Test.GenericArray(A)
+B  = Test.GenericArray(B)
+Q  = Test.GenericArray(Q)
+R  = Test.GenericArray(R)
+S  = Test.GenericArray(S)
+K  = Test.GenericArray(K)
+E  = Test.GenericArray(E)
+F  = Test.GenericArray(F)
 gl = Test.GenericArray(gl)
 gu = Test.GenericArray(gu)
 sl = Test.GenericArray(sl)
