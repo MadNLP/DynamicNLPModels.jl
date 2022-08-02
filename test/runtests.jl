@@ -1,7 +1,7 @@
 using Test, DynamicNLPModels, MadNLP, Random, JuMP, LinearAlgebra, SparseArrays, CUDA
 include("sparse_lq_test.jl")
 
-function test_mul(lq_dense, lq_dense_imp; cuda=false)
+function test_mul(lq_dense, lq_dense_imp)
     dnlp = lq_dense.dynamic_data
     N    = dnlp.N
     nu   = dnlp.nu
@@ -13,15 +13,10 @@ function test_mul(lq_dense, lq_dense_imp; cuda=false)
     x = rand(nu * N)
     y = rand(size(J, 1))
 
-    if cuda
-        x_imp = CuArray(x)
-        y_imp = CuArray(y)
-        copyto!(x_imp, x)
-        copyto!(y_imp, y)
-    else
-        x_imp = copy(x)
-        y_imp = copy(y)
-    end
+    x_imp = similar(lq_dense_imp.dynamic_data.s0, length(x))
+    y_imp = similar(lq_dense_imp.dynamic_data.s0, length(y))
+    LinearAlgebra.copyto!(x_imp, x)
+    LinearAlgebra.copyto!(y_imp, y)
 
     LinearAlgebra.mul!(y, J, x)
     LinearAlgebra.mul!(y_imp, J_imp, x_imp)
@@ -31,15 +26,10 @@ function test_mul(lq_dense, lq_dense_imp; cuda=false)
     x = rand(nu * N)
     y = rand(size(J, 1))
 
-    if cuda
-        x_imp = CuArray(x)
-        y_imp = CuArray(y)
-        copyto!(x_imp, x)
-        copyto!(y_imp, y)
-    else
-        x_imp = copy(x)
-        y_imp = copy(y)
-    end
+    x_imp = similar(lq_dense_imp.dynamic_data.s0, length(x))
+    y_imp = similar(lq_dense_imp.dynamic_data.s0, length(y))
+    LinearAlgebra.copyto!(x_imp, x)
+    LinearAlgebra.copyto!(y_imp, y)
 
     LinearAlgebra.mul!(x, J', y)
     LinearAlgebra.mul!(x_imp, J_imp', y_imp)
@@ -47,7 +37,7 @@ function test_mul(lq_dense, lq_dense_imp; cuda=false)
     @test x ≈ Vector(x_imp) atol = 1e-14
 end
 
-function test_add_jtsj(lq_dense, lq_dense_imp; cuda=false)
+function test_add_jtsj(lq_dense, lq_dense_imp)
     dnlp = lq_dense.dynamic_data
     N    = dnlp.N
     nu   = dnlp.nu
@@ -61,15 +51,9 @@ function test_add_jtsj(lq_dense, lq_dense_imp; cuda=false)
 
     x     = rand(size(J, 1))
 
-    if cuda
-        H_imp = CuArray(H)
-        x_imp = CuArray(x)
-        copyto!(H_imp, H)
-        copyto!(x_imp, x)
-    else
-        H_imp = zeros(nu * N, nu * N)
-        x_imp = copy(x)
-    end
+    H_imp = similar(lq_dense_imp.data.H, nu * N, nu * N); fill!(H_imp, 0)
+    x_imp = similar(lq_dense_imp.dynamic_data.s0, length(x));
+    LinearAlgebra.copyto!(x_imp, x)
 
     LinearAlgebra.mul!(ΣJ, Diagonal(x), J)
     LinearAlgebra.mul!(H, J', ΣJ)
@@ -124,6 +108,47 @@ function dynamic_data_to_CUDA(dnlp::LQDynamicData)
     )
 end
 
+function runtests(model, dnlp, lq_sparse, lq_dense, lq_sparse_from_data, lq_dense_from_data, N, ns, nu)
+    optimize!(model)
+    solution_ref_sparse           = madnlp(lq_sparse, max_iter=100)
+    solution_ref_dense            = madnlp(lq_dense, max_iter=100)
+    solution_ref_sparse_from_data = madnlp(lq_sparse_from_data, max_iter=100)
+    solution_ref_dense_from_data  = madnlp(lq_dense_from_data, max_iter=100)
+
+    @test objective_value(model) ≈ solution_ref_sparse.objective atol = 1e-7
+    @test objective_value(model) ≈ solution_ref_dense.objective atol = 1e-5
+    @test objective_value(model) ≈ solution_ref_sparse_from_data.objective atol = 1e-7
+    @test objective_value(model) ≈ solution_ref_dense_from_data.objective atol = 1e-5
+
+    @test solution_ref_sparse.solution[(ns * (N + 1) + 1):(ns * (N + 1) + nu*N)] ≈ solution_ref_dense.solution atol =  1e-6
+    @test solution_ref_sparse_from_data.solution[(ns * (N + 1) + 1):(ns * (N + 1) + nu*N)] ≈ solution_ref_dense_from_data.solution atol =  1e-6
+
+    # Test get_u and get_s functions with no K matrix
+    s_values = value.(all_variables(model)[1:(ns * (N + 1))])
+    u_values = value.(all_variables(model)[(1 + ns * (N + 1)):(ns * (N + 1) + nu * N)])
+
+    @test s_values ≈ get_s(solution_ref_sparse, lq_sparse) atol = 1e-7
+    @test u_values ≈ get_u(solution_ref_sparse, lq_sparse) atol = 1e-7
+    @test s_values ≈ get_s(solution_ref_dense, lq_dense) atol = 1e-5
+    @test u_values ≈ get_u(solution_ref_dense, lq_dense) atol = 1e-5
+
+    lq_dense_imp = DenseLQDynamicModel(dnlp; implicit = true)
+
+    imp_test_set = []
+    push!(imp_test_set, lq_dense_imp)
+
+    if CUDA.has_cuda_gpu()
+        dnlp_cuda     = dynamic_data_to_CUDA(dnlp)
+        lq_dense_cuda = DenseLQDynamicModel(dnlp_cuda; implicit=true)
+        push!(imp_test_set, lq_dense_cuda)
+    end
+
+    @testset "Test mul and add_jtsj!" for lq_imp in imp_test_set
+        test_mul(lq_dense, lq_imp)
+        test_add_jtsj(lq_dense, lq_imp)
+    end
+end
+
 N  = 3 # number of time steps
 ns = 2 # number of states
 nu = 1 # number of inputs
@@ -173,24 +198,7 @@ lq_dense  = DenseLQDynamicModel(dnlp)
 lq_sparse_from_data = SparseLQDynamicModel(s0, A, B, Q, R, N)
 lq_dense_from_data  = DenseLQDynamicModel(s0, A, B, Q, R, N)
 
-optimize!(model)
-solution_ref_sparse           = madnlp(lq_sparse, max_iter=100)
-solution_ref_dense            = madnlp(lq_dense, max_iter=100)
-solution_ref_sparse_from_data = madnlp(lq_sparse_from_data, max_iter=100)
-solution_ref_dense_from_data  = madnlp(lq_dense_from_data, max_iter=100)
-
-@test objective_value(model) ≈ solution_ref_sparse.objective atol = 1e-7
-@test objective_value(model) ≈ solution_ref_dense.objective atol = 1e-7
-@test objective_value(model) ≈ solution_ref_sparse_from_data.objective atol = 1e-7
-@test objective_value(model) ≈ solution_ref_dense_from_data.objective atol = 1e-7
-
-@test solution_ref_sparse.solution[(ns * (N + 1) + 1):(ns * (N + 1) + nu*N)] ≈ solution_ref_dense.solution atol =  1e-6
-@test solution_ref_sparse_from_data.solution[(ns * (N + 1) + 1):(ns * (N + 1) + nu*N)] ≈ solution_ref_dense_from_data.solution atol =  1e-6
-
-# Test mul! operators and LQJacobianOperator
-lq_dense_imp = DenseLQDynamicModel(dnlp; implicit = true)
-test_mul(lq_dense, lq_dense_imp)
-test_add_jtsj(lq_dense, lq_dense_imp)
+runtests(model, dnlp, lq_sparse, lq_dense, lq_sparse_from_data, lq_dense_from_data, N, ns, nu)
 
 # Test with lower bounds
 model     = build_QP_JuMP_model(Q,R,A,B, N;s0=s0, sl = sl, ul = ul)
@@ -201,20 +209,7 @@ lq_dense  = DenseLQDynamicModel(dnlp)
 lq_sparse_from_data = SparseLQDynamicModel(s0, A, B, Q, R, N; sl = sl, ul = ul)
 lq_dense_from_data  = DenseLQDynamicModel(s0, A, B, Q, R, N; sl = sl, ul = ul)
 
-optimize!(model)
-solution_ref_sparse           = madnlp(lq_sparse, max_iter=100)
-solution_ref_dense            = madnlp(lq_dense, max_iter=100)
-solution_ref_sparse_from_data = madnlp(lq_sparse_from_data, max_iter=100)
-solution_ref_dense_from_data  = madnlp(lq_dense_from_data, max_iter=100)
-
-@test objective_value(model) ≈ solution_ref_sparse.objective atol = 1e-7
-@test objective_value(model) ≈ solution_ref_dense.objective atol = 1e-7
-@test objective_value(model) ≈ solution_ref_sparse_from_data.objective atol = 1e-7
-@test objective_value(model) ≈ solution_ref_dense_from_data.objective atol = 1e-7
-
-@test solution_ref_sparse.solution[(ns * (N + 1) + 1):(ns * (N + 1) + nu*N)] ≈ solution_ref_dense.solution atol =  1e-6
-@test solution_ref_sparse_from_data.solution[(ns * (N + 1) + 1):(ns * (N + 1) + nu*N)] ≈ solution_ref_dense_from_data.solution atol =  1e-6
-
+runtests(model, dnlp, lq_sparse, lq_dense, lq_sparse_from_data, lq_dense_from_data, N, ns, nu)
 
 # Test with upper bounds
 model     = build_QP_JuMP_model(Q,R,A,B, N;s0=s0, su = su, uu = uu)
@@ -225,20 +220,7 @@ lq_dense  = DenseLQDynamicModel(dnlp)
 lq_sparse_from_data = SparseLQDynamicModel(s0, A, B, Q, R, N; su = su, uu = uu)
 lq_dense_from_data  = DenseLQDynamicModel(s0, A, B, Q, R, N; su = su, uu = uu)
 
-optimize!(model)
-solution_ref_sparse           = madnlp(lq_sparse, max_iter=100)
-solution_ref_dense            = madnlp(lq_dense, max_iter=100)
-solution_ref_sparse_from_data = madnlp(lq_sparse_from_data, max_iter=100)
-solution_ref_dense_from_data  = madnlp(lq_dense_from_data, max_iter=100)
-
-@test objective_value(model) ≈ solution_ref_sparse.objective atol = 1e-7
-@test objective_value(model) ≈ solution_ref_dense.objective atol = 1e-7
-@test objective_value(model) ≈ solution_ref_sparse_from_data.objective atol = 1e-7
-@test objective_value(model) ≈ solution_ref_dense_from_data.objective atol = 1e-7
-
-@test solution_ref_sparse.solution[(ns * (N + 1) + 1):(ns * (N + 1) + nu*N)] ≈ solution_ref_dense.solution atol =  1e-6
-@test solution_ref_sparse_from_data.solution[(ns * (N + 1) + 1):(ns * (N + 1) + nu*N)] ≈ solution_ref_dense_from_data.solution atol =  1e-6
-
+runtests(model, dnlp, lq_sparse, lq_dense, lq_sparse_from_data, lq_dense_from_data, N, ns, nu)
 
 # Test with upper and lower bounds
 model     = build_QP_JuMP_model(Q,R,A,B, N;s0=s0, sl = sl, ul = ul, su = su, uu = uu)
@@ -249,34 +231,7 @@ lq_dense  = DenseLQDynamicModel(dnlp)
 lq_sparse_from_data = SparseLQDynamicModel(s0, A, B, Q, R, N; sl=sl, ul=ul, su = su, uu = uu)
 lq_dense_from_data  = DenseLQDynamicModel(s0, A, B, Q, R, N; sl=sl, ul=ul, su = su, uu = uu)
 
-optimize!(model)
-solution_ref_sparse           = madnlp(lq_sparse, max_iter=100)
-solution_ref_dense            = madnlp(lq_dense, max_iter=100)
-solution_ref_sparse_from_data = madnlp(lq_sparse_from_data, max_iter=100)
-solution_ref_dense_from_data  = madnlp(lq_dense_from_data, max_iter=100)
-
-@test objective_value(model) ≈ solution_ref_sparse.objective atol = 1e-7
-@test objective_value(model) ≈ solution_ref_dense.objective atol = 1e-6
-@test objective_value(model) ≈ solution_ref_sparse_from_data.objective atol = 1e-7
-@test objective_value(model) ≈ solution_ref_dense_from_data.objective atol = 1e-6
-
-@test solution_ref_sparse.solution[(ns * (N + 1) + 1):(ns * (N + 1) + nu*N)] ≈ solution_ref_dense.solution atol =  1e-6
-@test solution_ref_sparse_from_data.solution[(ns * (N + 1) + 1):(ns * (N + 1) + nu*N)] ≈ solution_ref_dense_from_data.solution atol =  1e-6
-
-
-# Test mul! operators and LQJacobianOperator
-lq_dense_imp = DenseLQDynamicModel(dnlp; implicit = true)
-test_mul(lq_dense, lq_dense_imp)
-test_add_jtsj(lq_dense, lq_dense_imp)
-
-# Test mul! operators with CUDA
-if CUDA.has_cuda_gpu()
-    dnlp_cuda     = dynamic_data_to_CUDA(dnlp)
-    lq_dense_cuda = DenseLQDynamicModel(dnlp_cuda; implicit=true)
-
-    test_mul(lq_dense, lq_dense_cuda; cuda=true)
-    test_add_jtsj(lq_dense, lq_dense_cuda; cuda=true)
-end
+runtests(model, dnlp, lq_sparse, lq_dense, lq_sparse_from_data, lq_dense_from_data, N, ns, nu)
 
 # Test with Qf matrix
 model     = build_QP_JuMP_model(Q,R,A,B, N;s0=s0, sl = sl, ul = ul, su = su, uu = uu, Qf=Qf)
@@ -287,45 +242,7 @@ lq_dense  = DenseLQDynamicModel(dnlp)
 lq_sparse_from_data = SparseLQDynamicModel(s0, A, B, Q, R, N; sl = sl, ul = ul, su = su, uu = uu, Qf = Qf)
 lq_dense_from_data  = DenseLQDynamicModel(s0, A, B, Q, R, N; sl = sl, ul = ul, su = su, uu = uu, Qf = Qf)
 
-optimize!(model)
-solution_ref_sparse           = madnlp(lq_sparse, max_iter=100)
-solution_ref_dense            = madnlp(lq_dense, max_iter=100)
-solution_ref_sparse_from_data = madnlp(lq_sparse_from_data, max_iter=100)
-solution_ref_dense_from_data  = madnlp(lq_dense_from_data, max_iter=100)
-
-@test objective_value(model) ≈ solution_ref_sparse.objective atol = 1e-7
-@test objective_value(model) ≈ solution_ref_dense.objective atol = 1e-6
-@test objective_value(model) ≈ solution_ref_sparse_from_data.objective atol = 1e-7
-@test objective_value(model) ≈ solution_ref_dense_from_data.objective atol = 1e-6
-
-@test solution_ref_sparse.solution[(ns * (N + 1) + 1):(ns * (N + 1) + nu*N)] ≈ solution_ref_dense.solution atol =  1e-6
-@test solution_ref_sparse_from_data.solution[(ns * (N + 1) + 1):(ns * (N + 1) + nu*N)] ≈ solution_ref_dense_from_data.solution atol =  1e-6
-
-
-# Test mul! operators and LQJacobianOperator
-lq_dense_imp = DenseLQDynamicModel(dnlp; implicit = true)
-test_mul(lq_dense, lq_dense_imp)
-test_add_jtsj(lq_dense, lq_dense_imp)
-
-# Test mul! operators with CUDA
-if CUDA.has_cuda_gpu()
-    dnlp_cuda     = dynamic_data_to_CUDA(dnlp)
-    lq_dense_cuda = DenseLQDynamicModel(dnlp_cuda; implicit=true)
-
-    test_mul(lq_dense, lq_dense_cuda; cuda=true)
-    test_add_jtsj(lq_dense, lq_dense_cuda; cuda=true)
-end
-
-# Test get_u and get_s functions with no K matrix
-s_values = value.(all_variables(model)[1:(ns * (N + 1))])
-u_values = value.(all_variables(model)[(1 + ns * (N + 1)):(ns * (N + 1) + nu * N)])
-
-
-@test s_values ≈ get_s(solution_ref_sparse, lq_sparse) atol = 1e-7
-@test u_values ≈ get_u(solution_ref_sparse, lq_sparse) atol = 1e-7
-@test s_values ≈ get_s(solution_ref_dense, lq_dense) atol = 1e-6
-@test u_values ≈ get_u(solution_ref_dense, lq_dense) atol = 1e-7
-
+runtests(model, dnlp, lq_sparse, lq_dense, lq_sparse_from_data, lq_dense_from_data, N, ns, nu)
 
 # Test with E and F matrix bounds
 model     = build_QP_JuMP_model(Q,R,A,B, N;s0=s0, sl = sl, ul = ul, su = su, uu = uu, E = E, F = F, gl = gl, gu = gu)
@@ -336,34 +253,7 @@ lq_dense  = DenseLQDynamicModel(dnlp)
 lq_sparse_from_data = SparseLQDynamicModel(s0, A, B, Q, R, N; sl = sl, ul = ul, su = su, uu = uu, E = E, F = F, gl = gl, gu = gu)
 lq_dense_from_data  = DenseLQDynamicModel(s0, A, B, Q, R, N; sl = sl, ul = ul, su = su, uu = uu, E = E, F = F, gl = gl, gu = gu)
 
-optimize!(model)
-solution_ref_sparse           = madnlp(lq_sparse, max_iter=100)
-solution_ref_dense            = madnlp(lq_dense, max_iter=100)
-solution_ref_sparse_from_data = madnlp(lq_sparse_from_data, max_iter=100)
-solution_ref_dense_from_data  = madnlp(lq_dense_from_data, max_iter=100)
-
-@test objective_value(model) ≈ solution_ref_sparse.objective atol = 1e-7
-@test objective_value(model) ≈ solution_ref_dense.objective atol = 1e-5
-@test objective_value(model) ≈ solution_ref_sparse_from_data.objective atol = 1e-7
-@test objective_value(model) ≈ solution_ref_dense_from_data.objective atol = 1e-5
-
-@test solution_ref_sparse.solution[(ns * (N + 1) + 1):(ns * (N + 1) + nu*N)] ≈ solution_ref_dense.solution atol =  1e-6
-@test solution_ref_sparse_from_data.solution[(ns * (N + 1) + 1):(ns * (N + 1) + nu*N)] ≈ solution_ref_dense_from_data.solution atol =  1e-6
-
-
-# Test mul! operators and LQJacobianOperator
-lq_dense_imp = DenseLQDynamicModel(dnlp; implicit = true)
-test_mul(lq_dense, lq_dense_imp)
-test_add_jtsj(lq_dense, lq_dense_imp)
-
-# Test mul! operators with CUDA
-if CUDA.has_cuda_gpu()
-    dnlp_cuda     = dynamic_data_to_CUDA(dnlp)
-    lq_dense_cuda = DenseLQDynamicModel(dnlp_cuda; implicit=true)
-
-    test_mul(lq_dense, lq_dense_cuda; cuda=true)
-    test_add_jtsj(lq_dense, lq_dense_cuda; cuda=true)
-end
+runtests(model, dnlp, lq_sparse, lq_dense, lq_sparse_from_data, lq_dense_from_data, N, ns, nu)
 
 # Test edge case where one state is unbounded, other(s) is bounded
 model     = build_QP_JuMP_model(Q,R,A,B, N;s0=s0, sl = sl_with_inf, ul = ul, su = su_with_inf, uu = uu, E = E, F = F, gl = gl, gu = gu)
@@ -374,19 +264,7 @@ lq_dense  = DenseLQDynamicModel(dnlp)
 lq_sparse_from_data = SparseLQDynamicModel(s0, A, B, Q, R, N; sl = sl_with_inf, ul = ul, su = su_with_inf, uu = uu, E = E, F = F, gl = gl, gu = gu)
 lq_dense_from_data  = DenseLQDynamicModel(s0, A, B, Q, R, N; sl = sl_with_inf, ul = ul, su = su_with_inf, uu = uu, E = E, F = F, gl = gl, gu = gu)
 
-optimize!(model)
-solution_ref_sparse           = madnlp(lq_sparse, max_iter=100)
-solution_ref_dense            = madnlp(lq_dense, max_iter=100)
-solution_ref_sparse_from_data = madnlp(lq_sparse_from_data, max_iter=100)
-solution_ref_dense_from_data  = madnlp(lq_dense_from_data, max_iter=100)
-
-@test objective_value(model) ≈ solution_ref_sparse.objective atol = 1e-7
-@test objective_value(model) ≈ solution_ref_dense.objective atol = 1e-5
-@test objective_value(model) ≈ solution_ref_sparse_from_data.objective atol = 1e-7
-@test objective_value(model) ≈ solution_ref_dense_from_data.objective atol = 1e-5
-
-@test solution_ref_sparse.solution[(ns * (N + 1) + 1):(ns * (N + 1) + nu*N)] ≈ solution_ref_dense.solution atol =  1e-6
-@test solution_ref_sparse_from_data.solution[(ns * (N + 1) + 1):(ns * (N + 1) + nu*N)] ≈ solution_ref_dense_from_data.solution atol =  1e-6
+runtests(model, dnlp, lq_sparse, lq_dense, lq_sparse_from_data, lq_dense_from_data, N, ns, nu)
 
 @test size(lq_dense.data.A, 1) == size(E, 1) * 3 + sum(su_with_inf .!= Inf .|| sl_with_inf .!= -Inf) * N
 
@@ -400,20 +278,7 @@ lq_dense  = DenseLQDynamicModel(dnlp)
 lq_sparse_from_data = SparseLQDynamicModel(s0, A, B, Q, R, N; sl = sl, ul = ul, su = su, uu = uu, E = E, F = F, gl = gl, gu = gu, S = S)
 lq_dense_from_data  = DenseLQDynamicModel(s0, A, B, Q, R, N; sl = sl, ul = ul, su = su, uu = uu, E = E, F = F, gl = gl, gu = gu, S = S)
 
-optimize!(model)
-solution_ref_sparse           = madnlp(lq_sparse, max_iter=100)
-solution_ref_dense            = madnlp(lq_dense, max_iter=100)
-solution_ref_sparse_from_data = madnlp(lq_sparse_from_data, max_iter=100)
-solution_ref_dense_from_data  = madnlp(lq_dense_from_data, max_iter=100)
-
-@test objective_value(model) ≈ solution_ref_sparse.objective atol = 1e-7
-@test objective_value(model) ≈ solution_ref_dense.objective atol = 1e-5
-@test objective_value(model) ≈ solution_ref_sparse_from_data.objective atol = 1e-7
-@test objective_value(model) ≈ solution_ref_dense_from_data.objective atol = 1e-5
-
-@test solution_ref_sparse.solution[(ns * (N + 1) + 1):(ns * (N + 1) + nu*N)] ≈ solution_ref_dense.solution atol =  1e-6
-@test solution_ref_sparse_from_data.solution[(ns * (N + 1) + 1):(ns * (N + 1) + nu*N)] ≈ solution_ref_dense_from_data.solution atol =  1e-6
-
+runtests(model, dnlp, lq_sparse, lq_dense, lq_sparse_from_data, lq_dense_from_data, N, ns, nu)
 
 # Test K matrix case without S
 model     = build_QP_JuMP_model(Q,R,A,B, N;s0=s0, sl = sl, ul = ul, su = su, uu = uu, E = E, F = F, gl = gl, gu = gu, K = K)
@@ -424,20 +289,7 @@ lq_dense  = DenseLQDynamicModel(dnlp)
 lq_sparse_from_data = SparseLQDynamicModel(s0, A, B, Q, R, N; sl = sl, ul = ul, su = su, uu = uu, E = E, F = F, gl = gl, gu = gu, K = K)
 lq_dense_from_data  = DenseLQDynamicModel(s0, A, B, Q, R, N; sl = sl, ul = ul, su = su, uu = uu, E = E, F = F, gl = gl, gu = gu, K = K)
 
-optimize!(model)
-solution_ref_sparse           = madnlp(lq_sparse, max_iter=100)
-solution_ref_dense            = madnlp(lq_dense, max_iter=100)
-solution_ref_sparse_from_data = madnlp(lq_sparse_from_data, max_iter=100)
-solution_ref_dense_from_data  = madnlp(lq_dense_from_data, max_iter=100)
-
-@test objective_value(model) ≈ solution_ref_sparse.objective atol = 1e-7
-@test objective_value(model) ≈ solution_ref_dense.objective atol = 1e-5
-@test objective_value(model) ≈ solution_ref_sparse_from_data.objective atol = 1e-7
-@test objective_value(model) ≈ solution_ref_dense_from_data.objective atol = 1e-5
-
-@test solution_ref_sparse.solution[(ns * (N + 1) + 1):(ns * (N + 1) + nu*N)] ≈ solution_ref_dense.solution atol =  1e-6
-@test solution_ref_sparse_from_data.solution[(ns * (N + 1) + 1):(ns * (N + 1) + nu*N)] ≈ solution_ref_dense_from_data.solution atol =  1e-6
-
+runtests(model, dnlp, lq_sparse, lq_dense, lq_sparse_from_data, lq_dense_from_data, N, ns, nu)
 
 # Test K matrix case with S
 model     = build_QP_JuMP_model(Q,R,A,B, N;s0=s0, sl = sl, ul = ul, su = su, uu = uu, E = E, F = F, gl = gl, gu = gu, K = K, S = S)
@@ -448,34 +300,7 @@ lq_dense  = DenseLQDynamicModel(dnlp)
 lq_sparse_from_data = SparseLQDynamicModel(s0, A, B, Q, R, N; sl = sl, ul = ul, su = su, uu = uu, E = E, F = F, gl = gl, gu = gu, K = K, S = S)
 lq_dense_from_data  = DenseLQDynamicModel(s0, A, B, Q, R, N; sl = sl, ul = ul, su = su, uu = uu, E = E, F = F, gl = gl, gu = gu, K = K, S = S)
 
-optimize!(model)
-solution_ref_sparse           = madnlp(lq_sparse, max_iter=100)
-solution_ref_dense            = madnlp(lq_dense, max_iter=100)
-solution_ref_sparse_from_data = madnlp(lq_sparse_from_data, max_iter=100)
-solution_ref_dense_from_data  = madnlp(lq_dense_from_data, max_iter=100)
-
-@test objective_value(model) ≈ solution_ref_sparse.objective atol = 1e-7
-@test objective_value(model) ≈ solution_ref_dense.objective atol = 1e-5
-@test objective_value(model) ≈ solution_ref_sparse_from_data.objective atol = 1e-7
-@test objective_value(model) ≈ solution_ref_dense_from_data.objective atol = 1e-5
-
-@test solution_ref_sparse.solution[(ns * (N + 1) + 1):(ns * (N + 1) + nu*N)] ≈ solution_ref_dense.solution atol =  1e-6
-@test solution_ref_sparse_from_data.solution[(ns * (N + 1) + 1):(ns * (N + 1) + nu*N)] ≈ solution_ref_dense_from_data.solution atol =  1e-6
-
-
-# Test mul! operators and LQJacobianOperator
-lq_dense_imp = DenseLQDynamicModel(dnlp; implicit = true)
-test_mul(lq_dense, lq_dense_imp)
-test_add_jtsj(lq_dense, lq_dense_imp)
-
-# Test mul! operators with CUDA
-if CUDA.has_cuda_gpu()
-    dnlp_cuda     = dynamic_data_to_CUDA(dnlp)
-    lq_dense_cuda = DenseLQDynamicModel(dnlp_cuda; implicit=true)
-
-    test_mul(lq_dense, lq_dense_cuda; cuda=true)
-    test_add_jtsj(lq_dense, lq_dense_cuda; cuda=true)
-end
+runtests(model, dnlp, lq_sparse, lq_dense, lq_sparse_from_data, lq_dense_from_data, N, ns, nu)
 
 # Test K matrix case with S and with partial bounds on u
 
@@ -512,34 +337,7 @@ lq_dense  = DenseLQDynamicModel(dnlp)
 lq_sparse_from_data = SparseLQDynamicModel(s0, A, B, Q, R, N; sl = sl, ul = ul_with_inf, su = su, uu = uu_with_inf, E = E, F = F, gl = gl, gu = gu, K = K, S = S)
 lq_dense_from_data  = DenseLQDynamicModel(s0, A, B, Q, R, N; sl = sl, ul = ul_with_inf, su = su, uu = uu_with_inf, E = E, F = F, gl = gl, gu = gu, K = K, S = S)
 
-optimize!(model)
-solution_ref_sparse           = madnlp(lq_sparse, max_iter=100)
-solution_ref_dense            = madnlp(lq_dense, max_iter=100)
-solution_ref_sparse_from_data = madnlp(lq_sparse_from_data, max_iter=100)
-solution_ref_dense_from_data  = madnlp(lq_dense_from_data, max_iter=100)
-
-@test objective_value(model) ≈ solution_ref_sparse.objective atol = 1e-7
-@test objective_value(model) ≈ solution_ref_dense.objective atol = 1e-5
-@test objective_value(model) ≈ solution_ref_sparse_from_data.objective atol = 1e-7
-@test objective_value(model) ≈ solution_ref_dense_from_data.objective atol = 1e-5
-
-@test solution_ref_sparse.solution[(ns * (N + 1) + 1):(ns * (N + 1) + nu*N)] ≈ solution_ref_dense.solution atol =  1e-5
-@test solution_ref_sparse_from_data.solution[(ns * (N + 1) + 1):(ns * (N + 1) + nu*N)] ≈ solution_ref_dense_from_data.solution atol =  1e-5
-
-
-# Test mul! operators and LQJacobianOperator
-lq_dense_imp = DenseLQDynamicModel(dnlp; implicit = true)
-test_mul(lq_dense, lq_dense_imp)
-test_add_jtsj(lq_dense, lq_dense_imp)
-
-# Test mul! operators with CUDA
-if CUDA.has_cuda_gpu()
-    dnlp_cuda     = dynamic_data_to_CUDA(dnlp)
-    lq_dense_cuda = DenseLQDynamicModel(dnlp_cuda; implicit=true)
-
-    test_mul(lq_dense, lq_dense_cuda; cuda=true)
-    test_add_jtsj(lq_dense, lq_dense_cuda; cuda=true)
-end
+runtests(model, dnlp, lq_sparse, lq_dense, lq_sparse_from_data, lq_dense_from_data, N, ns, nu)
 
 # Test K with no bounds
 model     = build_QP_JuMP_model(Q,R,A,B, N;s0=s0, E = E, F = F, gl = gl, gu = gu, K = K)
@@ -550,44 +348,7 @@ lq_dense  = DenseLQDynamicModel(dnlp)
 lq_sparse_from_data = SparseLQDynamicModel(s0, A, B, Q, R, N; E = E, F = F, gl = gl, gu = gu, K = K)
 lq_dense_from_data  = DenseLQDynamicModel(s0, A, B, Q, R, N; E = E, F = F, gl = gl, gu = gu, K = K)
 
-optimize!(model)
-solution_ref_sparse           = madnlp(lq_sparse, max_iter=100)
-solution_ref_dense            = madnlp(lq_dense, max_iter=100)
-solution_ref_sparse_from_data = madnlp(lq_sparse_from_data, max_iter=100)
-solution_ref_dense_from_data  = madnlp(lq_dense_from_data, max_iter=100)
-
-@test objective_value(model) ≈ solution_ref_sparse.objective atol = 1e-7
-@test objective_value(model) ≈ solution_ref_dense.objective atol = 1e-5
-@test objective_value(model) ≈ solution_ref_sparse_from_data.objective atol = 1e-7
-@test objective_value(model) ≈ solution_ref_dense_from_data.objective atol = 1e-5
-
-@test solution_ref_sparse.solution[(ns * (N + 1) + 1):(ns * (N + 1) + nu*N)] ≈ solution_ref_dense.solution atol =  1e-5
-@test solution_ref_sparse_from_data.solution[(ns * (N + 1) + 1):(ns * (N + 1) + nu*N)] ≈ solution_ref_dense_from_data.solution atol =  1e-5
-
-
-# Test mul! operators and LQJacobianOperator
-lq_dense_imp = DenseLQDynamicModel(dnlp; implicit = true)
-test_mul(lq_dense, lq_dense_imp)
-test_add_jtsj(lq_dense, lq_dense_imp)
-
-# Test mul! operators with CUDA
-if CUDA.has_cuda_gpu()
-    dnlp_cuda     = dynamic_data_to_CUDA(dnlp)
-    lq_dense_cuda = DenseLQDynamicModel(dnlp_cuda; implicit=true)
-
-    test_mul(lq_dense, lq_dense_cuda; cuda=true)
-    test_add_jtsj(lq_dense, lq_dense_cuda; cuda=true)
-end
-
-# Test get_u and get_s functions with K matrix
-s_values = value.(all_variables(model)[1:(ns * (N + 1))])
-u_values = value.(all_variables(model)[(1 + ns * (N + 1)):(ns * (N + 1) + nu * N)])
-
-@test s_values ≈ get_s(solution_ref_sparse, lq_sparse) atol = 1e-7
-@test u_values ≈ get_u(solution_ref_sparse, lq_sparse) atol = 1e-7
-@test s_values ≈ get_s(solution_ref_dense, lq_dense) atol = 1e-7
-@test u_values ≈ get_u(solution_ref_dense, lq_dense) atol = 1e-7
-
+runtests(model, dnlp, lq_sparse, lq_dense, lq_sparse_from_data, lq_dense_from_data, N, ns, nu)
 
 # Test get_* and set_* functions
 
@@ -628,6 +389,7 @@ set_gl!(lq_sparse, 2, rand_val)
 gltest[3] = rand_val
 set_gl!(lq_dense, 3, rand_val)
 @test get_gl(lq_dense) == gltest
+
 
 # Test non-default vector/matrix on GenericArrays
 s0 = randn(Float32,2)
