@@ -338,14 +338,14 @@ function _build_sparse_lq_dynamic_model(dnlp::LQDynamicData{T, V, M, MK}) where 
 
     nc = size(E, 1)
 
-    dropzeros!(A)
-    dropzeros!(B)
-    dropzeros!(Q)
-    dropzeros!(R)
-    dropzeros!(Qf)
-    dropzeros!(E)
-    dropzeros!(F)
-    dropzeros!(S)
+    SparseArrays.dropzeros!(A)
+    SparseArrays.dropzeros!(B)
+    SparseArrays.dropzeros!(Q)
+    SparseArrays.dropzeros!(R)
+    SparseArrays.dropzeros!(Qf)
+    SparseArrays.dropzeros!(E)
+    SparseArrays.dropzeros!(F)
+    SparseArrays.dropzeros!(S)
 
     H_colptr = zeros(Int, ns * (N + 1) + nu * N + 1)
     H_rowval = zeros(Int, length(Q.rowval) * N + length(R.rowval) * N + 2 * length(S.rowval) * N + length(Qf.rowval))
@@ -446,15 +446,15 @@ function _build_sparse_lq_dynamic_model(dnlp::LQDynamicData{T, V, M, MK}) where 
 
     nc = size(E, 1)
 
-    dropzeros!(A)
-    dropzeros!(B)
-    dropzeros!(Q)
-    dropzeros!(R)
-    dropzeros!(Qf)
-    dropzeros!(E)
-    dropzeros!(F)
-    dropzeros!(S)
-    dropzeros!(K)
+    SparseArrays.dropzeros!(A)
+    SparseArrays.dropzeros!(B)
+    SparseArrays.dropzeros!(Q)
+    SparseArrays.dropzeros!(R)
+    SparseArrays.dropzeros!(Qf)
+    SparseArrays.dropzeros!(E)
+    SparseArrays.dropzeros!(F)
+    SparseArrays.dropzeros!(S)
+    SparseArrays.dropzeros!(K)
 
     bool_vec        = (ul .!= -Inf .|| uu .!= Inf)
     num_real_bounds = sum(bool_vec)
@@ -494,10 +494,10 @@ function _build_sparse_lq_dynamic_model(dnlp::LQDynamicData{T, V, M, MK}) where 
     LinearAlgebra.mul!(FK, F, K)
     LinearAlgebra.axpy!(1, FK, new_E)
 
-    dropzeros!(new_Q)
-    dropzeros!(new_A)
-    dropzeros!(new_E)
-    dropzeros!(new_S)
+    SparseArrays.dropzeros!(new_Q)
+    SparseArrays.dropzeros!(new_A)
+    SparseArrays.dropzeros!(new_E)
+    SparseArrays.dropzeros!(new_S)
 
     K_sparse = K[bool_vec, :]
 
