@@ -338,6 +338,15 @@ function _build_sparse_lq_dynamic_model(dnlp::LQDynamicData{T, V, M, MK}) where 
 
     nc = size(E, 1)
 
+    dropzeros!(A)
+    dropzeros!(B)
+    dropzeros!(Q)
+    dropzeros!(R)
+    dropzeros!(Qf)
+    dropzeros!(E)
+    dropzeros!(F)
+    dropzeros!(S)
+
     H_colptr = zeros(Int, ns * (N + 1) + nu * N + 1)
     H_rowval = zeros(Int, length(Q.rowval) * N + length(R.rowval) * N + 2 * length(S.rowval) * N + length(Qf.rowval))
     H_nzval  = zeros(T, length(Q.nzval) * N + length(R.nzval) * N + 2 * length(S.nzval) * N + length(Qf.nzval))
@@ -353,9 +362,6 @@ function _build_sparse_lq_dynamic_model(dnlp::LQDynamicData{T, V, M, MK}) where 
     _set_sparse_J!(J_colptr, J_rowval, J_nzval, A, B, E, F, K, N)
 
     J = SparseArrays.SparseMatrixCSC((nc + ns) * N, (N + 1) * ns + nu * N, J_colptr, J_rowval, J_nzval)
-
-    SparseArrays.dropzeros!(H)
-    SparseArrays.dropzeros!(J)
 
     c0  = zero(T)
 
@@ -440,6 +446,16 @@ function _build_sparse_lq_dynamic_model(dnlp::LQDynamicData{T, V, M, MK}) where 
 
     nc = size(E, 1)
 
+    dropzeros!(A)
+    dropzeros!(B)
+    dropzeros!(Q)
+    dropzeros!(R)
+    dropzeros!(Qf)
+    dropzeros!(E)
+    dropzeros!(F)
+    dropzeros!(S)
+    dropzeros!(K)
+
     bool_vec        = (ul .!= -Inf .|| uu .!= Inf)
     num_real_bounds = sum(bool_vec)
 
@@ -478,6 +494,11 @@ function _build_sparse_lq_dynamic_model(dnlp::LQDynamicData{T, V, M, MK}) where 
     LinearAlgebra.mul!(FK, F, K)
     LinearAlgebra.axpy!(1, FK, new_E)
 
+    dropzeros!(new_Q)
+    dropzeros!(new_A)
+    dropzeros!(new_E)
+    dropzeros!(new_S)
+
     K_sparse = K[bool_vec, :]
 
     H_colptr = zeros(Int, ns * (N + 1) + nu * N + 1)
@@ -497,9 +518,6 @@ function _build_sparse_lq_dynamic_model(dnlp::LQDynamicData{T, V, M, MK}) where 
     _set_sparse_J!(J_colptr, J_rowval, J_nzval, new_A, B, new_E, F, K, bool_vec, N, num_real_bounds)
 
     J = SparseArrays.SparseMatrixCSC(ns * N + nc * N + num_real_bounds * N, (N + 1) * ns + nu * N, J_colptr, J_rowval, J_nzval)
-
-    SparseArrays.dropzeros!(H)
-    SparseArrays.dropzeros!(J)
 
     # Remove algebraic constraints if u variable is unbounded on both upper and lower ends
     lcon3 = _init_similar(ul, nu * N, T)
