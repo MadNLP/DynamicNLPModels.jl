@@ -1,4 +1,3 @@
-
 """
 get_u(solution_ref, lqdm::SparseLQDynamicModel) -> u <: vector
 get_u(solution_ref, lqdm::DenseLQDynamicModel) -> u <: vector
@@ -719,5 +718,174 @@ function add_jtsj!(
                 H[row_range, col_range] .+= alpha .* H_sub_block
             end
         end
+    end
+end
+
+"""
+    reset_s0!(lqdm::SparseLQDynamicModel, s0)
+    reset_s0!(lqdm::DenseLQDynamicModel, s0)
+
+Resets `s0` within `lqdm.dynamic_data`. For a `SparseLQDynamicModel`, this updates the variable bounds which fix the value of `s0`.
+For a `DenseLQDynamicModel`, also resets the constraint bounds on the Jacobian and resets the linear and constant terms within the
+objective function (i.e., `lqdm.data.c` and `lqdm.data.c0`). This provides a way to update the model after each sample period.
+"""
+function reset_s0!(
+    lqdm::SparseLQDynamicModel{T, V, M1, M2, M3, MK},
+    s0::V
+) where {T, V <: AbstractVector{T}, M1, M2, M3, MK}
+    dnlp = lqdm.dynamic_data
+    ns = dnlp.ns
+
+    lqdm.dynamic_data.s0 .= s0
+
+    lqdm.meta.lvar[1:ns] .= s0
+    lqdm.meta.uvar[1:ns] .= s0
+end
+
+function reset_s0!(
+    lqdm::DenseLQDynamicModel{T, V, M1, M2, M3, M4, MK},
+    s0::V
+) where {T, V <: AbstractVector{T}, M1, M2, M3, M4, MK <: Nothing}
+
+    dnlp         = lqdm.dynamic_data
+    dense_blocks = lqdm.blocks
+
+    N  = dnlp.N
+    ns = dnlp.ns
+    nu = dnlp.nu
+    E  = dnlp.E
+    F  = dnlp.E
+    ul = dnlp.ul
+    uu = dnlp.uu
+    sl = dnlp.sl
+    su = dnlp.su
+    gl = dnlp.gl
+    gu = dnlp.gu
+    nc = size(E, 1)
+
+    # Get matrices for multiplying by s0
+    block_A  = dense_blocks.A
+    block_h  = dense_blocks.h
+    block_h0 = dense_blocks.h0
+    block_d  = dense_blocks.d
+
+    lcon = lqdm.meta.lcon
+    ucon = lqdm.meta.ucon
+
+    # Reset s0
+    lqdm.dynamic_data.s0 .= s0
+
+    As0  = _init_similar(s0, ns * (N + 1), T)
+    Qs0  = _init_similar(s0, ns, T)
+
+    dl = repeat(gl, N)
+    du = repeat(gu, N)
+
+    bool_vec_s = (sl .!= -Inf .|| su .!= Inf)
+    nsc   = sum(bool_vec_s)
+
+    sl = sl[bool_vec_s]
+    su = su[bool_vec_s]
+
+    LinearAlgebra.mul!(dl, block_d, s0, -1, 1)
+    LinearAlgebra.mul!(du, block_d, s0, -1, 1)
+
+    # Reset constraint bounds corresponding to E and F matrices
+    lcon[1:nc * N] .= dl
+    ucon[1:nc * N] .= du
+
+    LinearAlgebra.mul!(As0, block_A, s0)
+
+    # reset linear term
+    LinearAlgebra.mul!(lqdm.data.c, block_h, s0)
+
+    # reset constant term
+    LinearAlgebra.mul!(Qs0, block_h0, s0)
+    lqdm.data.c0 = LinearAlgebra.dot(s0, Qs0) / T(2)
+
+    for i in 1:N
+        # Reset bounds on constraints from state variable bounds
+        lcon[(1 + nc * N + nsc * (i - 1)):(nc * N + nsc * i)] .= sl .- As0[(1 + ns * i):(ns * (i + 1))][bool_vec_s]
+        ucon[(1 + nc * N + nsc * (i - 1)):(nc * N + nsc * i)] .= su .- As0[(1 + ns * i):(ns * (i + 1))][bool_vec_s]
+    end
+end
+
+function reset_s0!(
+    lqdm::DenseLQDynamicModel{T, V, M1, M2, M3, M4, MK},
+    s0::V
+) where {T, V <: AbstractVector{T}, M1, M2, M3, M4, MK <: AbstractMatrix{T}}
+    dnlp         = lqdm.dynamic_data
+    dense_blocks = lqdm.blocks
+
+    N  = dnlp.N
+    ns = dnlp.ns
+    nu = dnlp.nu
+    E  = dnlp.E
+    F  = dnlp.E
+    K  = dnlp.K
+    ul = dnlp.ul
+    uu = dnlp.uu
+    sl = dnlp.sl
+    su = dnlp.su
+    gl = dnlp.gl
+    gu = dnlp.gu
+    nc = size(E, 1)
+
+    # Get matrices for multiplying by s0
+    block_A  = dense_blocks.A
+    block_h  = dense_blocks.h
+    block_h0 = dense_blocks.h0
+    block_d  = dense_blocks.d
+    block_KA = dense_blocks.KA
+
+    lcon = lqdm.meta.lcon
+    ucon = lqdm.meta.ucon
+
+    # Reset s0
+    lqdm.dynamic_data.s0 .= s0
+
+    As0  = _init_similar(s0, ns * (N + 1), T)
+    Qs0  = _init_similar(s0, ns, T)
+    KAs0 = _init_similar(s0, nu * N, T)
+
+    dl   = repeat(gl, N)
+    du   = repeat(gu, N)
+
+    bool_vec_s = (sl .!= -Inf .|| su .!= Inf)
+    nsc   = sum(bool_vec_s)
+
+    bool_vec_u = (ul .!= -Inf .|| uu .!= Inf)
+    nuc = sum(bool_vec_u)
+
+    sl = sl[bool_vec_s]
+    su = su[bool_vec_s]
+
+    ul = ul[bool_vec_u]
+    uu = uu[bool_vec_u]
+
+    LinearAlgebra.mul!(dl, block_d, s0, -1, 1)
+    LinearAlgebra.mul!(du, block_d, s0, -1, 1)
+
+    # Reset constraint bounds corresponding to E and F matrices
+    lcon[1:nc * N] .= dl
+    ucon[1:nc * N] .= du
+
+    LinearAlgebra.mul!(As0, block_A, s0)
+    LinearAlgebra.mul!(KAs0, block_KA, s0)
+    # reset linear term
+    LinearAlgebra.mul!(lqdm.data.c, block_h, s0)
+
+    # reset constant term
+    LinearAlgebra.mul!(Qs0, block_h0, s0)
+    lqdm.data.c0 = LinearAlgebra.dot(s0, Qs0) / T(2)
+
+    for i in 1:N
+        # Reset bounds on constraints from state variable bounds
+        lcon[(1 + nc * N + nsc * (i - 1)):(nc * N + nsc * i)] .= sl .- As0[(1 + ns * i):(ns * (i + 1))][bool_vec_s]
+        ucon[(1 + nc * N + nsc * (i - 1)):(nc * N + nsc * i)] .= su .- As0[(1 + ns * i):(ns * (i + 1))][bool_vec_s]
+
+        # Reset bounds on constraints from input variable bounds
+        lcon[(1 + (nc + nsc) * N + nuc * (i - 1)):((nc + nsc) * N + nuc * i)] .= ul .- KAs0[(1 + nu * (i - 1)):(nu * i)][bool_vec_u]
+        ucon[(1 + (nc + nsc) * N + nuc * (i - 1)):((nc + nsc) * N + nuc * i)] .= uu .- KAs0[(1 + nu * (i - 1)):(nu * i)][bool_vec_u]
     end
 end

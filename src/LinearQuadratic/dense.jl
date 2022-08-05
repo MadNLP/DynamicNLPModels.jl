@@ -1,4 +1,3 @@
-
 """
 DenseLQDynamicModel(dnlp::LQDynamicData; implicit = false)    -> DenseLQDynamicModel
 DenseLQDynamicModel(s0, A, B, Q, R, N; implicit = false ...) -> DenseLQDynamicModel
@@ -101,14 +100,17 @@ function _build_dense_lq_dynamic_model(
     bool_vec_s        = (su .!= Inf .|| sl .!= -Inf)
     num_real_bounds_s = sum(bool_vec_s)
 
-    dense_blocks = _build_block_matrices(A, B, K, N)
+    dense_blocks = _build_block_matrices(A, B, K, N, nc)
     block_A  = dense_blocks.A
     block_B  = dense_blocks.B
+    block_d  = dense_blocks.d
 
     H_blocks = _build_H_blocks(Q, R, block_A, block_B, S,Qf, K, s0, N)
 
     H  = H_blocks.H
     c0 = H_blocks.c0
+    dense_blocks.h  .= H_blocks.block_h
+    dense_blocks.h0 .= H_blocks.block_h0
 
     G  = _init_similar(Q, nc * N, nu, T)
     J  = _init_similar(Q, nc * N + num_real_bounds_s * N, nu * N, T)
@@ -117,7 +119,7 @@ function _build_dense_lq_dynamic_model(
     dl = repeat(gl, N)
     du = repeat(gu, N)
 
-    _set_G_blocks!(G, dl, du, block_B, block_A, s0, E, F, K, N)
+    _set_G_blocks!(G, dl, du, block_B, block_A, block_d, s0, E, F, K, N)
     _set_J1_dense!(J, G, N)
 
     As0 = _init_similar(s0, ns * (N + 1), T)
@@ -226,14 +228,17 @@ function _build_dense_lq_dynamic_model(
 
     nc = size(E, 1)
 
-    dense_blocks = _build_block_matrices(A, B, K, N)
+    dense_blocks = _build_block_matrices(A, B, K, N, nc)
     block_A  = dense_blocks.A
     block_B  = dense_blocks.B
+    block_d  = dense_blocks.d
 
     H_blocks = _build_H_blocks(Q, R, block_A, block_B, S, Qf, K, s0, N)
 
     H  = H_blocks.H
     c0 = H_blocks.c0
+    dense_blocks.h  .= H_blocks.block_h
+    dense_blocks.h0 .= H_blocks.block_h0
 
     bool_vec_s        = (su .!= Inf .|| sl .!= -Inf)
     num_real_bounds_s   = sum(bool_vec_s)
@@ -260,7 +265,7 @@ function _build_dense_lq_dynamic_model(
     dl = repeat(gl, N)
     du = repeat(gu, N)
 
-    _set_G_blocks!(G, dl, du, block_B, block_A, s0, E, F, K, N)
+    _set_G_blocks!(G, dl, du, block_B, block_A, block_d, s0, E, F, K, N)
     _set_J1_dense!(J, G, N)
 
     LinearAlgebra.mul!(As0, block_A, s0)
@@ -438,20 +443,23 @@ function _build_implicit_dense_lq_dynamic_model(
     SJ3  = _init_similar(Q, 0, nu, T)
     H_sub_block = _init_similar(Q, nu, nu, T)
 
-    dense_blocks = _build_block_matrices(A, B, K, N)
+    dense_blocks = _build_block_matrices(A, B, K, N, nc)
     block_A      = dense_blocks.A
     block_B      = dense_blocks.B
+    block_d      = dense_blocks.d
 
     H_blocks = _build_H_blocks(Q, R, block_A, block_B, S,Qf, K, s0, N)
 
     H  = H_blocks.H
     c0 = H_blocks.c0
     c .= H_blocks.c
+    dense_blocks.h  .= H_blocks.block_h
+    dense_blocks.h0 .= H_blocks.block_h0
 
     dl = repeat(gl, N)
     du = repeat(gu, N)
 
-    _set_G_blocks!(G, dl, du, block_B, block_A, s0, E, F, K, N)
+    _set_G_blocks!(G, dl, du, block_B, block_A, block_d, s0, E, F, K, N)
     for i in 1:N
         Jac1[:, :, i] = @view G[(1 + nc * (i - 1)):(nc * i), :]
     end
@@ -556,15 +564,19 @@ function _build_implicit_dense_lq_dynamic_model(
 
     nc = size(E, 1)
 
-    dense_blocks = _build_block_matrices(A, B, K, N)
+    dense_blocks = _build_block_matrices(A, B, K, N, nc)
 
     block_A  = dense_blocks.A
     block_B  = dense_blocks.B
+    block_d  = dense_blocks.d
+
 
     H_blocks = _build_H_blocks(Q, R, block_A, block_B, S, Qf, K, s0, N)
 
     H  = H_blocks.H
     c0 = H_blocks.c0
+    dense_blocks.h  .= H_blocks.block_h
+    dense_blocks.h0 .= H_blocks.block_h0
 
 
     bool_vec_s        = (su .!= Inf .|| sl .!= -Inf)
@@ -607,7 +619,7 @@ function _build_implicit_dense_lq_dynamic_model(
     dl = repeat(gl, N)
     du = repeat(gu, N)
 
-    _set_G_blocks!(G, dl, du, block_B, block_A, s0, E, F, K, N)
+    _set_G_blocks!(G, dl, du, block_B, block_A, block_d, s0, E, F, K, N)
 
     for i in 1:N
         Jac1[:, :, i] = @view G[(1 + nc * (i - 1)):(nc * i), :]
@@ -731,7 +743,7 @@ end
 
 
 function _build_block_matrices(
-    A::M, B::M, K, N
+    A::M, B::M, K, N, nc
 ) where {T, M <: AbstractMatrix{T}}
 
     ns = size(A, 2)
@@ -742,11 +754,16 @@ function _build_block_matrices(
     end
 
     # Define block matrices
-    block_A = _init_similar(A, ns * (N + 1), ns, T)
-    block_B = _init_similar(B, ns * N, nu, T)
+    block_A  = _init_similar(A, ns * (N + 1), ns, T)
+    block_B  = _init_similar(B, ns * N, nu, T)
+    block_h  = _init_similar(A, nu * N, ns, T)
+    block_h0 = _init_similar(A, ns, ns, T)
+    block_d  = _init_similar(A, nc * N, ns, T)
+    block_KA = _init_similar(A, nu * N, ns, T)
 
     A_k = copy(A)
     BK  = _init_similar(A, ns, ns, T)
+    KA  = _init_similar(A, nu, ns, T)
 
     AB_klast = _init_similar(A, size(B, 1), size(B, 2), T)
     AB_k     = _init_similar(A, size(B, 1), size(B, 2), T)
@@ -767,6 +784,11 @@ function _build_block_matrices(
     block_B[(1 + ns):2 * ns, :] = AB_k
     AB_klast = copy(AB_k)
     # Fill the A and B matrices
+
+    LinearAlgebra.mul!(KA, K, A_k)
+    block_KA[1:nu, :] .= K
+    block_KA[(1 + nu):(2 * nu), :] .= KA
+
     for i in 2:(N - 1)
 
         LinearAlgebra.mul!(AB_k, A_k, AB_klast)
@@ -776,6 +798,9 @@ function _build_block_matrices(
         block_A[(ns * i + 1):ns * (i + 1),:] = A_knext
 
         block_B[(1 + (i) * ns):((i + 1) * ns), :] = AB_k
+
+        LinearAlgebra.mul!(KA, K, A_knext)
+        block_KA[(1 + nu * i):(nu * (i + 1)), :] .= KA
 
         AB_klast = copy(AB_k)
         A_klast  = copy(A_knext)
@@ -787,7 +812,11 @@ function _build_block_matrices(
 
     DenseLQDynamicBlocks{T, M}(
         block_A,
-        block_B
+        block_B,
+        block_h,
+        block_h0,
+        block_d,
+        block_KA
     )
 end
 
@@ -803,6 +832,12 @@ function _build_H_blocks(
     end
 
     H = _init_similar(block_A, nu * N, nu * N, T)
+
+    # block_h0 and block_h are stored in DenseLQDynamicBlocks to provide quick updates when redefining s0
+    # block_h0 = A^T((Q + KTRK + 2 * SK))A where Q, K, R, S, and A are block matrices
+    # block_h  = (QB + SKB + K^T R K B + K^T S^T B)^T A + (S + K^T R)^T A
+    block_h0     = _init_similar(Q, ns, ns, T)
+    block_h      = _init_similar(block_A, nu * N, ns, T)
 
     # quad term refers to the summation of Q, K^T RK, SK, and K^T S^T that is left and right multiplied by B in the Hessian
     quad_term    = _init_similar(Q, ns, ns, T)
@@ -820,17 +855,16 @@ function _build_H_blocks(
     RK           = _init_similar(Q, nu, ns, T)
     KTRK         = _init_similar(Q, ns, ns, T)
     RK_ST        = _init_similar(Q, nu, ns, T)
-    As0          = _init_similar(s0, ns * (N + 1), T)
 
     QB_block_vec = _init_similar(quad_term_B, ns * (N + 1), nu, T)
     h            = _init_similar(s0, nu * N, T)
-    h0           = zero(T)
 
-    As0QB        = _init_similar(s0, nu, T)
-    QAs0         = _init_similar(s0, ns, T)
-    As0S         = _init_similar(s0, nu, T)
-    KTRKAs0      = _init_similar(s0, ns, T)
-    SKAs0        = _init_similar(s0, ns, T)
+    BTQA         = _init_similar(Q, nu, ns, T)
+    RK_STA       = _init_similar(Q, nu, ns, T)
+    QA           = _init_similar(Q, ns, ns, T)
+    KTRKA        = _init_similar(Q, ns, ns, T)
+    SKA          = _init_similar(Q, ns, ns, T)
+    AQAs0         = _init_similar(s0, ns, T)
 
     LinearAlgebra.mul!(SK, S, K)
     LinearAlgebra.mul!(RK, R, K)
@@ -845,8 +879,6 @@ function _build_H_blocks(
 
     LinearAlgebra.copyto!(RK_ST, RK)
     RK_ST .+= S'
-
-    LinearAlgebra.mul!(As0, block_A, s0)
 
     for i in 1:N
         B_row_range = (1 + (i - 1) * ns):(i * ns)
@@ -888,6 +920,7 @@ function _build_H_blocks(
     end
 
     for i in 1:N
+        # quad_term_B = QB + SKB + KTRKB + KTSTB = (Q + SK + KTRK + KTST) B
         fill!(QB_block_vec, T(0))
         rows_QB           = 1:(ns * (N - i))
         rows_QfB          = (1 + ns * (N - i)):(ns * (N - i + 1))
@@ -895,33 +928,37 @@ function _build_H_blocks(
         QB_block_vec[(1 + ns * i):(ns * N), :]     = quad_term_B[rows_QB, :]
         QB_block_vec[(1 + ns * N):ns * (N + 1), :] = QfB[rows_QfB, :]
 
-        LinearAlgebra.mul!(As0QB, QB_block_vec', As0)
-        LinearAlgebra.mul!(As0S, RK_ST, As0[(ns * (i - 1) + 1):ns * i])
+        LinearAlgebra.mul!(BTQA, QB_block_vec', block_A)
+        LinearAlgebra.mul!(RK_STA, RK_ST, block_A[(ns * (i - 1) + 1):(ns * i), :])
 
-        h[(1 + nu * (i - 1)):nu * i] = As0QB
-        view(h, (1 + nu * (i - 1)):nu * i) .+= As0S
+        h_view = @view block_h[(1 + nu * (i - 1)):(nu * i), :]
 
-        LinearAlgebra.mul!(QAs0, Q, As0[(ns * (i - 1) + 1):ns * i])
-        LinearAlgebra.mul!(KTRKAs0, KTRK, As0[(ns * (i - 1) + 1):ns * i])
-        LinearAlgebra.mul!(SKAs0, SK, As0[(ns * (i - 1) + 1):ns * i])
+        LinearAlgebra.axpy!(1, BTQA, h_view)
+        LinearAlgebra.axpy!(1, RK_STA, h_view)
 
-        h0 += LinearAlgebra.dot(As0[(ns * (i - 1) + 1):ns * i], QAs0)
-        h0 += LinearAlgebra.dot(As0[(ns * (i - 1) + 1):ns * i], KTRKAs0)
-        h0 += T(2) * LinearAlgebra.dot(As0[(ns * (i - 1) + 1):ns * i], SKAs0)
+        A_view = @view block_A[(1 + ns * (i - 1)):(ns * i), :]
+        LinearAlgebra.mul!(QA, Q, A_view)
+        LinearAlgebra.mul!(KTRKA, KTRK, A_view)
+        LinearAlgebra.mul!(SKA, SK, A_view)
+
+        LinearAlgebra.mul!(block_h0, A_view', QA, 1, 1)
+        LinearAlgebra.mul!(block_h0, A_view', KTRKA, 1, 1)
+        LinearAlgebra.mul!(block_h0, A_view', SKA, 2, 1)
     end
 
-    LinearAlgebra.mul!(QAs0, Qf, As0[(ns * N + 1):ns * (N + 1)])
-    LinearAlgebra.mul!(KTRKAs0, KTRK, As0[(ns * N + 1):ns * (N + 1)])
-    LinearAlgebra.mul!(SKAs0, SK, As0[(ns * N + 1):ns * (N + 1)])
+    A_view = @view block_A[(1 + ns * N):(ns * (N + 1)), :]
+    LinearAlgebra.mul!(QA, Qf, A_view)
+    LinearAlgebra.mul!(block_h0, A_view', QA, 1, 1)
 
-    h0 += LinearAlgebra.dot(As0[(ns * N + 1):ns * (N + 1)], QAs0)
+    LinearAlgebra.mul!(h, block_h, s0)
+    LinearAlgebra.mul!(AQAs0, block_h0, s0)
+    h0 = LinearAlgebra.dot(AQAs0, s0)
 
-    return (H = H, c = h, c0 = h0 / T(2))
+    return (H = H, c = h, c0 = h0 / T(2), block_h = block_h, block_h0 = block_h0)
 end
 
-
 function _set_G_blocks!(
-    G, dl, du, block_B::M, block_A::M,
+    G, dl, du, block_B::M, block_A::M, block_d::M,
     s0, E, F, K::MK, N
 ) where {T, M <: AbstractMatrix{T}, MK <: Nothing}
     ns = size(E, 2)
@@ -931,10 +968,9 @@ function _set_G_blocks!(
     G[1:nc, :] = F
 
     EB   = _init_similar(block_B, nc, nu, T)
-    As0  = _init_similar(s0, ns * (N + 1), T)
-    EAs0 = _init_similar(s0, nc, T)
+    EA   = _init_similar(block_B, nc, ns, T)
 
-    LinearAlgebra.mul!(As0, block_A, s0)
+    #LinearAlgebra.mul!(As0, block_A, s0)
 
     for i in 1:N
         if i != N
@@ -944,17 +980,17 @@ function _set_G_blocks!(
             LinearAlgebra.mul!(EB, E, B_sub_block)
             G[(1 + nc * i):(nc * (i + 1)), :] = EB
         end
+        A_view = @view block_A[(1 + ns * (i - 1)):(ns * i), :]
+        LinearAlgebra.mul!(EA, E, A_view)
 
-        LinearAlgebra.mul!(EAs0, E, As0[(ns * (i - 1) + 1):ns * i])
-
-        dl[(1 + nc * (i - 1)):nc * i] .-= EAs0
-        du[(1 + nc * (i - 1)):nc * i] .-= EAs0
+        block_d[(1 + nc * (i - 1)):(nc * i), :] .= EA
     end
-
+    LinearAlgebra.mul!(dl, block_d, s0, -1, 1)
+    LinearAlgebra.mul!(du, block_d, s0, -1, 1)
 end
 
 function _set_G_blocks!(
-    G, dl, du, block_B, block_A,
+    G, dl, du, block_B, block_A, block_d,
     s0, E, F, K::MK, N
 ) where {T, MK <: AbstractMatrix{T}}
     ns = size(E, 2)
@@ -963,17 +999,14 @@ function _set_G_blocks!(
 
     G[1:nc, :] = F
 
-    E_FK = _init_similar(E, nc, ns, T)
-    FK   = _init_similar(E, nc, ns, T)
-    EB   = _init_similar(E, nc, nu, T)
-    As0  = _init_similar(s0, ns * (N + 1), T)
-    EAs0 = _init_similar(s0, nc, T)
+    E_FK  = _init_similar(E, nc, ns, T)
+    E_FKA = _init_similar(E, nc, ns, T)
+    FK    = _init_similar(E, nc, ns, T)
+    EB    = _init_similar(E, nc, nu, T)
 
     LinearAlgebra.copyto!(E_FK, E)
     LinearAlgebra.mul!(FK, F, K)
     LinearAlgebra.axpy!(1.0, FK, E_FK)
-
-    LinearAlgebra.mul!(As0, block_A, s0)
 
     for i in 1:N
         if i != N
@@ -983,14 +1016,13 @@ function _set_G_blocks!(
             LinearAlgebra.mul!(EB, E_FK, B_sub_block)
             G[(1 + nc * i):(nc * (i + 1)), :] = EB
         end
+        A_view = @view block_A[(1 + ns * (i - 1)):(ns * i), :]
+        LinearAlgebra.mul!(E_FKA, E_FK, A_view)
 
-
-        LinearAlgebra.mul!(EAs0, E_FK, As0[(ns * (i - 1) + 1):ns * i])
-
-        dl[(1 + nc * (i - 1)):nc * i] .-= EAs0
-        du[(1 + nc * (i - 1)):nc * i] .-= EAs0
+        block_d[(1 + nc * (i - 1)):(nc * i), :] .= E_FKA
     end
-
+    LinearAlgebra.mul!(dl, block_d, s0, -1, 1)
+    LinearAlgebra.mul!(du, block_d, s0, -1, 1)
 end
 
 function _set_J1_dense!(J1, G, N)
