@@ -108,6 +108,17 @@ function dynamic_data_to_CUDA(dnlp::LQDynamicData)
     )
 end
 
+function test_sparse_support(lqdm)
+    d = lqdm.dynamic_data
+
+    (lqdm_sparse_data = SparseLQDynamicModel(d.s0, sparse(d.A), sparse(d.B), sparse(d.Q), sparse(d.R), d.N;
+        sl = d.sl, ul = d.ul, su = d.su, uu = d.uu, Qf = sparse(d.Qf), K = (d.K == nothing ? nothing : sparse(d.K)),
+        S = sparse(d.S), E = sparse(d.E), F = sparse(d.F), gl = d.gl, gu = d.gu))
+
+    @test lqdm.data.H ≈ lqdm_sparse_data.data.H atol = 1e-10
+    @test lqdm.data.A ≈ lqdm_sparse_data.data.A atol = 1e-10
+end
+
 function runtests(model, dnlp, lq_sparse, lq_dense, lq_sparse_from_data, lq_dense_from_data, N, ns, nu)
     optimize!(model)
     solution_ref_sparse           = madnlp(lq_sparse, max_iter=100)
@@ -131,6 +142,8 @@ function runtests(model, dnlp, lq_sparse, lq_dense, lq_sparse_from_data, lq_dens
     @test u_values ≈ get_u(solution_ref_sparse, lq_sparse) atol = 1e-7
     @test s_values ≈ get_s(solution_ref_dense, lq_dense) atol = 1e-5
     @test u_values ≈ get_u(solution_ref_dense, lq_dense) atol = 1e-5
+
+    test_sparse_support(lq_sparse)
 
     lq_dense_imp = DenseLQDynamicModel(dnlp; implicit = true)
 
