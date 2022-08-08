@@ -1,10 +1,10 @@
-function build_thinplate(ns, nu, N, dx, dt; d = fill(300.0, ns, N+1), Tbar = 300.0, dense::Bool = true,
+function build_thinplate(ns, nu, N, dx, dt; d = fill(300.0, ns, N+1), Tbar = 300.0, dense::Bool = true, implicit = false,
     sl = -Inf, su = Inf, ul = -Inf, uu = Inf, K = nothing, S = zeros(ns, nu), E = zeros(0, ns), F = zeros(0, nu), gl = zeros(0), gu = zeros(0)
     )
     Q = 1.0 * Matrix(LinearAlgebra.I, ns, ns)
     Qf= 1.0 * Matrix(LinearAlgebra.I, ns, ns)/dt
     R = 1.0 * Matrix(LinearAlgebra.I, nu, nu)/10
- 
+
     kappa = 400. # thermal conductivity of copper, W/(m-K)
     rho = 8960. # density of copper, kg/m^3
     specificHeat = 386. # specific heat of copper, J/(kg-K)
@@ -13,9 +13,9 @@ function build_thinplate(ns, nu, N, dx, dt; d = fill(300.0, ns, N+1), Tbar = 300
     hCoeff = 1. # Convection coefficient, W/(m^2-K)
     Ta = 300. # The ambient temperature is assumed to be 300 degrees-Kelvin.
     emiss = .5 # emissivity of the plate surface
- 
+
     conduction_constant =  1 / rho / specificHeat / thick / dx^2
- 
+
     if ns == nu
         B = Matrix(LinearAlgebra.I, nu, nu) .* (- dt / (kappa * thick))
     elseif nu > ns
@@ -24,7 +24,7 @@ function build_thinplate(ns, nu, N, dx, dt; d = fill(300.0, ns, N+1), Tbar = 300
         # Space out the inputs, u, when nu < ns. These end up mostly evenly spaced
         u_floor   = floor(ns / nu)
         B = zeros(ns, nu)
- 
+
         index   = 1
         for i in 1:ns
             if index <= nu && i >= index * u_floor
@@ -33,14 +33,14 @@ function build_thinplate(ns, nu, N, dx, dt; d = fill(300.0, ns, N+1), Tbar = 300
             end
         end
     end
- 
- 
+
+
     A = zeros(ns, ns)
- 
+
     for i in 1:ns
         if i == 1
-            A[1, 1] = (-dt * conduction_constant + 1) 
-            A[1, 2] = (dt * conduction_constant) 
+            A[1, 1] = (-dt * conduction_constant + 1)
+            A[1, 2] = (dt * conduction_constant)
         elseif i == ns
             A[ns, ns]     = (-dt * conduction_constant + 1)
             A[ns, ns - 1] = (dt * conduction_constant)
@@ -48,38 +48,42 @@ function build_thinplate(ns, nu, N, dx, dt; d = fill(300.0, ns, N+1), Tbar = 300
             A[i, i]     = (-2 * dt * conduction_constant + 1)
             A[i, i - 1] = (dt * conduction_constant)
             A[i, i + 1] = (dt * conduction_constant)
- 
+
         end
     end
- 
+
     s0 = fill(Tbar, ns)
     sl = fill(sl, ns)
     su = fill(su, ns)
     ul = fill(ul, nu)
     uu = fill(uu, nu)
- 
- 
+
+
     if dense
-        lqdm = DenseLQDynamicModel(s0, A, B, Q, R, N; Qf = Qf, sl = sl, su = su, ul = ul, uu = uu, E = E, F = F, K = K, S = S, gl = gl, gu = gu)
+        if implicit
+            lqdm = DenseLQDynamicModel(s0, A, B, Q, R, N; Qf = Qf, sl = sl, su = su, ul = ul, uu = uu, E = E, F = F, K = K, S = S, gl = gl, gu = gu, implicit=implicit)
+        else
+            lqdm = DenseLQDynamicModel(s0, A, B, Q, R, N; Qf = Qf, sl = sl, su = su, ul = ul, uu = uu, E = E, F = F, K = K, S = S, gl = gl, gu = gu)
+        end
     else
         lqdm = SparseLQDynamicModel(s0, A, B, Q, R, N; Qf = Qf, sl = sl, su = su, ul = ul, uu = uu, E = E, F = F, K = K, S = S, gl = gl, gu = gu)
     end
- 
- 
+
+
     block_Q = SparseArrays.sparse([],[],eltype(Q)[], ns * (N + 1), ns * (N + 1))
- 
+
     for i in 1:N
         block_Q[(1 + (i - 1) * ns):(ns * i), (1 + (i - 1) * ns):(ns * i)] = Q
     end
- 
+
     block_Q[(1 + ns * N):end, (1 + ns * N):end] = Qf
- 
-    
-    
+
+
+
     Qd    = zeros(size(d, 1))
     Qdvec = zeros(length(d))
     dQd   = 0
- 
+
     for i in 1:N
         LinearAlgebra.mul!(Qd, Q, d[:, i])
         Qdvec[(1 + ns * (i - 1)):ns * i] = Qd
@@ -92,12 +96,12 @@ function build_thinplate(ns, nu, N, dx, dt; d = fill(300.0, ns, N+1), Tbar = 300
 
     dQd += LinearAlgebra.dot(Qd, d[:, N + 1])
 
- 
+
     # Add c and c0 that result from (x-d)^T Q (x-d) in the objective function
     if dense
         block_A = lqdm.blocks.A
         block_B = lqdm.blocks.B
- 
+
         As0 = zeros(size(block_A, 1))
         LinearAlgebra.mul!(As0, block_A, s0)
         dQB = zeros(nu * N)
@@ -120,10 +124,10 @@ function build_thinplate(ns, nu, N, dx, dt; d = fill(300.0, ns, N+1), Tbar = 300
     else
         uvec = zeros(nu * N)
         full_Qd = vcat(Qdvec, uvec)
- 
+
         lqdm.data.c0 += dQd / 2
         lqdm.data.c  += - full_Qd
     end
- 
+
     return lqdm
 end
