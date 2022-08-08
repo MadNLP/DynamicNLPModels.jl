@@ -970,8 +970,6 @@ function _set_G_blocks!(
     EB   = _init_similar(block_B, nc, nu, T)
     EA   = _init_similar(block_B, nc, ns, T)
 
-    #LinearAlgebra.mul!(As0, block_A, s0)
-
     for i in 1:N
         if i != N
             B_row_range = (1 + (i - 1) * ns):(i * ns)
