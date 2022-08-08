@@ -92,7 +92,7 @@ function dynamic_data_to_CUDA(dnlp::LQDynamicData)
     )
 end
 
-ns_vals = [10, 30, 50, 200, 1000]
+ns_vals = [10, 30, 50, 200, 1000, 2000, 4000, 6000]
 nu = 10
 N  = 50
 add_ns_cuda  = []
