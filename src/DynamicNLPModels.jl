@@ -10,7 +10,8 @@ import CUDA
 import CUDA: CUBLAS
 import SparseArrays: SparseMatrixCSC
 
-export LQDynamicData, SparseLQDynamicModel, DenseLQDynamicModel, get_u, get_s, get_jacobian, add_jtsj!
+export LQDynamicData, SparseLQDynamicModel, DenseLQDynamicModel
+export get_u, get_s, get_jacobian, add_jtsj!, reset_s0!
 
 include(joinpath("LinearQuadratic", "LinearQuadratic.jl"))
 include(joinpath("LinearQuadratic", "sparse.jl"))

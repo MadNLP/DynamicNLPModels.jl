@@ -1,4 +1,3 @@
-
 abstract type AbstractLQDynData{T,V} end
 """
     LQDynamicData{T,V,M,MK} <: AbstractLQDynData{T,V}
@@ -193,15 +192,27 @@ struct SparseLQDynamicModel{T, V, M1, M2, M3, MK} <:  AbstractDynamicModel{T,V}
 end
 
 """
-Struct containing block A and B matrices used in creating the `DenseLQDynamicModel`. These matrices are given by Jerez, Kerrigan, and Constantinides
+Struct containing block A and B matrices used in creating the `DenseLQDynamicModel`. These matrices are given in part by Jerez, Kerrigan, and Constantinides
 in section 4 of "A sparse and condensed QP formulation for predictive control of LTI systems" (doi:10.1016/j.automatica.2012.03.010).
 
 `A` is a ns(N+1) x ns matrix and `B` is a ns(N) x nu matrix containing the first column of the `B` block matrix in the above text. Note that the
 first block of zeros is omitted.
+
+The blocks `h`, `h0`, `d` and `KA` store data needed to reset the `DenseLQDynamicModel` when `s0` is redefined.
+
+See also `reset_s0!`
 """
 struct DenseLQDynamicBlocks{T, M}
+    # block_h0 = A^T((Q + KTRK + 2 * SK))A where Q, K, R, S, and A are block matrices
+    # block_h  = (QB + SKB + K^T R K B + K^T S^T B)^T A + (S + K^T R)^T A
+    # block_d  = (E + FK) A
+    # block_KA = KA
     A::M
     B::M
+    h::M
+    h0::M
+    d::M
+    KA::M
 end
 
 struct DenseLQDynamicModel{T, V, M1, M2, M3, M4, MK} <:  AbstractDynamicModel{T,V}
@@ -211,7 +222,6 @@ struct DenseLQDynamicModel{T, V, M1, M2, M3, M4, MK} <:  AbstractDynamicModel{T,
     dynamic_data::LQDynamicData{T, V, M3, MK}
     blocks::DenseLQDynamicBlocks{T, M4}
 end
-
 
 """
     LQJacobianOperator{T, V, M}
