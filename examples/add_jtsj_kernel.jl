@@ -22,6 +22,7 @@ using KernelAbstractions, CUDA, CUDAKernels
     tmp_sum2 = zero(eltype(J1))
     tmp_sum3 = zero(eltype(J1))
 
+    @inbounds begin
     for o in 1:nc
         tmp_sum1 += J1[o, l, i] * S[o + (k - 1) * nc] * J1[o, m, j]
     end
@@ -40,6 +41,8 @@ using KernelAbstractions, CUDA, CUDAKernels
     # H_col_val = m + (k_ind - 1) * nu = m + (k - i) * nu
 
     H[(l + (k - j) * nu), (m + (k - i) * nu)] += tmp_sum1 + tmp_sum2 + tmp_sum3
+    end
+
 
 end
 
