@@ -64,13 +64,16 @@ function add_JTSJ!_kernel(J, S, H)
     nsc = J.nsc
     nuc = J.nuc
 
-    for i in 1:N
+    CUDA.@time for i in 1:div(N, 2)
+        add_JTSJ!(J1, J2, J3, S, H, i, N, nu, nc, nsc, nuc)
+    end
+    CUDA.@time for i in div(N, 2):N
         add_JTSJ!(J1, J2, J3, S, H, i, N, nu, nc, nsc, nuc)
     end
 end
 
-#=
-N = 10
+
+N = 50
 nu = 10
 ns = 100
 
@@ -99,5 +102,4 @@ H_imp = zeros(nu * N, nu * N)
 
 
 
-@test LowerTriangular(H) ≈ LowerTriangular(H_imp) atol = 1e-15
-=#
+#@test LowerTriangular(H) ≈ LowerTriangular(H_imp) atol = 1e-15

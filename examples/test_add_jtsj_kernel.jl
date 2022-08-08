@@ -92,7 +92,7 @@ function dynamic_data_to_CUDA(dnlp::LQDynamicData)
     )
 end
 
-ns_vals = [10, 30, 50, 100, 500, 1000, 2000, 4000, 6000]
+ns_vals = [10, 30, 50, 200, 1000]
 nu = 10
 N  = 50
 add_ns_cuda  = []
@@ -130,12 +130,13 @@ for i in ns_vals
     xcuda = CuArray{Float64}(x)
     Hcuda1 = CuArray{Float64}(H_imp)
     Hcuda2 = CuArray{Float64}(H)
-
+    println()
+    println("The time splits are")
     a = @elapsed jtsj_mul!(H, J, x, ΣJ)
     b = @elapsed add_JTSJ!_kernel(J_imp, x, H_imp)
     c = CUDA.@elapsed add_JTSJ!_kernel(J_cu_imp, xcuda, Hcuda1)
     d = CUDA.@elapsed jtsj_mul!(Hcuda2, J_cu, xcuda, ΣJcu)
-
+    println()
     println(sum(abs.(LowerTriangular(H) - LowerTriangular(Array(Hcuda1)))))
 
     push!(add_ns_d, a)
