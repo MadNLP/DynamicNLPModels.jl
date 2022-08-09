@@ -131,7 +131,7 @@ function _build_dense_lq_dynamic_model(
     if num_real_bounds_s == length(sl)
         As0_bounds .= As0[(1 + ns):ns * (N + 1)]
         for i in 1:N
-            J[(offset_s + 1 + (i - 1) * ns):(offset_s + ns * N), (1 + nu * (i - 1)):(nu * i)] = @view(block_B[1:(ns * (N - i + 1)),:])
+            J[(offset_s + 1 + (i - 1) * ns):(offset_s + ns * N), (1 + nu * (i - 1)):(nu * i)] .= @view(block_B[1:(ns * (N - i + 1)),:])
         end
     else
         for i in 1:N
@@ -139,7 +139,7 @@ function _build_dense_lq_dynamic_model(
             As0_bounds[row_range] .= As0[(1 + ns * i):(ns * (i + 1))][bool_vec_s]
 
             for j in 1:(N - i + 1)
-                J[(offset_s + 1 + (i + j - 2) * num_real_bounds_s):(offset_s + (i + j - 1) * num_real_bounds_s), (1 + nu * (i - 1)):(nu * i)] = @view(block_B[(1 + (j - 1) * ns):(j * ns), :][bool_vec_s, :])
+                J[(offset_s + 1 + (i + j - 2) * num_real_bounds_s):(offset_s + (i + j - 1) * num_real_bounds_s), (1 + nu * (i - 1)):(nu * i)] .= @view(block_B[(1 + (j - 1) * ns):(j * ns), :][bool_vec_s, :])
             end
         end
 
@@ -156,12 +156,12 @@ function _build_dense_lq_dynamic_model(
     lcon = _init_similar(s0, length(dl) + length(lcon2), T)
     ucon = _init_similar(s0, length(du) + length(ucon2), T)
 
-    lcon[1:length(dl)] = dl
-    ucon[1:length(du)] = du
+    lcon[1:length(dl)] .= dl
+    ucon[1:length(du)] .= du
 
     if length(lcon2) > 0
-        lcon[(1 + length(dl)):(length(dl) + num_real_bounds_s * N)] = lcon2
-        ucon[(1 + length(du)):(length(du) + num_real_bounds_s * N)] = ucon2
+        lcon[(1 + length(dl)):(length(dl) + num_real_bounds_s * N)] .= lcon2
+        ucon[(1 + length(du)):(length(du) + num_real_bounds_s * N)] .= ucon2
     end
 
     nvar = nu * N
@@ -270,15 +270,15 @@ function _build_dense_lq_dynamic_model(
     if num_real_bounds_s == length(sl)
         As0_bounds .= As0[(1 + ns):ns * (N + 1)]
         for i in 1:N
-            J[(offset_s + 1 + (i - 1) * ns):(offset_s + ns * N), (1 + nu * (i - 1)):(nu * i)] = @view(block_B[1:(ns * (N - i + 1)),:])
+            J[(offset_s + 1 + (i - 1) * ns):(offset_s + ns * N), (1 + nu * (i - 1)):(nu * i)] .= @view(block_B[1:(ns * (N - i + 1)),:])
         end
     else
         for i in 1:N
             row_range = (1 + (i - 1) * num_real_bounds_s):(i * num_real_bounds_s)
-            As0_bounds[row_range] = As0[(1 + ns * i):(ns * (i + 1))][bool_vec_s]
+            As0_bounds[row_range] .= As0[(1 + ns * i):(ns * (i + 1))][bool_vec_s]
 
             for j in 1:(N - i + 1)
-                J[(offset_s + 1 + (i + j - 2) * num_real_bounds_s):(offset_s + (i + j - 1) * num_real_bounds_s), (1 + nu * (i - 1)):(nu * i)] = @view(block_B[(1 + (j - 1) * ns):(j * ns), :][bool_vec_s, :])
+                J[(offset_s + 1 + (i + j - 2) * num_real_bounds_s):(offset_s + (i + j - 1) * num_real_bounds_s), (1 + nu * (i - 1)):(nu * i)] .= @view(block_B[(1 + (j - 1) * ns):(j * ns), :][bool_vec_s, :])
             end
         end
 
@@ -296,24 +296,24 @@ function _build_dense_lq_dynamic_model(
             LinearAlgebra.mul!(KB, K, B_sub_block)
         end
 
-        KBI[(1 + nu * (i - 1)):(nu * i),:] = KB
+        KBI[(1 + nu * (i - 1)):(nu * i),:] .= KB
         LinearAlgebra.mul!(KAs0_block, K, As0[(1 + ns * (i - 1)):ns * i])
-        KAs0[(1 + nu * (i - 1)):nu * i] = KAs0_block
+        KAs0[(1 + nu * (i - 1)):nu * i] .= KAs0_block
     end
 
     offset_u = nc * N + num_real_bounds_s * N
     if num_real_bounds_u == length(ul)
         KAs0_bounds .= KAs0
         for i in 1:N
-            J[(offset_u + 1 + (i - 1) * nu):(offset_u + nu * N), (1 + nu * (i - 1)):(nu * i)] = @view(KBI[1:(nu * (N - i + 1)),:])
+            J[(offset_u + 1 + (i - 1) * nu):(offset_u + nu * N), (1 + nu * (i - 1)):(nu * i)] .= @view(KBI[1:(nu * (N - i + 1)),:])
         end
     else
         for i in 1:N
             row_range              = (1 + (i - 1) * num_real_bounds_u):(i * num_real_bounds_u)
-            KAs0_bounds[row_range] = KAs0[(1 + nu * (i - 1)):(nu * i)][bool_vec_u]
+            KAs0_bounds[row_range] .= KAs0[(1 + nu * (i - 1)):(nu * i)][bool_vec_u]
 
             for j in 1:(N - i +1)
-                J[(offset_u + 1 + (i + j - 2) * num_real_bounds_u):(offset_u + (i + j - 1) * num_real_bounds_u), (1 + nu * (i - 1)):(nu * i)] = @view(KBI[(1 + (j - 1) * nu):(j * nu), :][bool_vec_u, :])
+                J[(offset_u + 1 + (i + j - 2) * num_real_bounds_u):(offset_u + (i + j - 1) * num_real_bounds_u), (1 + nu * (i - 1)):(nu * i)] .= @view(KBI[(1 + (j - 1) * nu):(j * nu), :][bool_vec_u, :])
             end
         end
 
@@ -341,13 +341,13 @@ function _build_dense_lq_dynamic_model(
     ucon[1:length(du)] = du
 
     if length(lcon2) > 0
-        lcon[(length(dl) + 1):(length(dl) + length(lcon2))] = lcon2
-        ucon[(length(du) + 1):(length(du) + length(ucon2))] = ucon2
+        lcon[(length(dl) + 1):(length(dl) + length(lcon2))] .= lcon2
+        ucon[(length(du) + 1):(length(du) + length(ucon2))] .= ucon2
     end
 
     if length(lcon3) > 0
-        lcon[(length(dl) + length(lcon2) + 1):(length(dl) + length(lcon2) + length(lcon3))] = lcon3
-        ucon[(length(du) + length(ucon2) + 1):(length(du) + length(ucon2) + length(ucon3))] = ucon3
+        lcon[(length(dl) + length(lcon2) + 1):(length(dl) + length(lcon2) + length(lcon3))] .= lcon3
+        ucon[(length(du) + length(ucon2) + 1):(length(du) + length(ucon2) + length(ucon3))] .= ucon3
     end
 
     nvar = nu * N
@@ -453,7 +453,7 @@ function _build_implicit_dense_lq_dynamic_model(
 
     _set_G_blocks!(G, dl, du, block_B, block_A, s0, E, F, K, N)
     for i in 1:N
-        Jac1[:, :, i] = @view G[(1 + nc * (i - 1)):(nc * i), :]
+        Jac1[:, :, i] .= @view G[(1 + nc * (i - 1)):(nc * i), :]
     end
 
     LinearAlgebra.mul!(As0, block_A, s0)
@@ -465,13 +465,13 @@ function _build_implicit_dense_lq_dynamic_model(
     if num_real_bounds_s == length(sl)
         As0_bounds .= As0[(1 + ns):ns * (N + 1)]
         for i in 1:N
-            Jac2[:, :, i] = @view block_B[(1 + ns * (i - 1)):(ns * i), :]
+            Jac2[:, :, i] .= @view block_B[(1 + ns * (i - 1)):(ns * i), :]
         end
     else
         for i in 1:N
             row_range = (1 + (i - 1) * num_real_bounds_s):(i * num_real_bounds_s)
             As0_bounds[row_range] .= As0[(1 + ns * i):(ns * (i + 1))][bool_vec_s]
-            Jac2[:, :, i] = @view block_B[(1 + (i - 1) * ns):(i * ns), :][bool_vec_s, :]
+            Jac2[:, :, i] .= @view block_B[(1 + (i - 1) * ns):(i * ns), :][bool_vec_s, :]
         end
         sl = sl[bool_vec_s]
         su = su[bool_vec_s]
@@ -487,8 +487,8 @@ function _build_implicit_dense_lq_dynamic_model(
     ucon[1:length(du)] = du
 
     if length(lcon2) > 0
-        lcon[(1 + length(dl)):(length(dl) + num_real_bounds_s * N)] = lcon2
-        ucon[(1 + length(du)):(length(du) + num_real_bounds_s * N)] = ucon2
+        lcon[(1 + length(dl)):(length(dl) + num_real_bounds_s * N)] .= lcon2
+        ucon[(1 + length(du)):(length(du) + num_real_bounds_s * N)] .= ucon2
     end
 
     ncon = (nc + num_real_bounds_s) * N
@@ -610,7 +610,7 @@ function _build_implicit_dense_lq_dynamic_model(
     _set_G_blocks!(G, dl, du, block_B, block_A, s0, E, F, K, N)
 
     for i in 1:N
-        Jac1[:, :, i] = @view G[(1 + nc * (i - 1)):(nc * i), :]
+        Jac1[:, :, i] .= @view G[(1 + nc * (i - 1)):(nc * i), :]
     end
 
     LinearAlgebra.mul!(As0, block_A, s0)
@@ -620,13 +620,13 @@ function _build_implicit_dense_lq_dynamic_model(
     if num_real_bounds_s == length(sl)
         As0_bounds .= As0[(1 + ns):ns * (N + 1)]
         for i in 1:N
-            Jac2[:, :, i] = @view block_B[(1 + ns * (i - 1)):(ns * i), :]
+            Jac2[:, :, i] .= @view block_B[(1 + ns * (i - 1)):(ns * i), :]
         end
     else
         for i in 1:N
             row_range = (1 + (i - 1) * num_real_bounds_s):(i * num_real_bounds_s)
             As0_bounds[row_range] .= As0[(1 + ns * i):(ns * (i + 1))][bool_vec_s]
-            Jac2[:, :, i] = @view block_B[(1 + (i - 1) * ns):(i * ns), :][bool_vec_s, :]
+            Jac2[:, :, i] .= @view block_B[(1 + (i - 1) * ns):(i * ns), :][bool_vec_s, :]
         end
         sl = sl[bool_vec_s]
         su = su[bool_vec_s]
@@ -642,22 +642,22 @@ function _build_implicit_dense_lq_dynamic_model(
             LinearAlgebra.mul!(KB, K, B_sub_block)
         end
 
-        KBI[(1 + nu * (i - 1)):(nu * i),:] = KB
+        KBI[(1 + nu * (i - 1)):(nu * i),:] .= KB
         LinearAlgebra.mul!(KAs0_block, K, As0[(1 + ns * (i - 1)):ns * i])
-        KAs0[(1 + nu * (i - 1)):nu * i] = KAs0_block
+        KAs0[(1 + nu * (i - 1)):nu * i] .= KAs0_block
     end
 
     offset_u = nc * N + num_real_bounds_s * N
     if num_real_bounds_u == length(ul)
         KAs0_bounds .= KAs0
         for i in 1:N
-            Jac3[:, :, i] = @view KBI[(1 + (i - 1) * nu):(i * nu), :]
+            Jac3[:, :, i] .= @view KBI[(1 + (i - 1) * nu):(i * nu), :]
         end
     else
         for i in 1:N
             row_range              = (1 + (i - 1) * num_real_bounds_u):(i * num_real_bounds_u)
-            KAs0_bounds[row_range] = KAs0[(1 + nu * (i - 1)):(nu * i)][bool_vec_u]
-            Jac3[:, :, i] = @view KBI[(1 + (i - 1) * nu):(i * nu), :][bool_vec_u, :]
+            KAs0_bounds[row_range] .= KAs0[(1 + nu * (i - 1)):(nu * i)][bool_vec_u]
+            Jac3[:, :, i] .= @view KBI[(1 + (i - 1) * nu):(i * nu), :][bool_vec_u, :]
         end
 
         ul = ul[bool_vec_u]
@@ -680,13 +680,13 @@ function _build_implicit_dense_lq_dynamic_model(
     ucon[1:length(du)] = du
 
     if length(lcon2) > 0
-        lcon[(length(dl) + 1):(length(dl) + length(lcon2))] = lcon2
-        ucon[(length(du) + 1):(length(du) + length(ucon2))] = ucon2
+        lcon[(length(dl) + 1):(length(dl) + length(lcon2))] .= lcon2
+        ucon[(length(du) + 1):(length(du) + length(ucon2))] .= ucon2
     end
 
     if length(lcon3) > 0
-        lcon[(length(dl) + length(lcon2) + 1):(length(dl) + length(lcon2) + length(lcon3))] = lcon3
-        ucon[(length(du) + length(ucon2) + 1):(length(du) + length(ucon2) + length(ucon3))] = ucon3
+        lcon[(length(dl) + length(lcon2) + 1):(length(dl) + length(lcon2) + length(lcon3))] .= lcon3
+        ucon[(length(du) + length(ucon2) + 1):(length(du) + length(ucon2) + length(ucon3))] .= ucon3
     end
 
     nvar = nu * N
@@ -751,7 +751,7 @@ function _build_block_matrices(
     AB_klast = _init_similar(A, size(B, 1), size(B, 2), T)
     AB_k     = _init_similar(A, size(B, 1), size(B, 2), T)
 
-    block_B[1:ns, :] = B
+    block_B[1:ns, :] .= B
 
     block_A[LinearAlgebra.diagind(block_A)] .= T(1)
 
@@ -761,10 +761,10 @@ function _build_block_matrices(
     A_klast  = copy(A_k)
     A_knext  = copy(A_k)
 
-    block_A[(ns + 1):ns *2, :] = A_k
+    block_A[(ns + 1):ns *2, :] .= A_k
     LinearAlgebra.mul!(AB_k, A_k, B, 1, 0)
 
-    block_B[(1 + ns):2 * ns, :] = AB_k
+    block_B[(1 + ns):2 * ns, :] .= AB_k
     AB_klast = copy(AB_k)
     # Fill the A and B matrices
     for i in 2:(N - 1)
@@ -773,9 +773,9 @@ function _build_block_matrices(
 
         LinearAlgebra.mul!(A_knext, A_k, A_klast)
 
-        block_A[(ns * i + 1):ns * (i + 1),:] = A_knext
+        block_A[(ns * i + 1):ns * (i + 1),:] .= A_knext
 
-        block_B[(1 + (i) * ns):((i + 1) * ns), :] = AB_k
+        block_B[(1 + (i) * ns):((i + 1) * ns), :] .= AB_k
 
         AB_klast = copy(AB_k)
         A_klast  = copy(A_knext)
@@ -783,7 +783,7 @@ function _build_block_matrices(
 
     LinearAlgebra.mul!(A_knext, A_k, A_klast)
 
-    block_A[(ns * N + 1):ns * (N + 1), :] = A_knext
+    block_A[(ns * N + 1):ns * (N + 1), :] .= A_knext
 
     DenseLQDynamicBlocks{T, M}(
         block_A,
@@ -855,8 +855,8 @@ function _build_H_blocks(
         LinearAlgebra.mul!(quad_term_AB, quad_term, B_sub_block)
         LinearAlgebra.mul!(QfAB, Qf, B_sub_block)
 
-        quad_term_B[(1 + (i - 1) * ns):(i * ns), :]  = quad_term_AB
-        QfB[(1 + (i - 1) * ns):(i * ns), :] = QfAB
+        quad_term_B[(1 + (i - 1) * ns):(i * ns), :]  .= quad_term_AB
+        QfB[(1 + (i - 1) * ns):(i * ns), :] .= QfAB
 
         for j in 1:(N + 1 - i)
             right_block = block_B[(1 + (j - 1 + i - 1) * ns):((j + i - 1)* ns), :]
@@ -892,13 +892,13 @@ function _build_H_blocks(
         rows_QB           = 1:(ns * (N - i))
         rows_QfB          = (1 + ns * (N - i)):(ns * (N - i + 1))
 
-        QB_block_vec[(1 + ns * i):(ns * N), :]     = quad_term_B[rows_QB, :]
-        QB_block_vec[(1 + ns * N):ns * (N + 1), :] = QfB[rows_QfB, :]
+        QB_block_vec[(1 + ns * i):(ns * N), :]     .= quad_term_B[rows_QB, :]
+        QB_block_vec[(1 + ns * N):ns * (N + 1), :] .= QfB[rows_QfB, :]
 
         LinearAlgebra.mul!(As0QB, QB_block_vec', As0)
         LinearAlgebra.mul!(As0S, RK_ST, As0[(ns * (i - 1) + 1):ns * i])
 
-        h[(1 + nu * (i - 1)):nu * i] = As0QB
+        h[(1 + nu * (i - 1)):nu * i] .= As0QB
         view(h, (1 + nu * (i - 1)):nu * i) .+= As0S
 
         LinearAlgebra.mul!(QAs0, Q, As0[(ns * (i - 1) + 1):ns * i])
@@ -942,7 +942,7 @@ function _set_G_blocks!(
             B_sub_block = view(block_B, B_row_range, :)
 
             LinearAlgebra.mul!(EB, E, B_sub_block)
-            G[(1 + nc * i):(nc * (i + 1)), :] = EB
+            G[(1 + nc * i):(nc * (i + 1)), :] .= EB
         end
 
         LinearAlgebra.mul!(EAs0, E, As0[(ns * (i - 1) + 1):ns * i])
@@ -981,7 +981,7 @@ function _set_G_blocks!(
             B_sub_block = view(block_B, B_row_range, :)
 
             LinearAlgebra.mul!(EB, E_FK, B_sub_block)
-            G[(1 + nc * i):(nc * (i + 1)), :] = EB
+            G[(1 + nc * i):(nc * (i + 1)), :] .= EB
         end
 
 
@@ -1000,7 +1000,7 @@ function _set_J1_dense!(J1, G, N)
 
     for i in 1:N
         col_range = (1 + nu * (i - 1)):(nu * i)
-        J1[(1 + nc * (i - 1)):nc * N, col_range] = G[1:((N - i + 1) * nc),:]
+        J1[(1 + nc * (i - 1)):nc * N, col_range] .= G[1:((N - i + 1) * nc),:]
     end
 
 end
