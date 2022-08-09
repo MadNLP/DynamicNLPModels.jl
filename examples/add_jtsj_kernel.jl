@@ -5,7 +5,7 @@ using Test
 
 include("build_thinplate.jl")
 @kernel function JTSJ_kernel!(J1, J2, J3, S, H, i, N, nu, nc, nsc, nuc)
-    j, k, l, m = @index(Global, NTuple)
+    j, k, m, l = @index(Global, NTuple)
 
     # j = 1:i, but all of our calls will treat it as i:-1:1
     # this can be obtained by taking (j - i) * -1 + 1
@@ -41,7 +41,7 @@ include("build_thinplate.jl")
 end
 
 @kernel function JTSJ_kernel2!(J1, J2, J3, S, H, i, N, nu, nc, nsc, nuc)
-    j, k, l, m = @index(Global, NTuple)
+    j, k, m, l = @index(Global, NTuple)
 
     # j = 1:(N - i + 1), but all of our calls will treat it as i:N
     # this can be obtained by taking j + (i - 1)
@@ -114,38 +114,6 @@ function add_JTSJ!_kernel(J, S, H)
         add_JTSJ!(J1, J2, J3, S, H, i, N, nu, nc, nsc, nuc)
     end
     for i in (cld(N, 2)+1):N
-        add_JTSJ2!(J1, J2, J3, S, H, i, N, nu, nc, nsc, nuc)
-    end
-end
-
-function add_JTSJ!_kernel2(J, S, H)
-
-    J1  = J.truncated_jac1
-    J2  = J.truncated_jac2
-    J3  = J.truncated_jac3
-    N   = J.N
-    nu  = J.nu
-    nc  = J.nc
-    nsc = J.nsc
-    nuc = J.nuc
-
-    for i in 1:N
-        add_JTSJ!(J1, J2, J3, S, H, i, N, nu, nc, nsc, nuc)
-    end
-end
-
-function add_JTSJ!_kernel3(J, S, H)
-
-    J1  = J.truncated_jac1
-    J2  = J.truncated_jac2
-    J3  = J.truncated_jac3
-    N   = J.N
-    nu  = J.nu
-    nc  = J.nc
-    nsc = J.nsc
-    nuc = J.nuc
-
-    for i in 1:N
         add_JTSJ2!(J1, J2, J3, S, H, i, N, nu, nc, nsc, nuc)
     end
 end

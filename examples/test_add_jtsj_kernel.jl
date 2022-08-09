@@ -92,13 +92,14 @@ function dynamic_data_to_CUDA(dnlp::LQDynamicData)
     )
 end
 
-ns_vals = [10, 30, 50, 200, 1000, 2000, 4000, 6000]
+ns_vals = [10, 30, 50, 100, 500, 1000, 2000, 4000, 6000]
 nu = 10
 N  = 50
 add_ns_cuda  = []
 add_ns_cuda2 = []
 add_ns_d     = []
 add_ns_imp   = []
+
 for i in ns_vals
     @time lqdm_d   = build_lqdm(i, nu, N; implicit=false)
     println("built full Jacobian lqdm")
