@@ -262,7 +262,7 @@ function NLPModels.hess_coord!(
     x::AbstractVector{T},
     vals::AbstractVector{T};
     obj_weight::Real = one(eltype(x)),
-) where {T, V, M1 <: SparseMatrixCSC, M2 <: SparseMatrixCSC, M3 <: Matrix}
+) where {T, V, M1 <: SparseMatrixCSC, M2 <: SparseMatrixCSC, M3 <: AbstractMatrix}
     NLPModels.increment!(qp, :neval_hess)
     fill_coord!(qp.data.H, vals, obj_weight)
     return vals

@@ -6,7 +6,7 @@ A struct to represent the features of the optimization problem
 
 ```math
     minimize    \\frac{1}{2} \\sum_{i = 0}^{N-1}(s_i^T Q s_i + 2 u_i^T S^T x_i + u_i^T R u_i) + \\frac{1}{2} s_N^T Qf s_N
-    subject to  s_{i+1} = A s_i + B u_i  for i=0, 1, ..., N-1
+    subject to  s_{i+1} = A s_i + B u_i + w  for i=0, 1, ..., N-1
                 u_i = Kx_i + v_i  \\forall i = 0, 1, ..., N - 1
                 gl \\le E s_i + F u_i \\le gu for i = 0, 1, ..., N-1
                 sl \\le s \\le su
@@ -28,6 +28,7 @@ Attributes include:
 - `E` : constraint matrix for state variables
 - `F` : constraint matrix for input variables
 - `K` : feedback gain matrix
+- 'w' : constant term for dynamic constraints
 - `sl`: vector of lower bounds on state variables
 - `su`: vector of upper bounds on state variables
 - `ul`: vector of lower bounds on input variables
@@ -52,6 +53,7 @@ struct LQDynamicData{T, V, M, MK} <: AbstractLQDynData{T,V}
     E::M
     F::M
     K::MK
+    w::V
 
     sl::V
     su::V
@@ -89,6 +91,7 @@ The following keyward arguments are also accepted
 - `E  = zeros(eltype(Q), 0, ns)`  : constraint matrix for state variables
 - `F  = zeros(eltype(Q), 0, nu)`  : constraint matrix for input variables
 - `K  = nothing`       : feedback gain matrix
+- `w  = zeros(eltype(Q), ns)`     : constant term for dynamic constraints
 - `sl = fill(-Inf, ns)`: vector of lower bounds on state variables
 - `su = fill(Inf, ns)` : vector of upper bounds on state variables
 - `ul = fill(-Inf, nu)`: vector of lower bounds on input variables
@@ -109,6 +112,7 @@ function LQDynamicData(
     E::M  = _init_similar(Q, 0, length(s0), T),
     F::M  = _init_similar(Q, 0, size(R, 1), T),
     K::MK = nothing,
+    w::V  = _init_similar(s0, length(s0, T)),
 
     sl::V = (similar(s0) .= -Inf),
     su::V = (similar(s0) .=  Inf),
