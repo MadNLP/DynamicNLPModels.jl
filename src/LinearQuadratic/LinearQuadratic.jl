@@ -174,6 +174,9 @@ function LQDynamicData(
             error("Dimensions of K  do not match number of states and inputs")
         end
     end
+    if size(w) != size(s0)
+        error("Dimensions of w do not match ns")
+    end
 
 
     ns = size(Q,1)
@@ -181,7 +184,7 @@ function LQDynamicData(
 
     LQDynamicData{T, V, M, MK}(
         s0, A, B, Q, R, N,
-        Qf, S, ns, nu, E, F, K,
+        Qf, S, ns, nu, E, F, K, w,
         sl, su, ul, uu, gl, gu
     )
 end
@@ -206,16 +209,28 @@ The blocks `h`, `h0`, `d` and `KA` store data needed to reset the `DenseLQDynami
 
 See also `reset_s0!`
 """
-struct DenseLQDynamicBlocks{T, M}
-    # block_h0 = A^T((Q + KTRK + 2 * SK))A where Q, K, R, S, and A are block matrices
-    # block_h  = (QB + SKB + K^T R K B + K^T S^T B)^T A + (S + K^T R)^T A
-    # block_d  = (E + FK) A
-    # block_KA = KA
+struct DenseLQDynamicBlocks{T, V, M}
+    # Aw = block_matrix_A * w (result is a Vector; block_matrix A is like block_B,
+    # but with I instead of B)
+    # h  = (QB + SKB + K^T R K B + K^T S^T B)^T A + (S + K^T R)^T A
+    # h01 = A^T((Q + KTRK + KTST + SK))A where Q, K, R, S, and A are block matrices
+    # just needs to be multiplied by s0 on each side
+    # h02 = wT block_matrix_AT (Q + KTRK + KTSK + SK) A; just needs to be multiplied by s0 on right
+    # h_constant  = BT (Q + KTRK + SK + KTST) block_matrix_A w + (RK + ST)B block_matrix_A w
+    # h0_constant = wT block_matrix_AT (Q + KTRK + KTSK + SK) block_matrix_A w
+    # d  = (E + FK) A
+    # dw = (E + FK) block_matrix_A w - constant term to be subtracted from d
+    # KA = KA
     A::M
     B::M
+    Aw::V
     h::M
-    h0::M
+    h01::M
+    h02::V
+    h_constant::V
+    h0_constant::V
     d::M
+    dw::V
     KA::M
 end
 
@@ -224,7 +239,7 @@ struct DenseLQDynamicModel{T, V, M1, M2, M3, M4, MK} <:  AbstractDynamicModel{T,
     counters::NLPModels.Counters
     data::QuadraticModels.QPData{T, V, M1, M2}
     dynamic_data::LQDynamicData{T, V, M3, MK}
-    blocks::DenseLQDynamicBlocks{T, M4}
+    blocks::DenseLQDynamicBlocks{T, v, M4}
 end
 
 """

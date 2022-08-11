@@ -743,8 +743,8 @@ end
 
 
 function _build_block_matrices(
-    A::M, B::M, K, N, nc
-) where {T, M <: AbstractMatrix{T}}
+    A::M, B::M, K, N, w::V, nc
+) where {T, V <: AbstractVector{T}, M <: AbstractMatrix{T}}
 
     ns = size(A, 2)
     nu = size(B, 2)
@@ -754,12 +754,17 @@ function _build_block_matrices(
     end
 
     # Define block matrices
-    block_A  = _init_similar(A, ns * (N + 1), ns, T)
-    block_B  = _init_similar(B, ns * N, nu, T)
-    block_h  = _init_similar(A, nu * N, ns, T)
-    block_h0 = _init_similar(A, ns, ns, T)
-    block_d  = _init_similar(A, nc * N, ns, T)
-    block_KA = _init_similar(A, nu * N, ns, T)
+    block_A   = _init_similar(A, ns * (N + 1), ns, T)
+    block_B   = _init_similar(B, ns * N, nu, T)
+    block_Aw  = _init_similar(w, ns * N, T)
+    block_h   = _init_similar(A, nu * N, ns, T)
+    block_h01 = _init_similar(A, ns, ns, T)
+    block_h02 = _init_similar(w, ns * N, T)
+    h_const   = _init_similar(w, nu * N, T)
+    h0_const  = _init_similar(w, 1, T)
+    block_d   = _init_similar(A, nc * N, ns, T)
+    block_dw  = _init_similar(A, nc * N, ns, T)
+    block_KA  = _init_similar(A, nu * N, ns, T)
 
     A_k = copy(A)
     BK  = _init_similar(A, ns, ns, T)
@@ -810,12 +815,17 @@ function _build_block_matrices(
 
     block_A[(ns * N + 1):ns * (N + 1), :] = A_knext
 
-    DenseLQDynamicBlocks{T, M}(
+    DenseLQDynamicBlocks{T, V, M}(
         block_A,
         block_B,
+        block_Aw,
         block_h,
-        block_h0,
+        block_h01,
+        block_h02,
+        h_const,
+        h0_const,
         block_d,
+        block_dw,
         block_KA
     )
 end
