@@ -112,7 +112,7 @@ function LQDynamicData(
     E::M  = _init_similar(Q, 0, length(s0), T),
     F::M  = _init_similar(Q, 0, size(R, 1), T),
     K::MK = nothing,
-    w::V  = _init_similar(s0, length(s0, T)),
+    w::V  = _init_similar(s0, length(s0), T),
 
     sl::V = (similar(s0) .= -Inf),
     su::V = (similar(s0) .=  Inf),
@@ -209,7 +209,7 @@ The blocks `h`, `h0`, `d` and `KA` store data needed to reset the `DenseLQDynami
 
 See also `reset_s0!`
 """
-struct DenseLQDynamicBlocks{T, V, M}
+mutable struct DenseLQDynamicBlocks{T, V, M}
     # Aw = block_matrix_A * w (result is a Vector; block_matrix A is like block_B,
     # but with I instead of B)
     # h  = (QB + SKB + K^T R K B + K^T S^T B)^T A + (S + K^T R)^T A
@@ -228,10 +228,11 @@ struct DenseLQDynamicBlocks{T, V, M}
     h01::M
     h02::V
     h_constant::V
-    h0_constant::V
+    h0_constant::T
     d::M
     dw::V
     KA::M
+    KAw::V
 end
 
 struct DenseLQDynamicModel{T, V, M1, M2, M3, M4, MK} <:  AbstractDynamicModel{T,V}
@@ -239,7 +240,7 @@ struct DenseLQDynamicModel{T, V, M1, M2, M3, M4, MK} <:  AbstractDynamicModel{T,
     counters::NLPModels.Counters
     data::QuadraticModels.QPData{T, V, M1, M2}
     dynamic_data::LQDynamicData{T, V, M3, MK}
-    blocks::DenseLQDynamicBlocks{T, v, M4}
+    blocks::DenseLQDynamicBlocks{T, V, M4}
 end
 
 """

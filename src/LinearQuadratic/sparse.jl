@@ -43,6 +43,7 @@ function SparseLQDynamicModel(
     E::M  = _init_similar(Q, 0, length(s0), T),
     F::M  = _init_similar(Q, 0, size(R, 1), T),
     K::MK = nothing,
+    w::V  = _init_similar(s0, length(s0), T),
     sl::V = (similar(s0) .= -Inf),
     su::V = (similar(s0) .=  Inf),
     ul::V = (similar(s0, size(R, 1)) .= -Inf),
@@ -53,7 +54,7 @@ function SparseLQDynamicModel(
 
     dnlp = LQDynamicData(
         s0, A, B, Q, R, N;
-        Qf = Qf, S = S, E = E, F = F, K = K,
+        Qf = Qf, S = S, E = E, F = F, K = K, w,
         sl = sl, su = su, ul = ul, uu = uu, gl = gl, gu = gu
     )
 
@@ -78,6 +79,7 @@ function _build_sparse_lq_dynamic_model(
     E  = dnlp.E
     F  = dnlp.F
     K  = dnlp.K
+    w  = dnlp.w
 
     sl = dnlp.sl
     su = dnlp.su
@@ -128,6 +130,9 @@ function _build_sparse_lq_dynamic_model(
     for i in 1:N
         lvar[(i * ns + 1):((i + 1) * ns)] = sl
         uvar[(i * ns + 1):((i + 1) * ns)] = su
+
+        lcon[(1 + (i - 1) * ns):(i * ns)] = w
+        ucon[(1 + (i - 1) * ns):(i * ns)] = w
 
         lcon[(ns * N + 1 + (i -1) * nc):(ns * N + i * nc)] = gl
         ucon[(ns * N + 1 + (i -1) * nc):(ns * N + i * nc)] = gu
@@ -181,6 +186,7 @@ function _build_sparse_lq_dynamic_model(
     E  = dnlp.E
     F  = dnlp.F
     K  = dnlp.K
+    w  = dnlp.w
 
     sl = dnlp.sl
     su = dnlp.su
@@ -276,6 +282,9 @@ function _build_sparse_lq_dynamic_model(
         lvar[(i * ns + 1):((i + 1) * ns)] = sl
         uvar[(i * ns + 1):((i + 1) * ns)] = su
 
+        lcon[(1 + (i - 1) * ns):(i * ns)] = w
+        ucon[(1 + (i - 1) * ns):(i * ns)] = w
+
         lcon[(ns * N + 1 + (i -1) * nc):(ns * N + i * nc)] = gl
         ucon[(ns * N + 1 + (i -1) * nc):(ns * N + i * nc)] = gu
     end
@@ -328,6 +337,7 @@ function _build_sparse_lq_dynamic_model(dnlp::LQDynamicData{T, V, M, MK}) where 
     E  = dnlp.E
     F  = dnlp.F
     K  = dnlp.K
+    w  = dnlp.w
 
     sl = dnlp.sl
     su = dnlp.su
@@ -385,6 +395,9 @@ function _build_sparse_lq_dynamic_model(dnlp::LQDynamicData{T, V, M, MK}) where 
         lvar[(i * ns + 1):((i + 1) * ns)] = sl
         uvar[(i * ns + 1):((i + 1) * ns)] = su
 
+        lcon[(1 + (i - 1) * ns):(i * ns)] = w
+        ucon[(1 + (i - 1) * ns):(i * ns)] = w
+
         lcon[(ns * N + 1 + (i -1) * nc):(ns * N + i * nc)] = gl
         ucon[(ns * N + 1 + (i -1) * nc):(ns * N + i * nc)] = gu
     end
@@ -436,6 +449,7 @@ function _build_sparse_lq_dynamic_model(dnlp::LQDynamicData{T, V, M, MK}) where 
     E  = dnlp.E
     F  = dnlp.F
     K  = dnlp.K
+    w  = dnlp.w
 
     sl = dnlp.sl
     su = dnlp.su
@@ -547,6 +561,9 @@ function _build_sparse_lq_dynamic_model(dnlp::LQDynamicData{T, V, M, MK}) where 
     for i in 1:N
         lvar[(i * ns + 1):((i + 1) * ns)] = sl
         uvar[(i * ns + 1):((i + 1) * ns)] = su
+
+        lcon[(1 + (i - 1) * ns):(i * ns)] = w
+        ucon[(1 + (i - 1) * ns):(i * ns)] = w
 
         lcon[(ns * N + 1 + (i -1) * nc):(ns * N + i * nc)] = gl
         ucon[(ns * N + 1 + (i -1) * nc):(ns * N + i * nc)] = gu
