@@ -69,6 +69,7 @@ function dynamic_data_to_CUDA(dnlp::LQDynamicData)
     Sc  = CuArray{Float64}(undef, size(dnlp.S))
     Ec  = CuArray{Float64}(undef, size(dnlp.E))
     Fc  = CuArray{Float64}(undef, size(dnlp.F))
+    wc  = CuArray{Float64}(undef, length(dnlp.w))
     Qfc = CuArray{Float64}(undef, size(dnlp.Qf))
     glc = CuVector{Float64}(undef, length(dnlp.gl))
     guc = CuVector{Float64}(undef, length(dnlp.gu))
@@ -85,6 +86,7 @@ function dynamic_data_to_CUDA(dnlp::LQDynamicData)
     LinearAlgebra.copyto!(Sc, dnlp.S)
     LinearAlgebra.copyto!(Ec, dnlp.E)
     LinearAlgebra.copyto!(Fc, dnlp.F)
+    LinearAlgebra.copyto!(wc, dnlp.w)
     LinearAlgebra.copyto!(Qfc, dnlp.Qf)
     LinearAlgebra.copyto!(glc, dnlp.gl)
     LinearAlgebra.copyto!(guc, dnlp.gu)
@@ -101,7 +103,7 @@ function dynamic_data_to_CUDA(dnlp::LQDynamicData)
     end
 
     LQDynamicData(s0c, Ac, Bc, Qc, Rc, dnlp.N; Qf = Qfc, S = Sc,
-    E = Ec, F = Fc, K = Kc, sl = slc, su = suc, ul = ulc, uu = uuc, gl = glc, gu = guc
+    E = Ec, F = Fc, K = Kc, sl = slc, su = suc, ul = ulc, uu = uuc, gl = glc, gu = guc, w = wc
     )
 end
 
@@ -151,17 +153,17 @@ function runtests(model, dnlp, lq_sparse, lq_dense, lq_sparse_from_data, lq_dens
     @test objective_value(model) ≈ solution_ref_sparse_from_data.objective atol = 1e-7
     @test objective_value(model) ≈ solution_ref_dense_from_data.objective atol = 1e-5
 
-    @test solution_ref_sparse.solution[(ns * (N + 1) + 1):(ns * (N + 1) + nu*N)] ≈ solution_ref_dense.solution atol =  1e-6
-    @test solution_ref_sparse_from_data.solution[(ns * (N + 1) + 1):(ns * (N + 1) + nu*N)] ≈ solution_ref_dense_from_data.solution atol =  1e-6
+    @test solution_ref_sparse.solution[(ns * (N + 1) + 1):(ns * (N + 1) + nu*N)] ≈ solution_ref_dense.solution atol =  1e-5
+    @test solution_ref_sparse_from_data.solution[(ns * (N + 1) + 1):(ns * (N + 1) + nu*N)] ≈ solution_ref_dense_from_data.solution atol =  1e-5
 
     # Test get_u and get_s functions with no K matrix
     s_values = value.(all_variables(model)[1:(ns * (N + 1))])
     u_values = value.(all_variables(model)[(1 + ns * (N + 1)):(ns * (N + 1) + nu * N)])
 
-    @test s_values ≈ get_s(solution_ref_sparse, lq_sparse) atol = 1e-7
-    @test u_values ≈ get_u(solution_ref_sparse, lq_sparse) atol = 1e-7
-    @test s_values ≈ get_s(solution_ref_dense, lq_dense) atol = 1e-5
-    @test u_values ≈ get_u(solution_ref_dense, lq_dense) atol = 1e-5
+    @test s_values ≈ get_s(solution_ref_sparse, lq_sparse) atol = 1e-6
+    @test u_values ≈ get_u(solution_ref_sparse, lq_sparse) atol = 1e-6
+    @test s_values ≈ get_s(solution_ref_dense, lq_dense) atol = 2e-5
+    @test u_values ≈ get_u(solution_ref_dense, lq_dense) atol = 2e-5
 
     test_sparse_support(lq_sparse)
 

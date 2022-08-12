@@ -6,7 +6,7 @@ A constructor for building a `SparseLQDynamicModel <: QuadraticModels.AbstractQu
 Input data is for the problem of the form
 ```math
 minimize    \\frac{1}{2} \\sum_{i = 0}^{N-1}(s_i^T Q s_i + 2 u_i^T S^T x_i + u_i^T R u_i) + \\frac{1}{2} s_N^T Qf s_N
-subject to  s_{i+1} = A s_i + B u_i  for i=0, 1, ..., N-1
+subject to  s_{i+1} = A s_i + B u_i + w for i=0, 1, ..., N-1
             u_i = Kx_i + v_i  \\forall i = 0, 1, ..., N - 1
             gl \\le E s_i + F u_i \\le gu for i = 0, 1, ..., N-1
             sl \\le s \\le su
@@ -54,7 +54,7 @@ function SparseLQDynamicModel(
 
     dnlp = LQDynamicData(
         s0, A, B, Q, R, N;
-        Qf = Qf, S = S, E = E, F = F, K = K, w,
+        Qf = Qf, S = S, E = E, F = F, K = K, w = w,
         sl = sl, su = su, ul = ul, uu = uu, gl = gl, gu = gu
     )
 
@@ -131,8 +131,8 @@ function _build_sparse_lq_dynamic_model(
         lvar[(i * ns + 1):((i + 1) * ns)] = sl
         uvar[(i * ns + 1):((i + 1) * ns)] = su
 
-        lcon[(1 + (i - 1) * ns):(i * ns)] = w
-        ucon[(1 + (i - 1) * ns):(i * ns)] = w
+        lcon[(1 + (i - 1) * ns):(i * ns)] = -w
+        ucon[(1 + (i - 1) * ns):(i * ns)] = -w
 
         lcon[(ns * N + 1 + (i -1) * nc):(ns * N + i * nc)] = gl
         ucon[(ns * N + 1 + (i -1) * nc):(ns * N + i * nc)] = gu
@@ -282,8 +282,8 @@ function _build_sparse_lq_dynamic_model(
         lvar[(i * ns + 1):((i + 1) * ns)] = sl
         uvar[(i * ns + 1):((i + 1) * ns)] = su
 
-        lcon[(1 + (i - 1) * ns):(i * ns)] = w
-        ucon[(1 + (i - 1) * ns):(i * ns)] = w
+        lcon[(1 + (i - 1) * ns):(i * ns)] = -w
+        ucon[(1 + (i - 1) * ns):(i * ns)] = -w
 
         lcon[(ns * N + 1 + (i -1) * nc):(ns * N + i * nc)] = gl
         ucon[(ns * N + 1 + (i -1) * nc):(ns * N + i * nc)] = gu
@@ -395,8 +395,8 @@ function _build_sparse_lq_dynamic_model(dnlp::LQDynamicData{T, V, M, MK}) where 
         lvar[(i * ns + 1):((i + 1) * ns)] = sl
         uvar[(i * ns + 1):((i + 1) * ns)] = su
 
-        lcon[(1 + (i - 1) * ns):(i * ns)] = w
-        ucon[(1 + (i - 1) * ns):(i * ns)] = w
+        lcon[(1 + (i - 1) * ns):(i * ns)] = -w
+        ucon[(1 + (i - 1) * ns):(i * ns)] = -w
 
         lcon[(ns * N + 1 + (i -1) * nc):(ns * N + i * nc)] = gl
         ucon[(ns * N + 1 + (i -1) * nc):(ns * N + i * nc)] = gu
@@ -562,8 +562,8 @@ function _build_sparse_lq_dynamic_model(dnlp::LQDynamicData{T, V, M, MK}) where 
         lvar[(i * ns + 1):((i + 1) * ns)] = sl
         uvar[(i * ns + 1):((i + 1) * ns)] = su
 
-        lcon[(1 + (i - 1) * ns):(i * ns)] = w
-        ucon[(1 + (i - 1) * ns):(i * ns)] = w
+        lcon[(1 + (i - 1) * ns):(i * ns)] = -w
+        ucon[(1 + (i - 1) * ns):(i * ns)] = -w
 
         lcon[(ns * N + 1 + (i -1) * nc):(ns * N + i * nc)] = gl
         ucon[(ns * N + 1 + (i -1) * nc):(ns * N + i * nc)] = gu

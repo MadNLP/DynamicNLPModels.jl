@@ -6,7 +6,7 @@ A constructor for building a `DenseLQDynamicModel <: QuadraticModels.AbstractQua
 Input data is for the problem of the form
 ```math
 minimize    \\frac{1}{2} \\sum_{i = 0}^{N-1}(s_i^T Q s_i + 2 u_i^T S^T x_i + u_i^T R u_i) + \\frac{1}{2} s_N^T Qf s_N
-subject to  s_{i+1} = A s_i + B u_i  for i=0, 1, ..., N-1
+subject to  s_{i+1} = A s_i + B u_i + w for i=0, 1, ..., N-1
             u_i = Kx_i + v_i  \\forall i = 0, 1, ..., N - 1
             gl \\le E s_i + F u_i \\le gu for i = 0, 1, ..., N-1
             sl \\le s \\le su
@@ -51,6 +51,7 @@ function DenseLQDynamicModel(
     E::M  = _init_similar(Q, 0, length(s0), T),
     F::M  = _init_similar(Q, 0, size(R, 1), T),
     K::MK = nothing,
+    w::V  = _init_similar(s0, length(s0), T),
     sl::V = (similar(s0) .= -Inf),
     su::V = (similar(s0) .=  Inf),
     ul::V = (similar(s0, size(R, 1)) .= -Inf),
@@ -62,7 +63,7 @@ function DenseLQDynamicModel(
 
     dnlp = LQDynamicData(
         s0, A, B, Q, R, N;
-        Qf = Qf, S = S, E = E, F = F, K = K,
+        Qf = Qf, S = S, E = E, F = F, K = K, w = w,
         sl = sl, su = su, ul = ul, uu = uu, gl = gl, gu = gu
     )
 
@@ -137,14 +138,14 @@ function _build_dense_lq_dynamic_model(
     # Convert state variable constraints to algebraic constraints
     offset_s = N * nc
     if num_real_bounds_s == length(sl)
-        As0_bounds .= As0[(1 + ns):ns * (N + 1)]
+        As0_bounds .= As0[(1 + ns):ns * (N + 1)] .+ block_Aw[(1 + ns):(ns * (N + 1))]
         for i in 1:N
             J[(offset_s + 1 + (i - 1) * ns):(offset_s + ns * N), (1 + nu * (i - 1)):(nu * i)] = @view(block_B[1:(ns * (N - i + 1)),:])
         end
     else
         for i in 1:N
             row_range = (1 + (i - 1) * num_real_bounds_s):(i * num_real_bounds_s)
-            As0_bounds[row_range] .= As0[(1 + ns * i):(ns * (i + 1))][bool_vec_s]
+            As0_bounds[row_range] .= As0[(1 + ns * i):(ns * (i + 1))][bool_vec_s] .+ block_Aw[(1 + ns * i):(ns * (i + 1))][bool_vec_s]
 
             for j in 1:(N - i + 1)
                 J[(offset_s + 1 + (i + j - 2) * num_real_bounds_s):(offset_s + (i + j - 1) * num_real_bounds_s), (1 + nu * (i - 1)):(nu * i)] = @view(block_B[(1 + (j - 1) * ns):(j * ns), :][bool_vec_s, :])
@@ -236,11 +237,12 @@ function _build_dense_lq_dynamic_model(
     nc = size(E, 1)
 
     dense_blocks = _build_block_matrices(A, B, K, N, w, nc)
-    block_A  = dense_blocks.A
-    block_B  = dense_blocks.B
-    block_d  = dense_blocks.d
-    block_Aw = dense_blocks.Aw
-    block_dw = dense_blocks.dw
+    block_A   = dense_blocks.A
+    block_B   = dense_blocks.B
+    block_d   = dense_blocks.d
+    block_Aw  = dense_blocks.Aw
+    block_dw  = dense_blocks.dw
+    block_KAw = dense_blocks.KAw
 
     H_blocks = _build_H_blocks(Q, R, block_A, block_B, block_Aw, S,Qf, K, s0, N)
 
@@ -285,14 +287,14 @@ function _build_dense_lq_dynamic_model(
     # Convert state variable constraints to algebraic constraints
     offset_s = nc * N
     if num_real_bounds_s == length(sl)
-        As0_bounds .= As0[(1 + ns):ns * (N + 1)]
+        As0_bounds .= As0[(1 + ns):ns * (N + 1)] .+ block_Aw[(1 + ns):ns * (N + 1)]
         for i in 1:N
             J[(offset_s + 1 + (i - 1) * ns):(offset_s + ns * N), (1 + nu * (i - 1)):(nu * i)] = @view(block_B[1:(ns * (N - i + 1)),:])
         end
     else
         for i in 1:N
             row_range = (1 + (i - 1) * num_real_bounds_s):(i * num_real_bounds_s)
-            As0_bounds[row_range] = As0[(1 + ns * i):(ns * (i + 1))][bool_vec_s]
+            As0_bounds[row_range] = As0[(1 + ns * i):(ns * (i + 1))][bool_vec_s] .+ block_Aw[(1 + ns * i):(ns * (i + 1))][bool_vec_s]
 
             for j in 1:(N - i + 1)
                 J[(offset_s + 1 + (i + j - 2) * num_real_bounds_s):(offset_s + (i + j - 1) * num_real_bounds_s), (1 + nu * (i - 1)):(nu * i)] = @view(block_B[(1 + (j - 1) * ns):(j * ns), :][bool_vec_s, :])
@@ -320,14 +322,14 @@ function _build_dense_lq_dynamic_model(
 
     offset_u = nc * N + num_real_bounds_s * N
     if num_real_bounds_u == length(ul)
-        KAs0_bounds .= KAs0
+        KAs0_bounds .= KAs0 .+ block_KAw
         for i in 1:N
             J[(offset_u + 1 + (i - 1) * nu):(offset_u + nu * N), (1 + nu * (i - 1)):(nu * i)] = @view(KBI[1:(nu * (N - i + 1)),:])
         end
     else
         for i in 1:N
             row_range              = (1 + (i - 1) * num_real_bounds_u):(i * num_real_bounds_u)
-            KAs0_bounds[row_range] = KAs0[(1 + nu * (i - 1)):(nu * i)][bool_vec_u]
+            KAs0_bounds[row_range] = KAs0[(1 + nu * (i - 1)):(nu * i)][bool_vec_u] .+ block_KAw[(1 + nu * (i - 1)):(nu * i)][bool_vec_u]
 
             for j in 1:(N - i +1)
                 J[(offset_u + 1 + (i + j - 2) * num_real_bounds_u):(offset_u + (i + j - 1) * num_real_bounds_u), (1 + nu * (i - 1)):(nu * i)] = @view(KBI[(1 + (j - 1) * nu):(j * nu), :][bool_vec_u, :])
@@ -488,14 +490,14 @@ function _build_implicit_dense_lq_dynamic_model(
 
     # Convert state variable constraints to algebraic constraints
     if num_real_bounds_s == length(sl)
-        As0_bounds .= As0[(1 + ns):ns * (N + 1)]
+        As0_bounds .= As0[(1 + ns):ns * (N + 1)] .+ block_Aw[(1 + ns):(ns * (N + 1))]
         for i in 1:N
             Jac2[:, :, i] = @view block_B[(1 + ns * (i - 1)):(ns * i), :]
         end
     else
         for i in 1:N
             row_range = (1 + (i - 1) * num_real_bounds_s):(i * num_real_bounds_s)
-            As0_bounds[row_range] .= As0[(1 + ns * i):(ns * (i + 1))][bool_vec_s]
+            As0_bounds[row_range] .= As0[(1 + ns * i):(ns * (i + 1))][bool_vec_s] .+ block_Aw[(1 + ns * i):(ns * (i + 1))][bool_vec_s]
             Jac2[:, :, i] = @view block_B[(1 + (i - 1) * ns):(i * ns), :][bool_vec_s, :]
         end
         sl = sl[bool_vec_s]
@@ -584,11 +586,12 @@ function _build_implicit_dense_lq_dynamic_model(
 
     dense_blocks = _build_block_matrices(A, B, K, N, w, nc)
 
-    block_A  = dense_blocks.A
-    block_B  = dense_blocks.B
-    block_d  = dense_blocks.d
-    block_Aw = dense_blocks.Aw
-    block_dw = dense_blocks.dw
+    block_A   = dense_blocks.A
+    block_B   = dense_blocks.B
+    block_d   = dense_blocks.d
+    block_Aw  = dense_blocks.Aw
+    block_dw  = dense_blocks.dw
+    block_KAw = dense_blocks.KAw
 
     H_blocks = _build_H_blocks(Q, R, block_A, block_B, block_Aw, S,Qf, K, s0, N)
 
@@ -652,14 +655,14 @@ function _build_implicit_dense_lq_dynamic_model(
     # Convert state variable constraints to algebraic constraints
     offset_s = nc * N
     if num_real_bounds_s == length(sl)
-        As0_bounds .= As0[(1 + ns):ns * (N + 1)]
+        As0_bounds .= As0[(1 + ns):ns * (N + 1)] .+ block_Aw[(1 + ns):(ns * (N + 1))]
         for i in 1:N
             Jac2[:, :, i] = @view block_B[(1 + ns * (i - 1)):(ns * i), :]
         end
     else
         for i in 1:N
             row_range = (1 + (i - 1) * num_real_bounds_s):(i * num_real_bounds_s)
-            As0_bounds[row_range] .= As0[(1 + ns * i):(ns * (i + 1))][bool_vec_s]
+            As0_bounds[row_range] .= As0[(1 + ns * i):(ns * (i + 1))][bool_vec_s] .+ block_Aw[(1 + ns * i):(ns * (i + 1))][bool_vec_s]
             Jac2[:, :, i] = @view block_B[(1 + (i - 1) * ns):(i * ns), :][bool_vec_s, :]
         end
         sl = sl[bool_vec_s]
@@ -683,14 +686,14 @@ function _build_implicit_dense_lq_dynamic_model(
 
     offset_u = nc * N + num_real_bounds_s * N
     if num_real_bounds_u == length(ul)
-        KAs0_bounds .= KAs0
+        KAs0_bounds .= KAs0 .+ block_KAw
         for i in 1:N
             Jac3[:, :, i] = @view KBI[(1 + (i - 1) * nu):(i * nu), :]
         end
     else
         for i in 1:N
             row_range              = (1 + (i - 1) * num_real_bounds_u):(i * num_real_bounds_u)
-            KAs0_bounds[row_range] = KAs0[(1 + nu * (i - 1)):(nu * i)][bool_vec_u]
+            KAs0_bounds[row_range] = KAs0[(1 + nu * (i - 1)):(nu * i)][bool_vec_u] .+ block_KAw[(1 + nu * (i - 1)):(nu * i)][bool_vec_u]
             Jac3[:, :, i] = @view KBI[(1 + (i - 1) * nu):(i * nu), :][bool_vec_u, :]
         end
 
@@ -840,10 +843,10 @@ function _build_block_matrices(
 
     block_A[(ns * N + 1):ns * (N + 1), :] = A_knext
 
-    for i in 1:(N + 1)
+    for i in 1:N
         A_view = @view block_A[(1 + (i - 1) * ns):(i * ns), :]
         LinearAlgebra.mul!(Aw, A_view, w)
-        for j in i:N
+        for j in (i + 1):(N + 1)
             block_Aw[(1 + (j - 1) * ns):(j * ns)] .+= Aw
         end
     end
@@ -921,10 +924,12 @@ function _build_H_blocks(
     QA           = _init_similar(Q, ns, ns, T)
     KTRKA        = _init_similar(Q, ns, ns, T)
     SKA          = _init_similar(Q, ns, ns, T)
+    KTSTA        = _init_similar(Q, ns, ns, T)
 
     QAw          = _init_similar(s0, ns, T)
     KTRKAw       = _init_similar(s0, ns, T)
     SKAw         = _init_similar(s0, ns, T)
+    KTSTAw       = _init_similar(s0, ns, T)
 
     AQAs0        = _init_similar(s0, ns, T)
 
@@ -1011,25 +1016,27 @@ function _build_H_blocks(
         LinearAlgebra.mul!(QA, Q, A_view)
         LinearAlgebra.mul!(KTRKA, KTRK, A_view)
         LinearAlgebra.mul!(SKA, SK, A_view)
+        LinearAlgebra.mul!(KTSTA, SK', A_view)
 
         LinearAlgebra.mul!(QAw, Q, Aw_view)
-        LinearAlgebra.mul!(KTRKAw, Q, Aw_view)
+        LinearAlgebra.mul!(KTRKAw, KTRK, Aw_view)
         LinearAlgebra.mul!(SKAw, SK, Aw_view)
+        LinearAlgebra.mul!(KTSTAw, SK', Aw_view)
 
         LinearAlgebra.mul!(block_h01, A_view', QA, 1, 1)
         LinearAlgebra.mul!(block_h01, A_view', KTRKA, 1, 1)
-        LinearAlgebra.mul!(block_h01, A_view', SKA, 2, 1)
+        LinearAlgebra.mul!(block_h01, A_view', SKA, 1, 1)
+        LinearAlgebra.mul!(block_h01, A_view', KTSTA, 1, 1)
 
         LinearAlgebra.mul!(block_h02, A_view', QAw, 1, 1)
         LinearAlgebra.mul!(block_h02, A_view', KTRKAw, 1, 1)
         LinearAlgebra.mul!(block_h02, A_view', SKAw, 1, 1)
+        LinearAlgebra.mul!(block_h02, A_view', KTSTAw, 1, 1)
 
         h0_constant += LinearAlgebra.dot(Aw_view, QAw)
         h0_constant += LinearAlgebra.dot(Aw_view, KTRKAw)
         h0_constant += LinearAlgebra.dot(Aw_view, SKAw)
-        #LinearAlgebra.mul!(h0_constant, Aw_view', QAw, 1, 1)
-        #LinearAlgebra.mul!(h0_constant, Aw_view', KTRKAw, 1, 1)
-        #LinearAlgebra.mul!(h0_constant, Aw_view', SKAw, 1, 1)
+        h0_constant += LinearAlgebra.dot(Aw_view, KTSTAw)
     end
 
     A_view  = @view block_A[(1 + ns * N):(ns * (N + 1)), :]
@@ -1039,6 +1046,7 @@ function _build_H_blocks(
 
     LinearAlgebra.mul!(QAw, Qf, Aw_view)
     LinearAlgebra.mul!(block_h02, A_view', QAw, 1, 1)
+
     h0_constant += LinearAlgebra.dot(Aw_view, QAw)
     #LinearAlgebra.mul!(h0_constant, Aw_view', QAw, 1, 1)
 

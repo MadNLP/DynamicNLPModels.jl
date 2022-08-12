@@ -51,8 +51,9 @@ function get_u(
     nu   = dnlp.nu
     K    = dnlp.K
 
-    block_A = lqdm.blocks.A
-    block_B = lqdm.blocks.B
+    block_A  = lqdm.blocks.A
+    block_B  = lqdm.blocks.B
+    block_Aw = lqdm.blocks.Aw
 
     v = solver_status.solution
 
@@ -74,6 +75,7 @@ function get_u(
 
     LinearAlgebra.mul!(As0, block_A, dnlp.s0)
     LinearAlgebra.axpy!(1, As0, s)
+    LinearAlgebra.axpy!(1, block_Aw, s)
 
     Ks = _init_similar(dnlp.s0, size(K, 1), T)
     u = copy(v)
@@ -138,8 +140,9 @@ function get_s(
     ns   = dnlp.ns
     nu   = dnlp.nu
 
-    block_A = lqdm.blocks.A
-    block_B = lqdm.blocks.B
+    block_A  = lqdm.blocks.A
+    block_B  = lqdm.blocks.B
+    block_Aw = lqdm.blocks.Aw
 
     v = solver_status.solution
 
@@ -161,6 +164,7 @@ function get_s(
 
     LinearAlgebra.mul!(As0, block_A, dnlp.s0)
     LinearAlgebra.axpy!(1, As0, s)
+    LinearAlgebra.axpy!(1, block_Aw, s)
 
     return s
 end
@@ -817,8 +821,8 @@ function reset_s0!(
 
     for i in 1:N
         # Reset bounds on constraints from state variable bounds
-        lcon[(1 + nc * N + nsc * (i - 1)):(nc * N + nsc * i)] .= sl .- As0[(1 + ns * i):(ns * (i + 1))][bool_vec_s] .- block_Aw[(1 + (i - 1) * ns):(i * ns)][bool_vec_s]
-        ucon[(1 + nc * N + nsc * (i - 1)):(nc * N + nsc * i)] .= su .- As0[(1 + ns * i):(ns * (i + 1))][bool_vec_s] .- block_Aw[(1 + (i - 1) * ns):(i * ns)][bool_vec_s]
+        lcon[(1 + nc * N + nsc * (i - 1)):(nc * N + nsc * i)] .= sl .- As0[(1 + ns * i):(ns * (i + 1))][bool_vec_s] .- block_Aw[(1 + ns * i):((i + 1) * ns)][bool_vec_s]
+        ucon[(1 + nc * N + nsc * (i - 1)):(nc * N + nsc * i)] .= su .- As0[(1 + ns * i):(ns * (i + 1))][bool_vec_s] .- block_Aw[(1 + ns * i):((i + 1) * ns)][bool_vec_s]
     end
 end
 
@@ -908,8 +912,8 @@ function reset_s0!(
 
     for i in 1:N
         # Reset bounds on constraints from state variable bounds
-        lcon[(1 + nc * N + nsc * (i - 1)):(nc * N + nsc * i)] .= sl .- As0[(1 + ns * i):(ns * (i + 1))][bool_vec_s] .- block_Aw[(1 + (i - 1) * ns):(i * ns)][bool_vec_s]
-        ucon[(1 + nc * N + nsc * (i - 1)):(nc * N + nsc * i)] .= su .- As0[(1 + ns * i):(ns * (i + 1))][bool_vec_s] .- block_Aw[(1 + (i - 1) * ns):(i * ns)][bool_vec_s]
+        lcon[(1 + nc * N + nsc * (i - 1)):(nc * N + nsc * i)] .= sl .- As0[(1 + ns * i):(ns * (i + 1))][bool_vec_s] .- block_Aw[(1 + i * ns):((i + 1) * ns)][bool_vec_s]
+        ucon[(1 + nc * N + nsc * (i - 1)):(nc * N + nsc * i)] .= su .- As0[(1 + ns * i):(ns * (i + 1))][bool_vec_s] .- block_Aw[(1 + i * ns):((i + 1) * ns)][bool_vec_s]
 
         # Reset bounds on constraints from input variable bounds
         lcon[(1 + (nc + nsc) * N + nuc * (i - 1)):((nc + nsc) * N + nuc * i)] .= ul .- KAs0[(1 + nu * (i - 1)):(nu * i)][bool_vec_u] .- block_KAw[(1 + nu * (i - 1)):(nu * i)][bool_vec_u]

@@ -199,13 +199,29 @@ struct SparseLQDynamicModel{T, V, M1, M2, M3, MK} <:  AbstractDynamicModel{T,V}
 end
 
 """
-Struct containing block A and B matrices used in creating the `DenseLQDynamicModel`. These matrices are given in part by Jerez, Kerrigan, and Constantinides
-in section 4 of "A sparse and condensed QP formulation for predictive control of LTI systems" (doi:10.1016/j.automatica.2012.03.010).
+Struct containing block matrices used for creating and resetting the `DenseLQDynamicModel`. A and B matrices are given in part by
+Jerez, Kerrigan, and Constantinides in section 4 of "A sparse and condensed QP formulation for predictive control of LTI systems"
+(doi:10.1016/j.automatica.2012.03.010). States are eliminated by the equation $ x = Ax_0 + Bu + \hat{A}w$ where $ x = [x_0^T, x_1^T, ..., x_N^T]$
+and $ u = [u_0^T, u_1^T, ..., u_{N-1}^T]$
 
-`A` is a ns(N+1) x ns matrix and `B` is a ns(N) x nu matrix containing the first column of the `B` block matrix in the above text. Note that the
-first block of zeros is omitted.
-
-The blocks `h`, `h0`, `d` and `KA` store data needed to reset the `DenseLQDynamicModel` when `s0` is redefined.
+---
+- `A`  : block A matrix given by Jerez et al. with ns(N + 1) rows and ns columns
+- `B`  : block B matrix given by Jerez et al. with ns(N) rows and nu columns
+- `Aw` : length ns(N + 1) vector corresponding to the linear term of the dynamic constraints
+- `h`  : nu(N) x ns matrix for building the linear term of the objective function. Just needs to be
+multiplied by `s0`.
+- `h01`: ns x ns matrix for building the constant term fo the objective function. This can be found by
+taking $ s_0^T h01 s_0$
+- `h02`: similar to `h01`, but one side is multiplied by `Aw` rather than by `As0`. This will just
+be multiplied by `s0` once
+- `h_constant` : linear term in the objective function that arises from `Aw`. Not a function of `s0`
+- `h0_constant`: constant term in the objective function that arises from `Aw`. Not a function of `s0`
+- `d`  : length nc(N) term for the constraint bounds corresponding to `E` and `F`. Must be multiplied by `s0` and
+subtracted from `gl` and `gu`. Equal to the blocks (E + FK) A (see Jerez et al.)
+- `dw` : length nc(N) term for the constraint bounds that arises from `w`. Equal to (E + FK) Aw
+- `KA` : size nu(N) x ns matrix. Needs to be multiplied by `s0` and subtracted from `ul` and `uu` to updated
+the algebraic constraints corresponding to the input bounds
+- `KAw`: similar to `KA`, but it is already multiplied by `w`.
 
 See also `reset_s0!`
 """
