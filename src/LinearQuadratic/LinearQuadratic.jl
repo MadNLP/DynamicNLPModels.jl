@@ -68,7 +68,7 @@ end
 A constructor for building an object of type `LQDynamicData` for the optimization problem
 ```math
     minimize    \\frac{1}{2} \\sum_{i = 0}^{N-1}(s_i^T Q s_i + 2 u_i^T S^T x_i + u_i^T R u_i) + \\frac{1}{2} s_N^T Qf s_N
-    subject to  s_{i+1} = A s_i + B u_i  \\forall i=0, 1, ..., N - 1
+    subject to  s_{i+1} = A s_i + B u_i + w \\forall i=0, 1, ..., N - 1
                 u_i = Kx_i + v_i  \\forall i = 0, 1, ..., N - 1
                 gl \\le E s_i + F u_i \\le gu \\forall i = 0, 1, ..., N-1
                 sl \\le s \\le su
@@ -201,8 +201,8 @@ end
 """
 Struct containing block matrices used for creating and resetting the `DenseLQDynamicModel`. A and B matrices are given in part by
 Jerez, Kerrigan, and Constantinides in section 4 of "A sparse and condensed QP formulation for predictive control of LTI systems"
-(doi:10.1016/j.automatica.2012.03.010). States are eliminated by the equation $ x = Ax_0 + Bu + \hat{A}w$ where $ x = [x_0^T, x_1^T, ..., x_N^T]$
-and $ u = [u_0^T, u_1^T, ..., u_{N-1}^T]$
+(doi:10.1016/j.automatica.2012.03.010). States are eliminated by the equation  x = Ax_0 + Bu + \\hat{A}w where  x = [x_0^T, x_1^T, ..., x_N^T]
+and u = [u_0^T, u_1^T, ..., u_{N-1}^T]
 
 ---
 - `A`  : block A matrix given by Jerez et al. with ns(N + 1) rows and ns columns
@@ -218,10 +218,10 @@ be multiplied by `s0` once
 - `h0_constant`: constant term in the objective function that arises from `Aw`. Not a function of `s0`
 - `d`  : length nc(N) term for the constraint bounds corresponding to `E` and `F`. Must be multiplied by `s0` and
 subtracted from `gl` and `gu`. Equal to the blocks (E + FK) A (see Jerez et al.)
-- `dw` : length nc(N) term for the constraint bounds that arises from `w`. Equal to (E + FK) Aw
-- `KA` : size nu(N) x ns matrix. Needs to be multiplied by `s0` and subtracted from `ul` and `uu` to updated
+- `dw` : length nc(N) term for the constraint bounds that arises from `w`. Equal to the blocks (E + FK) Aw
+- `KA` : size nu(N) x ns matrix. Needs to be multiplied by `s0` and subtracted from `ul` and `uu` to update
 the algebraic constraints corresponding to the input bounds
-- `KAw`: similar to `KA`, but it is already multiplied by `w`.
+- `KAw`: similar to `KA`, but it is multiplied by Aw rather than A
 
 See also `reset_s0!`
 """
