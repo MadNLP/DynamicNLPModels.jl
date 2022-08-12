@@ -211,7 +211,7 @@ and u = [u_0^T, u_1^T, ..., u_{N-1}^T]
 - `h`  : nu(N) x ns matrix for building the linear term of the objective function. Just needs to be
 multiplied by `s0`.
 - `h01`: ns x ns matrix for building the constant term fo the objective function. This can be found by
-taking $ s_0^T h01 s_0$
+taking  s_0^T h01 s_0
 - `h02`: similar to `h01`, but one side is multiplied by `Aw` rather than by `As0`. This will just
 be multiplied by `s0` once
 - `h_constant` : linear term in the objective function that arises from `Aw`. Not a function of `s0`
