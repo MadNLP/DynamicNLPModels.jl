@@ -1,4 +1,3 @@
-using Revise
 using Test, DynamicNLPModels, MadNLP, Random, JuMP, LinearAlgebra, SparseArrays, CUDA
 include("sparse_lq_test.jl")
 include("functions.jl")
@@ -263,7 +262,7 @@ sl = s0 .- 1
 su = s0 .+ 1
 ul = randn(Float32,2)
 uu = ul .+ 2
-w = Float32(rand(0.0:.0001:.25, ns))
+w = Float32.(rand(0.0:.0001:.25, ns))
 
 s0 = Test.GenericArray(s0)
 A  = Test.GenericArray(A)
