@@ -1,6 +1,8 @@
 using Revise
 using LinearAlgebra, SparseArrays, DynamicNLPModels, MadNLP, Random
 using NLPModels, QuadraticModels
+using MatrixEquations
+
 
 
 function MadNLP.jac_dense!(nlp::DenseLQDynamicModel{T, V, M1, M2, M3}, x, jac) where {T, V, M1<: AbstractMatrix, M2 <: AbstractMatrix, M3 <: AbstractMatrix}
@@ -84,8 +86,8 @@ function build_oscillating_masses(num_masses, nu, dt, N; dense = true)
     Q  = 100.0 * Matrix(LinearAlgebra.I, ns, ns)
     Qf = 100.0 * Matrix(LinearAlgebra.I, ns, ns)
     for i in 2:2:ns
-        Q[i, i] = 0
-        Qf[i, i] = 0
+        Q[i, i] = 1
+        Qf[i, i] = 1
     end
     R  = 1.0 * Matrix(LinearAlgebra.I, nu, nu) / 100
 
@@ -109,7 +111,13 @@ function build_oscillating_masses(num_masses, nu, dt, N; dense = true)
 
     w[ns] += len * dt * k
 
-    K = .001 * Matrix(LinearAlgebra.I, nu, ns)
+    Q_scale = 1
+    R_scale = 1
+
+    X, eig, F = ared(A, B, R_scale, Q_scale)
+    K = - F
+    #K = .001 * Matrix(LinearAlgebra.I, nu, ns)
+    #K = -.001 * ones(nu, ns)
     if dense
         #lqdm = DenseLQDynamicModel(s0, A, B, Q, R, N; w = w, K = K) #relaxed problem
         lqdm = DenseLQDynamicModel(s0, A, B, Q, R, N; w = w, ul = ul, uu = uu, sl = sl, su = su, K = K)
@@ -177,8 +185,7 @@ function build_oscillating_masses(num_masses, nu, dt, N; dense = true)
     return lqdm
 end
 
-
-lqdm = build_oscillating_masses(6, 3, .1, 100; dense=true)
+lqdm = build_oscillating_masses(6, 3, .05, 100; dense=true)
 #lqdms = build_oscillating_masses(6, 3, .1, 100; dense=false)
 #sol = madnlp(lqdms)
 madnlp_options = Dict{Symbol, Any}(
@@ -187,11 +194,21 @@ madnlp_options = Dict{Symbol, Any}(
     :jacobian_constant=>true,
     :hessian_constant=>true,
     :lapack_algorithm=>MadNLP.CHOLESKY,
-    :max_iter=>30,
+    :max_iter=>50,
     :print_level=>MadNLP.DEBUG,
-    :inertia_correction_method=>MadNLP.INERTIA_FREE
+    #:inertia_correction_method=>MadNLP.INERTIA_FREE
 )
 
 #madnlp(lqdm)
 ips = MadNLP.InteriorPointSolver(lqdm, option_dict=madnlp_options)
 sol_ref = MadNLP.optimize!(ips)
+
+A = lqdm.dynamic_data.A
+B = lqdm.dynamic_data.B
+K = lqdm.dynamic_data.K
+
+AK = A + B * K
+eig = eigvals(AK)
+
+println(maximum(abs.(eig)))
+println(minimum(abs.(eig)))
