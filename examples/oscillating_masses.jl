@@ -185,7 +185,7 @@ function build_oscillating_masses(num_masses, nu, dt, N; dense = true)
     return lqdm
 end
 
-lqdm = build_oscillating_masses(6, 3, .05, 300; dense=true)
+lqdm = build_oscillating_masses(6, 3, .05, 200; dense=true)
 #lqdms = build_oscillating_masses(6, 3, .1, 100; dense=false)
 #sol = madnlp(lqdms)
 madnlp_options = Dict{Symbol, Any}(
