@@ -185,7 +185,7 @@ function build_oscillating_masses(num_masses, nu, dt, N; dense = true)
     return lqdm
 end
 
-lqdm = build_oscillating_masses(6, 3, .05, 100; dense=true)
+lqdm = build_oscillating_masses(6, 3, .05, 300; dense=true)
 #lqdms = build_oscillating_masses(6, 3, .1, 100; dense=false)
 #sol = madnlp(lqdms)
 madnlp_options = Dict{Symbol, Any}(
@@ -194,21 +194,22 @@ madnlp_options = Dict{Symbol, Any}(
     :jacobian_constant=>true,
     :hessian_constant=>true,
     :lapack_algorithm=>MadNLP.CHOLESKY,
-    :max_iter=>50,
+    :max_iter=>100,
     :print_level=>MadNLP.DEBUG,
     #:inertia_correction_method=>MadNLP.INERTIA_FREE
 )
 
-#madnlp(lqdm)
-ips = MadNLP.InteriorPointSolver(lqdm, option_dict=madnlp_options)
-sol_ref = MadNLP.optimize!(ips)
+ips1 = MadNLP.InteriorPointSolver(lqdm, option_dict = madnlp_options)
+sol_ref1 = MadNLP.optimize!(ips1)
 
-A = lqdm.dynamic_data.A
-B = lqdm.dynamic_data.B
-K = lqdm.dynamic_data.K
+madnlp_options = Dict{Symbol, Any}(
+    :kkt_system=>MadNLP.DENSE_CONDENSED_KKT_SYSTEM,
+    :linear_solver=>LapackGPUSolver,
+    :jacobian_constant=>true,
+    :hessian_constant=>true,
+    :lapack_algorithm => MadNLP.CHOLESKY,
+    :max_iter=>200
+)
 
-AK = A + B * K
-eig = eigvals(AK)
-
-println(maximum(abs.(eig)))
-println(minimum(abs.(eig)))
+ips2 = MadNLPGPU.CuInteriorPointSolver(lqdm, option_dict = madnlp_options)
+sol_ref2 = MadNLP.optimize!(ips2)
