@@ -202,6 +202,7 @@ madnlp_options = Dict{Symbol, Any}(
 ips1 = MadNLP.InteriorPointSolver(lqdm, option_dict = madnlp_options)
 sol_ref1 = MadNLP.optimize!(ips1)
 
+using MadNLPGPU
 madnlp_options = Dict{Symbol, Any}(
     :kkt_system=>MadNLP.DENSE_CONDENSED_KKT_SYSTEM,
     :linear_solver=>LapackGPUSolver,
