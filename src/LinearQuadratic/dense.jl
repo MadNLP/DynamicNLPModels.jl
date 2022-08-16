@@ -6,7 +6,7 @@ A constructor for building a `DenseLQDynamicModel <: QuadraticModels.AbstractQua
 Input data is for the problem of the form
 ```math
 minimize    \\frac{1}{2} \\sum_{i = 0}^{N-1}(s_i^T Q s_i + 2 u_i^T S^T x_i + u_i^T R u_i) + \\frac{1}{2} s_N^T Qf s_N
-subject to  s_{i+1} = A s_i + B u_i + w for i=0, 1, ..., N-1
+subject to  s_{i+1} = A s_i + B u_i + w_i for i=0, 1, ..., N-1
             u_i = Kx_i + v_i  \\forall i = 0, 1, ..., N - 1
             gl \\le E s_i + F u_i \\le gu for i = 0, 1, ..., N-1
             sl \\le s \\le su
@@ -51,7 +51,7 @@ function DenseLQDynamicModel(
     E::M  = _init_similar(Q, 0, length(s0), T),
     F::M  = _init_similar(Q, 0, size(R, 1), T),
     K::MK = nothing,
-    w::V  = _init_similar(s0, length(s0), T),
+    w::V  = _init_similar(s0, length(s0) * N, T),
     sl::V = (similar(s0) .= -Inf),
     su::V = (similar(s0) .=  Inf),
     ul::V = (similar(s0, size(R, 1)) .= -Inf),
@@ -845,8 +845,8 @@ function _build_block_matrices(
 
     for i in 1:N
         A_view = @view block_A[(1 + (i - 1) * ns):(i * ns), :]
-        LinearAlgebra.mul!(Aw, A_view, w)
         for j in (i + 1):(N + 1)
+            LinearAlgebra.mul!(Aw, A_view, w[(1 + (j - i - 1) * ns):((j - i) * ns)])
             block_Aw[(1 + (j - 1) * ns):(j * ns)] .+= Aw
         end
     end

@@ -6,7 +6,7 @@ A struct to represent the features of the optimization problem
 
 ```math
     minimize    \\frac{1}{2} \\sum_{i = 0}^{N-1}(s_i^T Q s_i + 2 u_i^T S^T x_i + u_i^T R u_i) + \\frac{1}{2} s_N^T Qf s_N
-    subject to  s_{i+1} = A s_i + B u_i + w  for i=0, 1, ..., N-1
+    subject to  s_{i+1} = A s_i + B u_i + w_i  for i=0, 1, ..., N-1
                 u_i = Kx_i + v_i  \\forall i = 0, 1, ..., N - 1
                 gl \\le E s_i + F u_i \\le gu for i = 0, 1, ..., N-1
                 sl \\le s \\le su
@@ -68,7 +68,7 @@ end
 A constructor for building an object of type `LQDynamicData` for the optimization problem
 ```math
     minimize    \\frac{1}{2} \\sum_{i = 0}^{N-1}(s_i^T Q s_i + 2 u_i^T S^T x_i + u_i^T R u_i) + \\frac{1}{2} s_N^T Qf s_N
-    subject to  s_{i+1} = A s_i + B u_i + w \\forall i=0, 1, ..., N - 1
+    subject to  s_{i+1} = A s_i + B u_i + w_i \\forall i=0, 1, ..., N - 1
                 u_i = Kx_i + v_i  \\forall i = 0, 1, ..., N - 1
                 gl \\le E s_i + F u_i \\le gu \\forall i = 0, 1, ..., N-1
                 sl \\le s \\le su
@@ -91,7 +91,7 @@ The following keyward arguments are also accepted
 - `E  = zeros(eltype(Q), 0, ns)`  : constraint matrix for state variables
 - `F  = zeros(eltype(Q), 0, nu)`  : constraint matrix for input variables
 - `K  = nothing`       : feedback gain matrix
-- `w  = zeros(eltype(Q), ns)`     : constant term for dynamic constraints
+- `w  = zeros(eltype(Q), ns * N)`     : constant term for dynamic constraints
 - `sl = fill(-Inf, ns)`: vector of lower bounds on state variables
 - `su = fill(Inf, ns)` : vector of upper bounds on state variables
 - `ul = fill(-Inf, nu)`: vector of lower bounds on input variables
@@ -112,7 +112,7 @@ function LQDynamicData(
     E::M  = _init_similar(Q, 0, length(s0), T),
     F::M  = _init_similar(Q, 0, size(R, 1), T),
     K::MK = nothing,
-    w::V  = _init_similar(s0, length(s0), T),
+    w::V  = _init_similar(s0, length(s0) * N, T),
 
     sl::V = (similar(s0) .= -Inf),
     su::V = (similar(s0) .=  Inf),
@@ -174,7 +174,7 @@ function LQDynamicData(
             error("Dimensions of K  do not match number of states and inputs")
         end
     end
-    if size(w) != size(s0)
+    if Int(size(w, 1)) != Int(size(s0, 1) * N)
         error("Dimensions of w do not match ns")
     end
 
@@ -226,27 +226,16 @@ the algebraic constraints corresponding to the input bounds
 See also `reset_s0!`
 """
 mutable struct DenseLQDynamicBlocks{T, V, M}
-    # Aw = block_matrix_A * w (result is a Vector; block_matrix A is like block_B,
-    # but with I instead of B)
-    # h  = (QB + SKB + K^T R K B + K^T S^T B)^T A + (S + K^T R)^T A
-    # h01 = A^T((Q + KTRK + KTST + SK))A where Q, K, R, S, and A are block matrices
-    # just needs to be multiplied by s0 on each side
-    # h02 = wT block_matrix_AT (Q + KTRK + KTSK + SK) A; just needs to be multiplied by s0 on right
-    # h_constant  = BT (Q + KTRK + SK + KTST) block_matrix_A w + (RK + ST)B block_matrix_A w
-    # h0_constant = wT block_matrix_AT (Q + KTRK + KTSK + SK) block_matrix_A w
-    # d  = (E + FK) A
-    # dw = (E + FK) block_matrix_A w - constant term to be subtracted from d
-    # KA = KA
     A::M
     B::M
-    Aw::V
-    h::M
-    h01::M
-    h02::V
-    h_constant::V
-    h0_constant::T
-    d::M
-    dw::V
+    Aw::V          # Aw = block_matrix_A * w (result is a Vector; block_matrix A is like block_B, but with I instead of B)
+    h::M           # h = (QB + SKB + K^T R K B + K^T S^T B)^T A + (S + K^T R)^T A
+    h01::M         # h01 = A^T((Q + KTRK + KTST + SK))A where Q, K, R, S, and A are block matrices just needs to be multiplied by s0 on each side
+    h02::V         # h02 = wT block_matrix_AT (Q + KTRK + KTSK + SK) A; just needs to be multiplied by s0 on right
+    h_constant::V  # h_constant  = BT (Q + KTRK + SK + KTST) block_matrix_A w + (RK + ST)B block_matrix_A w
+    h0_constant::T # h0_constant = wT block_matrix_AT (Q + KTRK + KTSK + SK) block_matrix_A w
+    d::M           # d = (E + FK) A
+    dw::V          # dw = (E + FK) block_matrix_A w - constant term to be subtracted from d
     KA::M
     KAw::V
 end

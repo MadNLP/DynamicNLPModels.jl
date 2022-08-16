@@ -98,7 +98,9 @@ function build_QP_JuMP_model(
 
     # Give constraints from A, B, matrices
     for s1 in NS
-        @constraint(model, [t in 0:(N - 1)], s[s1, t + 1] == sum(A[s1, s2] * s[s2, t] for s2 in NS) + sum(B[s1, u1] * u[u1, t] for u1 in NU) + w[s1])
+        for t in 0:(N - 1)
+            @constraint(model, s[s1, t + 1] == sum(A[s1, s2] * s[s2, t] for s2 in NS) + sum(B[s1, u1] * u[u1, t] for u1 in NU) + w[s1 + t * ns])
+        end
     end
 
     # Constraints for Kx + v = u

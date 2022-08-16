@@ -40,7 +40,7 @@ gu = fill(15.0, 3)
 
 S = rand(ns, nu)
 
-w = rand(0.0:.0001:.25, ns)
+w = rand(0.0:.0001:.25, ns * N)
 
 K = rand(nu, ns)
 
@@ -262,7 +262,7 @@ sl = s0 .- 1
 su = s0 .+ 1
 ul = randn(Float32,2)
 uu = ul .+ 2
-w = Float32.(rand(0.0:.0001:.25, ns))
+w = Float32.(rand(0.0:.0001:.25, ns * 10))
 
 s0 = Test.GenericArray(s0)
 A  = Test.GenericArray(A)
