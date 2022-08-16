@@ -1,7 +1,7 @@
 """
     build_QP_JuMP_model(Q,R,A,B,N;...) -> JuMP.Model(...)
-Return a `JuMP.jl` Model for the quadratic problem 
-    
+Return a `JuMP.jl` Model for the quadratic problem
+
 min 1/2 ( sum_{i=1}^{N-1} s_i^T Q s + sum_{i=1}^{N-1} u^T R u + s_N^T Qf s_n  )
 s.t. s_{i+1} = As_i + Bs_i for i = 1,..., N-1
 Optional Arguments
@@ -15,8 +15,8 @@ Optional Arguments
 """
 function build_QP_JuMP_model(
         Q,R,A,B, N;
-        s0 = [],
-        sl = [], 
+        s0 = zeros(size(Q, 1)),
+        sl = [],
         su = [],
         ul = [],
         uu = [],
@@ -26,7 +26,8 @@ function build_QP_JuMP_model(
         gl = [],
         gu = [],
         S  = zeros(size(Q, 1), size(R, 1)),
-        K  = zeros(size(R, 1), size(Q, 1))
+        K  = zeros(size(R, 1), size(Q, 1)),
+        w  = zeros(size(Q, 1))
         )
 
     ns = size(Q,1) # Number of states
@@ -41,11 +42,11 @@ function build_QP_JuMP_model(
     model = Model(MadNLP.Optimizer) # define model
 
 
-    @variable(model, s[NS, 0:N])     # define states 
+    @variable(model, s[NS, 0:N])     # define states
     @variable(model, u[NU, 0:(N-1)]) # define inputs
 
     if !iszero(K)
-        @variable(model, v[NU, 0:(N-1)]) 
+        @variable(model, v[NU, 0:(N-1)])
     end
 
 
@@ -93,11 +94,15 @@ function build_QP_JuMP_model(
             JuMP.fix(s[i,0], s0[i])
         end
     end
-    
+
 
     # Give constraints from A, B, matrices
-    @constraint(model, [t in 0:(N - 1), s1 in NS], s[s1, t + 1] == sum(A[s1, s2] * s[s2, t] for s2 in NS) + sum(B[s1, u1] * u[u1, t] for u1 in NU) )
-    
+    for s1 in NS
+        for t in 0:(N - 1)
+            @constraint(model, s[s1, t + 1] == sum(A[s1, s2] * s[s2, t] for s2 in NS) + sum(B[s1, u1] * u[u1, t] for u1 in NU) + w[s1 + t * ns])
+        end
+    end
+
     # Constraints for Kx + v = u
     if !iszero(K)
         for u1 in NU
@@ -114,8 +119,8 @@ function build_QP_JuMP_model(
     end
 
     # Give objective function as xT Q x + uT R u where x is summed over T and u is summed over T-1
-    @objective(model,Min,  sum( 1/2 * Q[s1, s2]*s[s1,t]*s[s2,t] for s1 in NS, s2 in NS, t in 0:(N-1)) + 
-            sum( 1/2 * R[u1,u2] * u[u1, t] * u[u2,t] for t in 0:(N-1) , u1 in NU, u2 in NU) + 
+    @objective(model,Min,  sum( 1/2 * Q[s1, s2]*s[s1,t]*s[s2,t] for s1 in NS, s2 in NS, t in 0:(N-1)) +
+            sum( 1/2 * R[u1,u2] * u[u1, t] * u[u2,t] for t in 0:(N-1) , u1 in NU, u2 in NU) +
             sum( 1/2 * Qf[s1,s2] * s[s1,N] * s[s2, N]  for s1 in NS, s2 in NS) +
             sum( S[s1, u1] * s[s1, t] * u[u1, t] for s1 in NS, u1 in NU, t in 0:(N-1))
             )

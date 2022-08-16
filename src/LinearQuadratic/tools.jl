@@ -51,8 +51,9 @@ function get_u(
     nu   = dnlp.nu
     K    = dnlp.K
 
-    block_A = lqdm.blocks.A
-    block_B = lqdm.blocks.B
+    block_A  = lqdm.blocks.A
+    block_B  = lqdm.blocks.B
+    block_Aw = lqdm.blocks.Aw
 
     v = solver_status.solution
 
@@ -74,6 +75,7 @@ function get_u(
 
     LinearAlgebra.mul!(As0, block_A, dnlp.s0)
     LinearAlgebra.axpy!(1, As0, s)
+    LinearAlgebra.axpy!(1, block_Aw, s)
 
     Ks = _init_similar(dnlp.s0, size(K, 1), T)
     u = copy(v)
@@ -138,8 +140,9 @@ function get_s(
     ns   = dnlp.ns
     nu   = dnlp.nu
 
-    block_A = lqdm.blocks.A
-    block_B = lqdm.blocks.B
+    block_A  = lqdm.blocks.A
+    block_B  = lqdm.blocks.B
+    block_Aw = lqdm.blocks.Aw
 
     v = solver_status.solution
 
@@ -161,6 +164,7 @@ function get_s(
 
     LinearAlgebra.mul!(As0, block_A, dnlp.s0)
     LinearAlgebra.axpy!(1, As0, s)
+    LinearAlgebra.axpy!(1, block_Aw, s)
 
     return s
 end
@@ -262,7 +266,7 @@ function NLPModels.hess_coord!(
     x::AbstractVector{T},
     vals::AbstractVector{T};
     obj_weight::Real = one(eltype(x)),
-) where {T, V, M1 <: SparseMatrixCSC, M2 <: SparseMatrixCSC, M3 <: Matrix}
+) where {T, V, M1 <: SparseMatrixCSC, M2 <: SparseMatrixCSC, M3 <: AbstractMatrix}
     NLPModels.increment!(qp, :neval_hess)
     fill_coord!(qp.data.H, vals, obj_weight)
     return vals
@@ -764,10 +768,15 @@ function reset_s0!(
     nc = size(E, 1)
 
     # Get matrices for multiplying by s0
-    block_A  = dense_blocks.A
-    block_h  = dense_blocks.h
-    block_h0 = dense_blocks.h0
-    block_d  = dense_blocks.d
+    block_A     = dense_blocks.A
+    block_Aw    = dense_blocks.Aw
+    block_h     = dense_blocks.h
+    block_h0    = dense_blocks.h01
+    block_d     = dense_blocks.d
+    block_dw    = dense_blocks.dw
+    block_h02   = dense_blocks.h02
+    h_constant  = dense_blocks.h_constant
+    h0_constant = dense_blocks.h0_constant
 
     lcon = lqdm.meta.lcon
     ucon = lqdm.meta.ucon
@@ -794,19 +803,26 @@ function reset_s0!(
     lcon[1:nc * N] .= dl
     ucon[1:nc * N] .= du
 
+    lcon[1:nc * N] .-= block_dw
+    ucon[1:nc * N] .-= block_dw
+
     LinearAlgebra.mul!(As0, block_A, s0)
 
     # reset linear term
     LinearAlgebra.mul!(lqdm.data.c, block_h, s0)
+    lqdm.data.c += h_constant
 
     # reset constant term
     LinearAlgebra.mul!(Qs0, block_h0, s0)
     lqdm.data.c0 = LinearAlgebra.dot(s0, Qs0) / T(2)
 
+    lqdm.data.c0 += h0_constant
+    lqdm.data.c0 += LinearAlgebra.dot(s0, block_h02)
+
     for i in 1:N
         # Reset bounds on constraints from state variable bounds
-        lcon[(1 + nc * N + nsc * (i - 1)):(nc * N + nsc * i)] .= sl .- As0[(1 + ns * i):(ns * (i + 1))][bool_vec_s]
-        ucon[(1 + nc * N + nsc * (i - 1)):(nc * N + nsc * i)] .= su .- As0[(1 + ns * i):(ns * (i + 1))][bool_vec_s]
+        lcon[(1 + nc * N + nsc * (i - 1)):(nc * N + nsc * i)] .= sl .- As0[(1 + ns * i):(ns * (i + 1))][bool_vec_s] .- block_Aw[(1 + ns * i):((i + 1) * ns)][bool_vec_s]
+        ucon[(1 + nc * N + nsc * (i - 1)):(nc * N + nsc * i)] .= su .- As0[(1 + ns * i):(ns * (i + 1))][bool_vec_s] .- block_Aw[(1 + ns * i):((i + 1) * ns)][bool_vec_s]
     end
 end
 
@@ -832,11 +848,17 @@ function reset_s0!(
     nc = size(E, 1)
 
     # Get matrices for multiplying by s0
-    block_A  = dense_blocks.A
-    block_h  = dense_blocks.h
-    block_h0 = dense_blocks.h0
-    block_d  = dense_blocks.d
-    block_KA = dense_blocks.KA
+    block_A     = dense_blocks.A
+    block_Aw    = dense_blocks.Aw
+    block_h     = dense_blocks.h
+    block_h0    = dense_blocks.h01
+    block_d     = dense_blocks.d
+    block_dw    = dense_blocks.dw
+    block_KA    = dense_blocks.KA
+    block_KAw   = dense_blocks.KAw
+    block_h02   = dense_blocks.h02
+    h_constant  = dense_blocks.h_constant
+    h0_constant = dense_blocks.h0_constant
 
     lcon = lqdm.meta.lcon
     ucon = lqdm.meta.ucon
@@ -844,6 +866,7 @@ function reset_s0!(
     # Reset s0
     lqdm.dynamic_data.s0 .= s0
 
+    lqdm.data.c0 += LinearAlgebra.dot(s0, block_h02)
     As0  = _init_similar(s0, ns * (N + 1), T)
     Qs0  = _init_similar(s0, ns, T)
     KAs0 = _init_similar(s0, nu * N, T)
@@ -870,22 +893,30 @@ function reset_s0!(
     lcon[1:nc * N] .= dl
     ucon[1:nc * N] .= du
 
+    lcon[1:nc * N] .-= block_dw
+    ucon[1:nc * N] .-= block_dw
+
     LinearAlgebra.mul!(As0, block_A, s0)
     LinearAlgebra.mul!(KAs0, block_KA, s0)
+
     # reset linear term
     LinearAlgebra.mul!(lqdm.data.c, block_h, s0)
+    lqdm.data.c += h_constant
 
     # reset constant term
     LinearAlgebra.mul!(Qs0, block_h0, s0)
     lqdm.data.c0 = LinearAlgebra.dot(s0, Qs0) / T(2)
 
+    lqdm.data.c0 += h0_constant
+    lqdm.data.c0 += LinearAlgebra.dot(s0, block_h02)
+
     for i in 1:N
         # Reset bounds on constraints from state variable bounds
-        lcon[(1 + nc * N + nsc * (i - 1)):(nc * N + nsc * i)] .= sl .- As0[(1 + ns * i):(ns * (i + 1))][bool_vec_s]
-        ucon[(1 + nc * N + nsc * (i - 1)):(nc * N + nsc * i)] .= su .- As0[(1 + ns * i):(ns * (i + 1))][bool_vec_s]
+        lcon[(1 + nc * N + nsc * (i - 1)):(nc * N + nsc * i)] .= sl .- As0[(1 + ns * i):(ns * (i + 1))][bool_vec_s] .- block_Aw[(1 + i * ns):((i + 1) * ns)][bool_vec_s]
+        ucon[(1 + nc * N + nsc * (i - 1)):(nc * N + nsc * i)] .= su .- As0[(1 + ns * i):(ns * (i + 1))][bool_vec_s] .- block_Aw[(1 + i * ns):((i + 1) * ns)][bool_vec_s]
 
         # Reset bounds on constraints from input variable bounds
-        lcon[(1 + (nc + nsc) * N + nuc * (i - 1)):((nc + nsc) * N + nuc * i)] .= ul .- KAs0[(1 + nu * (i - 1)):(nu * i)][bool_vec_u]
-        ucon[(1 + (nc + nsc) * N + nuc * (i - 1)):((nc + nsc) * N + nuc * i)] .= uu .- KAs0[(1 + nu * (i - 1)):(nu * i)][bool_vec_u]
+        lcon[(1 + (nc + nsc) * N + nuc * (i - 1)):((nc + nsc) * N + nuc * i)] .= ul .- KAs0[(1 + nu * (i - 1)):(nu * i)][bool_vec_u] .- block_KAw[(1 + nu * (i - 1)):(nu * i)][bool_vec_u]
+        ucon[(1 + (nc + nsc) * N + nuc * (i - 1)):((nc + nsc) * N + nuc * i)] .= uu .- KAs0[(1 + nu * (i - 1)):(nu * i)][bool_vec_u] .- block_KAw[(1 + nu * (i - 1)):(nu * i)][bool_vec_u]
     end
 end
