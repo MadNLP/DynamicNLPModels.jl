@@ -39,7 +39,7 @@ Jacobian matrix is stored. If `implicit = true`, only the first `nu` columns of 
 """
 function DenseLQDynamicModel(
     dnlp::LQDynamicData{T, V, M};
-    implicit = false,
+    implicit::Bool = false,
 ) where {
     T,
     V <: AbstractVector{T},
