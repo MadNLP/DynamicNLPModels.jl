@@ -1,4 +1,4 @@
-abstract type AbstractLQDynData{T,V} end
+abstract type AbstractLQDynData{T, V} end
 @doc raw"""
     LQDynamicData{T,V,M,MK} <: AbstractLQDynData{T,V}
 
@@ -41,7 +41,7 @@ Attributes include:
 
 see also `LQDynamicData(s0, A, B, Q, R, N; ...)`
 """
-struct LQDynamicData{T, V, M, MK} <: AbstractLQDynData{T,V}
+struct LQDynamicData{T, V, M, MK} <: AbstractLQDynData{T, V}
     s0::V
     A::M
     B::M
@@ -111,21 +111,24 @@ function LQDynamicData(
     Q::M,
     R::M,
     N;
-
     Qf::M = Q,
-    S::M  = _init_similar(Q, size(Q, 1), size(R, 1), T),
-    E::M  = _init_similar(Q, 0, length(s0), T),
-    F::M  = _init_similar(Q, 0, size(R, 1), T),
+    S::M = _init_similar(Q, size(Q, 1), size(R, 1), T),
+    E::M = _init_similar(Q, 0, length(s0), T),
+    F::M = _init_similar(Q, 0, size(R, 1), T),
     K::MK = nothing,
-    w::V  = _init_similar(s0, length(s0) * N, T),
-
+    w::V = _init_similar(s0, length(s0) * N, T),
     sl::V = (similar(s0) .= -Inf),
-    su::V = (similar(s0) .=  Inf),
+    su::V = (similar(s0) .= Inf),
     ul::V = (similar(s0, size(R, 1)) .= -Inf),
-    uu::V = (similar(s0, size(R, 1)) .=  Inf),
+    uu::V = (similar(s0, size(R, 1)) .= Inf),
     gl::V = (similar(s0, size(E, 1)) .= -Inf),
-    gu::V = (similar(s0, size(F, 1)) .= Inf)
-) where {T,V <: AbstractVector{T}, M <: AbstractMatrix{T}, MK <: Union{Nothing, AbstractMatrix{T}}}
+    gu::V = (similar(s0, size(F, 1)) .= Inf),
+) where {
+    T,
+    V <: AbstractVector{T},
+    M <: AbstractMatrix{T},
+    MK <: Union{Nothing, AbstractMatrix{T}},
+}
 
     if size(Q, 1) != size(Q, 2)
         error("Q matrix is not square")
@@ -175,7 +178,7 @@ function LQDynamicData(
         error("Dimensions of S do not match dimensions of Q and R")
     end
     if K != nothing
-        if size(K, 1) != size(R, 1) || size(K, 2) != size(Q,1)
+        if size(K, 1) != size(R, 1) || size(K, 2) != size(Q, 1)
             error("Dimensions of K  do not match number of states and inputs")
         end
     end
@@ -184,19 +187,36 @@ function LQDynamicData(
     end
 
 
-    ns = size(Q,1)
-    nu = size(R,1)
+    ns = size(Q, 1)
+    nu = size(R, 1)
 
     LQDynamicData{T, V, M, MK}(
-        s0, A, B, Q, R, N,
-        Qf, S, ns, nu, E, F, K, w,
-        sl, su, ul, uu, gl, gu
+        s0,
+        A,
+        B,
+        Q,
+        R,
+        N,
+        Qf,
+        S,
+        ns,
+        nu,
+        E,
+        F,
+        K,
+        w,
+        sl,
+        su,
+        ul,
+        uu,
+        gl,
+        gu,
     )
 end
 
-abstract type AbstractDynamicModel{T,V} <: QuadraticModels.AbstractQuadraticModel{T, V} end
+abstract type AbstractDynamicModel{T, V} <: QuadraticModels.AbstractQuadraticModel{T, V} end
 
-struct SparseLQDynamicModel{T, V, M1, M2, M3, MK} <:  AbstractDynamicModel{T,V}
+struct SparseLQDynamicModel{T, V, M1, M2, M3, MK} <: AbstractDynamicModel{T, V}
     meta::NLPModels.NLPModelMeta{T, V}
     counters::NLPModels.Counters
     data::QuadraticModels.QPData{T, V, M1, M2}
@@ -245,7 +265,7 @@ mutable struct DenseLQDynamicBlocks{T, V, M}
     KAw::V
 end
 
-struct DenseLQDynamicModel{T, V, M1, M2, M3, M4, MK} <:  AbstractDynamicModel{T,V}
+struct DenseLQDynamicModel{T, V, M1, M2, M3, M4, MK} <: AbstractDynamicModel{T, V}
     meta::NLPModels.NLPModelMeta{T, V}
     counters::NLPModels.Counters
     data::QuadraticModels.QPData{T, V, M1, M2}
@@ -304,16 +324,19 @@ end
 
 
 function _init_similar(mat, dim1::Number, dim2::Number, dim3::Number, T::DataType)
-    new_mat = similar(mat, dim1, dim2, dim3); fill!(new_mat, zero(T))
+    new_mat = similar(mat, dim1, dim2, dim3)
+    fill!(new_mat, zero(T))
     return new_mat
 end
 
-function _init_similar(mat, dim1::Number, dim2::Number, T=eltype(mat))
-    new_mat = similar(mat, dim1, dim2); fill!(new_mat, zero(T))
+function _init_similar(mat, dim1::Number, dim2::Number, T = eltype(mat))
+    new_mat = similar(mat, dim1, dim2)
+    fill!(new_mat, zero(T))
     return new_mat
 end
 
-function _init_similar(mat, dim1::Number, T=eltype(mat))
-    new_mat = similar(mat, dim1); fill!(new_mat, zero(T))
+function _init_similar(mat, dim1::Number, T = eltype(mat))
+    new_mat = similar(mat, dim1)
+    fill!(new_mat, zero(T))
     return new_mat
 end
