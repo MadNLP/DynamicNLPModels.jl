@@ -1,27 +1,32 @@
-
-"""
+@doc raw"""
 SparseLQDynamicModel(dnlp::LQDynamicData)    -> SparseLQDynamicModel
 SparseLQDynamicModel(s0, A, B, Q, R, N; ...) -> SparseLQDynamicModel
 A constructor for building a `SparseLQDynamicModel <: QuadraticModels.AbstractQuadraticModel`
 Input data is for the problem of the form
 ```math
-minimize    \\frac{1}{2} \\sum_{i = 0}^{N-1}(s_i^T Q s_i + 2 u_i^T S^T x_i + u_i^T R u_i) + \\frac{1}{2} s_N^T Qf s_N
-subject to  s_{i+1} = A s_i + B u_i + w_i for i=0, 1, ..., N-1
-            u_i = Kx_i + v_i  \\forall i = 0, 1, ..., N - 1
-            gl \\le E s_i + F u_i \\le gu for i = 0, 1, ..., N-1
-            sl \\le s \\le su
-            ul \\le u \\le uu
-            s_0 = s0
+    \begin{aligned}
+        \min \frac{1}{2} &\; \sum_{i = 0}^{N - 1}(s_i^T Q s_i + 2 u_i^T S^T x_i + u_i^T R u_i) + \frac{1}{2} s_N^T Q_f s_N \\
+        \textrm{s.t.} &\; s_{i+1} = A s_i + B u_i + w_i  \quad \forall i=0, 1, ..., N-1 \\
+        &\; u_i = Kx_i + v_i \quad  \forall i = 0, 1, ..., N - 1 \\
+        &\; gl \le E s_i + F u_i \le gu \quad \forall i = 0, 1, ..., N-1\\
+        &\; sl \le s \le su \\
+        &\; ul \le u \le uu \\
+        &\; s_0 = s0
+    \end{aligned}
 ```
+
 ---
 
 Data is converted to the form
 
 ```math
-minimize    \\frac{1}{2} z^T H z
-subject to  lcon \\le Jz \\le ucon
-            lvar \\le z \\le uvar
+\begin{aligned}
+    \min &\;    \frac{1}{2} z^T H z \\
+    \textrm{s.t.} &\;  \textrm{lcon} \le Jz \le \textrm{ucon}\\
+    &\; \textrm{lvar} \le z \le \textrm{uvar}
+\end{aligned}
 ```
+
 Resulting `H` and `J` matrices are stored as `QuadraticModels.QPData` within the `SparseLQDynamicModel` struct and
 variable and constraint limits are stored within `NLPModels.NLPModelMeta`
 
@@ -602,13 +607,11 @@ function _build_sparse_lq_dynamic_model(dnlp::LQDynamicData{T, V, M, MK}) where 
     )
 end
 
-"""
-    _set_sparse_H!(H_colptr, H_rowval, H_nzval, Q, R, N; Qf = Q, S = zeros(T, size(Q, 1), size(R, 1))
 
-set the data needed to build a SparseArrays.SparseMatrixCSC matrix. H_colptr, H_rowval, and H_nzval
-are set so that they can be passed to SparseMatrixCSC() to obtain the `H` matrix such that
- z^T H z = sum_{i=1}^{N-1} s_i^T Q s + sum_{i=1}^{N-1} u^T R u + s_N^T Qf s_n .
-"""
+#set the data needed to build a SparseArrays.SparseMatrixCSC matrix. H_colptr, H_rowval, and H_nzval
+#are set so that they can be passed to SparseMatrixCSC() to obtain the `H` matrix such that
+# z^T H z = sum_{i=1}^{N-1} s_i^T Q s + sum_{i=1}^{N-1} u^T R u + s_N^T Qf s_n .
+
 function _set_sparse_H!(
     H_colptr, H_rowval, H_nzval,
     Q::M, R::M, N;
@@ -702,20 +705,17 @@ function _set_sparse_H!(
     end
 end
 
-"""
-    _set_sparse_J!(J_colptr, J_rowval, J_nzval, A, B, E, F, K, bool_vec, N, nb)
-    _set_sparse_J!(J_colptr, J_rowval, J_nzval, A, B, E, F, K, N)
 
-set the data needed to build a SparseArrays.SparseMatrixCSC matrix. J_colptr, J_rowval, and J_nzval
-are set so that they can be passed to SparseMatrixCSC() to obtain the Jacobian, `J`. The Jacobian
-contains the data for the following constraints:
+# set the data needed to build a SparseArrays.SparseMatrixCSC matrix. J_colptr, J_rowval, and J_nzval
+# are set so that they can be passed to SparseMatrixCSC() to obtain the Jacobian, `J`. The Jacobian
+# contains the data for the following constraints:
 
-As_i + Bu_i = s_{i + 1}
-gl <= Es_i + Fu_i <= get_u
+# As_i + Bu_i = s_{i + 1}
+# gl <= Es_i + Fu_i <= get_u
 
-If `K` is defined, then this matrix also contains the constraints
-ul <= Kx_i + v_i <= uu
-"""
+# If `K` is defined, then this matrix also contains the constraints
+# ul <= Kx_i + v_i <= uu
+
 function _set_sparse_J!(
     J_colptr, J_rowval, J_nzval,
     A, B, E, F, K::MK, bool_vec,

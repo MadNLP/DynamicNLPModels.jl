@@ -176,7 +176,7 @@ for field in fieldnames(LQDynamicData)
             $($method)(LQDynamicData)
             $($method)(SparseLQDynamicModel)
             $($method)(DenseLQDynamicModel)
-        Return the value $($(QuoteNode(field))) from LQDynamicData or SparseLQDynamicModel.dynamic_data or DenseLQDynamicModel.dynamic_data
+        Return the value of $($(QuoteNode(field))) from `LQDynamicData` or `SparseLQDynamicModel.dynamic_data` or `DenseLQDynamicModel.dynamic_data`
         """
         $method(dyn_data::LQDynamicData) = getproperty(dyn_data, $(QuoteNode(field)))
     end
@@ -192,7 +192,7 @@ for field in [:A, :B, :Q, :R, :Qf, :E, :F, :S, :K]
             $($method)(LQDynamicData, row, col, val)
             $($method)(SparseLQDynamicModel, row, col, val)
             $($method)(DenseLQDynamicModel, row, col, val)
-        Set the value of entry $($(QuoteNode(field)))[row, col] to val for LQDynamicData, SparseLQDynamicModel.dynamic_data, or DenseLQDynamicModel.dynamic_data
+        Set the value of entry $($(QuoteNode(field)))[row, col] to val for `LQDynamicData`, `SparseLQDynamicModel.dynamic_data`, or `DenseLQDynamicModel.dynamic_data`
         """
         $method(dyn_data::LQDynamicData, row, col, val) = (dyn_data.$field[row, col] = val)
     end
@@ -208,7 +208,7 @@ for field in [:s0, :sl, :su, :ul, :uu, :gl, :gu]
             $($method)(LQDynamicData, index, val)
             $($method)(SparseLQDynamicModel, index, val)
             $($method)(DenseLQDynamicModel, index, val)
-        Set the value of entry $($(QuoteNode(field)))[index] to val for LQDynamicData, SparseLQDynamicModel.dynamic_data, or DenseLQDynamicModel.dynamic_data
+        Set the value of entry $($(QuoteNode(field)))[index] to val for `LQDynamicData`, `SparseLQDynamicModel.dynamic_data`, or `DenseLQDynamicModel.dynamic_data`
         """
         $method(dyn_data::LQDynamicData, index, val) = (dyn_data.$field[index] = val)
     end

@@ -1,25 +1,28 @@
 abstract type AbstractLQDynData{T,V} end
-"""
+@doc raw"""
     LQDynamicData{T,V,M,MK} <: AbstractLQDynData{T,V}
 
 A struct to represent the features of the optimization problem
 
 ```math
-    minimize    \\frac{1}{2} \\sum_{i = 0}^{N-1}(s_i^T Q s_i + 2 u_i^T S^T x_i + u_i^T R u_i) + \\frac{1}{2} s_N^T Qf s_N
-    subject to  s_{i+1} = A s_i + B u_i + w_i  for i=0, 1, ..., N-1
-                u_i = Kx_i + v_i  \\forall i = 0, 1, ..., N - 1
-                gl \\le E s_i + F u_i \\le gu for i = 0, 1, ..., N-1
-                sl \\le s \\le su
-                ul \\le u \\le uu
-                s_0 = s0
+    \begin{aligned}
+        \min \frac{1}{2} &\; \sum_{i = 0}^{N - 1}(s_i^T Q s_i + 2 u_i^T S^T x_i + u_i^T R u_i) + \frac{1}{2} s_N^T Q_f s_N \\
+        \textrm{s.t.} &\; s_{i+1} = A s_i + B u_i + w_i  \quad \forall i=0, 1, ..., N-1 \\
+        &\; u_i = Kx_i + v_i \quad  \forall i = 0, 1, ..., N - 1 \\
+        &\; g^l \le E s_i + F u_i \le g^u \quad \forall i = 0, 1, ..., N-1\\
+        &\; s^l \le s \le s^u \\
+        &\; u^l \le u \le u^u \\
+        &\; s_0 = s0
+    \end{aligned}
 ```
+
 ---
 Attributes include:
 - `s0`: initial state of system
 - `A` : constraint matrix for system states
 - `B` : constraint matrix for system inputs
-- `Q` : objective function matrix for system states from 1:(N-1)
-- `R` : objective function matrix for system inputs from 1:(N-1)
+- `Q` : objective function matrix for system states from 0:(N-1)
+- `R` : objective function matrix for system inputs from 0:(N-1)
 - `N` : number of time steps
 - `Qf`: objective function matrix for system state at time N
 - `S` : objective function matrix for system states and inputs
@@ -63,24 +66,26 @@ struct LQDynamicData{T, V, M, MK} <: AbstractLQDynData{T,V}
     gu::V
 end
 
-"""
+@doc raw"""
     LQDynamicData(s0, A, B, Q, R, N; ...) -> LQDynamicData{T, V, M, MK}
 A constructor for building an object of type `LQDynamicData` for the optimization problem
 ```math
-    minimize    \\frac{1}{2} \\sum_{i = 0}^{N-1}(s_i^T Q s_i + 2 u_i^T S^T x_i + u_i^T R u_i) + \\frac{1}{2} s_N^T Qf s_N
-    subject to  s_{i+1} = A s_i + B u_i + w_i \\forall i=0, 1, ..., N - 1
-                u_i = Kx_i + v_i  \\forall i = 0, 1, ..., N - 1
-                gl \\le E s_i + F u_i \\le gu \\forall i = 0, 1, ..., N-1
-                sl \\le s \\le su
-                ul \\le u \\le uu
-                s_0 = s0
+    \begin{aligned}
+        \min \frac{1}{2} &\; \sum_{i = 0}^{N - 1}(s_i^T Q s_i + 2 u_i^T S^T x_i + u_i^T R u_i) + \frac{1}{2} s_N^T Q_f s_N \\
+        \textrm{s.t.} &\; s_{i+1} = A s_i + B u_i + w_i  \quad \forall i=0, 1, ..., N-1 \\
+        &\; u_i = Kx_i + v_i \quad  \forall i = 0, 1, ..., N - 1 \\
+        &\; gl \le E s_i + F u_i \le gu \quad \forall i = 0, 1, ..., N-1\\
+        &\; sl \le s \le su \\
+        &\; ul \le u \le uu \\
+        &\; s_0 = s0
+    \end{aligned}
 ```
 ---
 - `s0`: initial state of system
 - `A` : constraint matrix for system states
 - `B` : constraint matrix for system inputs
-- `Q` : objective function matrix for system states from 1:(N-1)
-- `R` : objective function matrix for system inputs from 1:(N-1)
+- `Q` : objective function matrix for system states from 0:(N-1)
+- `R` : objective function matrix for system inputs from 0:(N-1)
 - `N` : number of time steps
 The following attributes of the `LQDynamicData` type are detected automatically from the length of s0 and size of R
 - `ns`: number of state variables
@@ -201,25 +206,25 @@ end
 """
 Struct containing block matrices used for creating and resetting the `DenseLQDynamicModel`. A and B matrices are given in part by
 Jerez, Kerrigan, and Constantinides in section 4 of "A sparse and condensed QP formulation for predictive control of LTI systems"
-(doi:10.1016/j.automatica.2012.03.010). States are eliminated by the equation  x = Ax_0 + Bu + \\hat{A}w where  x = [x_0^T, x_1^T, ..., x_N^T]
-and u = [u_0^T, u_1^T, ..., u_{N-1}^T]
+(doi:10.1016/j.automatica.2012.03.010). States are eliminated by the equation  ``x = Ax_0 + Bu + \\hat{A}w`` where  ``x = [x_0^T, x_1^T, ..., x_N^T]``
+and ``u = [u_0^T, u_1^T, ..., u_{N-1}^T]``
 
 ---
-- `A`  : block A matrix given by Jerez et al. with ns(N + 1) rows and ns columns
-- `B`  : block B matrix given by Jerez et al. with ns(N) rows and nu columns
-- `Aw` : length ns(N + 1) vector corresponding to the linear term of the dynamic constraints
-- `h`  : nu(N) x ns matrix for building the linear term of the objective function. Just needs to be
+- `A`  : block A matrix given by Jerez et al. with ``n_s(N + 1)`` rows and ns columns
+- `B`  : block B matrix given by Jerez et al. with ``n_s(N)`` rows and nu columns
+- `Aw` : length ``n_s(N + 1)`` vector corresponding to the linear term of the dynamic constraints
+- `h`  : ``n_u(N) \\times n_s`` matrix for building the linear term of the objective function. Just needs to be
 multiplied by `s0`.
 - `h01`: ns x ns matrix for building the constant term fo the objective function. This can be found by
-taking  s_0^T h01 s_0
+taking  ``s_0^T``  `h01`  ``s_0``
 - `h02`: similar to `h01`, but one side is multiplied by `Aw` rather than by `As0`. This will just
 be multiplied by `s0` once
 - `h_constant` : linear term in the objective function that arises from `Aw`. Not a function of `s0`
 - `h0_constant`: constant term in the objective function that arises from `Aw`. Not a function of `s0`
-- `d`  : length nc(N) term for the constraint bounds corresponding to `E` and `F`. Must be multiplied by `s0` and
+- `d`  : length ``n_c(N)`` term for the constraint bounds corresponding to `E` and `F`. Must be multiplied by `s0` and
 subtracted from `gl` and `gu`. Equal to the blocks (E + FK) A (see Jerez et al.)
-- `dw` : length nc(N) term for the constraint bounds that arises from `w`. Equal to the blocks (E + FK) Aw
-- `KA` : size nu(N) x ns matrix. Needs to be multiplied by `s0` and subtracted from `ul` and `uu` to update
+- `dw` : length ``n_c(N)`` term for the constraint bounds that arises from `w`. Equal to the blocks (E + FK) Aw
+- `KA` : size ``n_u(N)`` x ns matrix. Needs to be multiplied by `s0` and subtracted from `ul` and `uu` to update
 the algebraic constraints corresponding to the input bounds
 - `KAw`: similar to `KA`, but it is multiplied by Aw rather than A
 
@@ -253,7 +258,7 @@ end
 
 Struct for storing the implicit Jacobian matrix. All data for the Jacobian can be stored
 in the first `nu` columns of `J`. This struct contains the needed data and storage arrays for
-calculating `Jx`, `J^T x`, and `J^T Sigma J`. `Jx` and `J^T x` are performed through extensions
+calculating ``Jx``, ``J^T x``, and ``J^T \\Sigma J``. ``Jx`` and ``J^T x`` are performed through extensions
 to `LinearAlgebra.mul!()`.
 
 ---

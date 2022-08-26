@@ -1,26 +1,32 @@
-"""
-DenseLQDynamicModel(dnlp::LQDynamicData; implicit = false)    -> DenseLQDynamicModel
-DenseLQDynamicModel(s0, A, B, Q, R, N; implicit = false ...) -> DenseLQDynamicModel
+@doc raw"""
+    DenseLQDynamicModel(dnlp::LQDynamicData; implicit = false)    -> DenseLQDynamicModel
+    DenseLQDynamicModel(s0, A, B, Q, R, N; implicit = false ...) -> DenseLQDynamicModel
+
 A constructor for building a `DenseLQDynamicModel <: QuadraticModels.AbstractQuadraticModel`
 
 Input data is for the problem of the form
 ```math
-minimize    \\frac{1}{2} \\sum_{i = 0}^{N-1}(s_i^T Q s_i + 2 u_i^T S^T x_i + u_i^T R u_i) + \\frac{1}{2} s_N^T Qf s_N
-subject to  s_{i+1} = A s_i + B u_i + w_i for i=0, 1, ..., N-1
-            u_i = Kx_i + v_i  \\forall i = 0, 1, ..., N - 1
-            gl \\le E s_i + F u_i \\le gu for i = 0, 1, ..., N-1
-            sl \\le s \\le su
-            ul \\le u \\le uu
-            s_0 = s0
+    \begin{aligned}
+        \min \frac{1}{2} &\; \sum_{i = 0}^{N - 1}(s_i^T Q s_i + 2 u_i^T S^T x_i + u_i^T R u_i) + \frac{1}{2} s_N^T Q_f s_N \\
+        \textrm{s.t.} &\; s_{i+1} = A s_i + B u_i + w_i  \quad \forall i=0, 1, ..., N-1 \\
+        &\; u_i = Kx_i + v_i \quad  \forall i = 0, 1, ..., N - 1 \\
+        &\; gl \le E s_i + F u_i \le gu \quad \forall i = 0, 1, ..., N-1\\
+        &\; sl \le s \le su \\
+        &\; ul \le u \le uu \\
+        &\; s_0 = s0
+    \end{aligned}
 ```
+
 ---
 
 Data is converted to the form
 
 ```math
-minimize    \\frac{1}{2} u^T H u + h^T u + h0
-subject to  Jz \\le g
-            ul \\le u \\le uu
+\begin{aligned}
+    \min &\;    \frac{1}{2} z^T H z \\
+    \textrm{s.t.} &\;  \textrm{lcon} \le Jz \le \textrm{ucon}\\
+    &\; \textrm{lvar} \le z \le \textrm{uvar}
+\end{aligned}
 ```
 
 Resulting `H`, `J`, `h`, and `h0` matrices are stored within `QuadraticModels.QPData` as `H`, `A`, `c`, and `c0` attributes respectively

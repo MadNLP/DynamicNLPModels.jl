@@ -1,11 +1,10 @@
 using DynamicNLPModels, Random, LinearAlgebra, SparseArrays
 using MadNLP, QuadraticModels, MadNLPGPU, CUDA, NLPModels
 
-include("build_thinplate.jl")
-
+# Extend MadNLP functions
 function MadNLP.jac_dense!(nlp::DenseLQDynamicModel{T, V, M1, M2, M3}, x, jac) where {T, V, M1<: AbstractMatrix, M2 <: AbstractMatrix, M3 <: AbstractMatrix}
     NLPModels.increment!(nlp, :neval_jac)
-    
+
     J = nlp.data.A
     copyto!(jac, J)
 end
@@ -16,32 +15,43 @@ function MadNLP.hess_dense!(nlp::DenseLQDynamicModel{T, V, M1, M2, M3}, x, w1l, 
     copyto!(hess, H)
 end
 
-# Define attributes of 1 D heat transfer model
-N  = 10
-ns = 5
-nu = 5
+# Time horizon
+N  = 3
 
-function dfunc(i,j)
-    return 100 * sin(2 * pi * (4 * i / N - 12 * j / ns)) + 400
-end
+# generate random Q, R, A, and B matrices
+Random.seed!(10)
+Q_rand = Random.rand(2, 2)
+Q = Q_rand * Q_rand' + I
+R_rand   = Random.rand(1, 1)
+R    = R_rand * R_rand' + I
 
-d = [dfunc(i, j) for i in 1:(N + 1), j in 1:ns]
+A_rand = rand(2, 2)
+A = A_rand * A_rand' + I
+B = rand(2, 1)
 
+# generate upper and lower bounds
+sl = rand(2)
+ul = fill(-15.0, 1)
+su = sl .+ 4
+uu = ul .+ 10
+s0 = sl .+ 2
 
-dx = 0.1
-dt = 0.1
+# Define K matrix for numerical stability of condensed problem
+K  = - [1.41175 2.47819;] # found from MatrixEquations.jl; ared(A, B, 1, 1)
+
 
 # Build model for 1 D heat transfer
-lq_dense  = build_thinplate(ns, nu, N, dx, dt; d = d, Tbar = 400., dense = true)
-lq_sparse = build_thinplate(ns, nu, N, dx, dt; d = d, Tbar = 400., dense = false)
+lq_dense  = DenseLQDynamicModel(s0, A, B, Q, R, N; K = K, sl = sl, su = su, ul = ul, uu = uu)
+lq_sparse = SparseLQDynamicModel(s0, A, B, Q, R, N; sl = sl, su = su, ul = ul, uu = uu)
 
 # Solve the dense problem
 dense_options = Dict{Symbol, Any}(
-    :kkt_system => MadNLP.DENSE_KKT_SYSTEM,
-    :linear_solver=> MadNLPLapackCPU,
-    :max_iter=> 200,
+    :kkt_system => MadNLP.DENSE_CONDENSED_KKT_SYSTEM,
+    :linear_solver=> LapackCPUSolver,
+    :max_iter=> 50,
     :jacobian_constant=>true,
     :hessian_constant=>true,
+    :lapack_algorithm=>MadNLP.CHOLESKY
 )
 
 d_ips = MadNLP.InteriorPointSolver(lq_dense, option_dict = dense_options)
@@ -49,9 +59,7 @@ sol_ref_dense = MadNLP.optimize!(d_ips)
 
 # Solve the sparse problem
 sparse_options = Dict{Symbol, Any}(
-    :kkt_system=>MadNLP.SPARSE_KKT_SYSTEM,
-    :linear_solver=>MadNLPLapackCPU,
-    :print_level=>MadNLP.DEBUG,
+    :max_iter=>50,
     :jacobian_constant=>true,
     :hessian_constant=>true,
 )
@@ -61,14 +69,21 @@ sol_ref_sparse = MadNLP.optimize!(s_ips)
 
 # Solve the dense problem on the GPU
 gpu_options = Dict{Symbol, Any}(
-        :kkt_system=>MadNLP.DENSE_KKT_SYSTEM,
-        :linear_solver=>MadNLPLapackGPU,
-        :print_level=>MadNLP.DEBUG,
+        :kkt_system=>MadNLP.DENSE_CONDENSED_KKT_SYSTEM,
+        :linear_solver=>LapackGPUSolver,
+        :max_iter=>50,
         :jacobian_constant=>true,
         :hessian_constant=>true,
+        :lapack_algorithm=>MadNLP.CHOLESKY
 )
 
-TKKTGPU = MadNLP.DenseKKTSystem{Float64, CuVector{Float64}, CuMatrix{Float64}}
-opt = MadNLP.Options(; gpu_options...)
-gpu_ips = MadNLP.InteriorPointSolver{TKKTGPU}(lq_dense, opt; option_linear_solver=copy(gpu_options))
+gpu_ips = MadNLPGPU.CuInteriorPointSolver(lq_dense, option_dict = gpu_options)
 sol_ref_gpu = MadNLP.optimize!(gpu_ips)
+
+println("States from dense problem on CPU are ", get_s(sol_ref_dense, lq_dense))
+println("States from dense problem on GPU are ", get_s(sol_ref_gpu, lq_dense))
+println("States from sparse problem on CPU are ", get_s(sol_ref_sparse, lq_sparse))
+println()
+println("Inputs from dense problem on CPU are ", get_u(sol_ref_dense, lq_dense))
+println("Inputs from dense problem on GPU are ", get_u(sol_ref_gpu, lq_dense))
+println("Inputs from sparse problem on CPU are ", get_u(sol_ref_sparse, lq_sparse))
