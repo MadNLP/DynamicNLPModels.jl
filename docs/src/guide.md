@@ -74,7 +74,7 @@ The `SparseLQDynamicModel` contains four fields:
  * `meta` which contains the `NLPModelMeta` for the problem from NLPModels.jl
  * `counters` which is the `Counters` object from NLPModels.jl
 
-!!! Note
+!!! note
     The `SparseLQDynamicModel` requires that all matrices in the `LQDynamicData` be the same type. It is recommended that the user be aware of how to most efficiently store their data in the `Q`, `R`, `A`, and `B` matrices as this impacts how efficiently the `SparseLQDynamicModel` is constructed. When `Q`, `R`, `A`, and `B` are sparse, building the `SparseLQDynamicModel` is much faster when these are passed as sparse rather than dense matrices. 
 
 ## `DenseLQDynamicModel`
