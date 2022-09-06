@@ -35,4 +35,3 @@ deploydocs(
     devurl = "dev",
     push_preview = true,
 )
-

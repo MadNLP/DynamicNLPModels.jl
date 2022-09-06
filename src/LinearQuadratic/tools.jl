@@ -8,22 +8,29 @@ If `K <: AbstractMatrix`, `solution_ref.solution` returns `v`, and `get_u` solve
 """
 function get_u(
     solver_status,
-    lqdm::SparseLQDynamicModel{T, V, M1, M2, M3, MK}
-) where {T, V <: AbstractVector{T}, M1 <: AbstractMatrix{T}, M2 <: AbstractMatrix{T}, M3 <: AbstractMatrix{T}, MK <: AbstractMatrix{T}}
+    lqdm::SparseLQDynamicModel{T, V, M1, M2, M3, MK},
+) where {
+    T,
+    V <: AbstractVector{T},
+    M1 <: AbstractMatrix{T},
+    M2 <: AbstractMatrix{T},
+    M3 <: AbstractMatrix{T},
+    MK <: AbstractMatrix{T},
+}
 
     solution = solver_status.solution
-    ns       = lqdm.dynamic_data.ns
-    nu       = lqdm.dynamic_data.nu
-    N        = lqdm.dynamic_data.N
-    K        = lqdm.dynamic_data.K
+    ns = lqdm.dynamic_data.ns
+    nu = lqdm.dynamic_data.nu
+    N = lqdm.dynamic_data.N
+    K = lqdm.dynamic_data.K
 
     u = zeros(T, nu * N)
 
-    for i in 1:N
+    for i = 1:N
         start_v = (i - 1) * nu + 1
-        end_v   = i * nu
+        end_v = i * nu
         start_s = (i - 1) * ns + 1
-        end_s   = i * ns
+        end_s = i * ns
 
         Ks = zeros(T, size(K, 1), 1)
 
@@ -41,32 +48,40 @@ end
 
 function get_u(
     solver_status,
-    lqdm::DenseLQDynamicModel{T, V, M1, M2, M3, M4, MK}
-) where {T, V <: AbstractVector{T}, M1 <: AbstractMatrix{T}, M2 <: AbstractMatrix{T}, M3 <: AbstractMatrix{T}, M4 <: AbstractMatrix{T}, MK <: AbstractMatrix{T}}
+    lqdm::DenseLQDynamicModel{T, V, M1, M2, M3, M4, MK},
+) where {
+    T,
+    V <: AbstractVector{T},
+    M1 <: AbstractMatrix{T},
+    M2 <: AbstractMatrix{T},
+    M3 <: AbstractMatrix{T},
+    M4 <: AbstractMatrix{T},
+    MK <: AbstractMatrix{T},
+}
 
     dnlp = lqdm.dynamic_data
 
-    N    = dnlp.N
-    ns   = dnlp.ns
-    nu   = dnlp.nu
-    K    = dnlp.K
+    N = dnlp.N
+    ns = dnlp.ns
+    nu = dnlp.nu
+    K = dnlp.K
 
-    block_A  = lqdm.blocks.A
-    block_B  = lqdm.blocks.B
+    block_A = lqdm.blocks.A
+    block_B = lqdm.blocks.B
     block_Aw = lqdm.blocks.Aw
 
     v = solver_status.solution
 
     As0 = zeros(T, ns * (N + 1))
-    Bv  = zeros(T, ns)
-    s   = zeros(T, ns * (N + 1))
+    Bv = zeros(T, ns)
+    s = zeros(T, ns * (N + 1))
 
-    for i in 1:N
+    for i = 1:N
         B_row_range = (1 + (i - 1) * ns):(i * ns)
         B_sub_block = view(block_B, B_row_range, :)
 
-        for j in 1:(N - i + 1)
-            v_sub_vec   = v[(1 + nu * (j - 1)):nu * j]
+        for j = 1:(N - i + 1)
+            v_sub_vec = v[(1 + nu * (j - 1)):(nu * j)]
             LinearAlgebra.mul!(Bv, B_sub_block, v_sub_vec)
 
             s[(1 + ns * (i + j - 1)):(ns * (i + j))] .+= Bv
@@ -79,9 +94,9 @@ function get_u(
 
     Ks = _init_similar(dnlp.s0, size(K, 1), T)
     u = copy(v)
-    for i in 1:N
-        LinearAlgebra.mul!(Ks, K, s[(1 + ns * (i - 1)):ns * i])
-        u[(1 + nu * (i - 1)):nu * i] .+= Ks
+    for i = 1:N
+        LinearAlgebra.mul!(Ks, K, s[(1 + ns * (i - 1)):(ns * i)])
+        u[(1 + nu * (i - 1)):(nu * i)] .+= Ks
     end
 
     return u
@@ -89,13 +104,20 @@ end
 
 function get_u(
     solver_status,
-    lqdm::SparseLQDynamicModel{T, V, M1, M2, M3, MK}
-) where {T, V <: AbstractVector{T}, M1 <: AbstractMatrix{T}, M2 <: AbstractMatrix{T}, M3 <: AbstractMatrix{T}, MK <: Nothing}
+    lqdm::SparseLQDynamicModel{T, V, M1, M2, M3, MK},
+) where {
+    T,
+    V <: AbstractVector{T},
+    M1 <: AbstractMatrix{T},
+    M2 <: AbstractMatrix{T},
+    M3 <: AbstractMatrix{T},
+    MK <: Nothing,
+}
 
     solution = solver_status.solution
-    ns       = lqdm.dynamic_data.ns
-    nu       = lqdm.dynamic_data.nu
-    N        = lqdm.dynamic_data.N
+    ns = lqdm.dynamic_data.ns
+    nu = lqdm.dynamic_data.nu
+    N = lqdm.dynamic_data.N
 
     u = solution[(ns * (N + 1) + 1):end]
     return u
@@ -103,8 +125,16 @@ end
 
 function get_u(
     solver_status,
-    lqdm::DenseLQDynamicModel{T, V, M1, M2, M3, M4, MK}
-) where {T, V <: AbstractVector{T}, M1 <: AbstractMatrix{T}, M2 <: AbstractMatrix{T}, M3 <: AbstractMatrix{T}, M4 <: AbstractMatrix{T}, MK <: Nothing}
+    lqdm::DenseLQDynamicModel{T, V, M1, M2, M3, M4, MK},
+) where {
+    T,
+    V <: AbstractVector{T},
+    M1 <: AbstractMatrix{T},
+    M2 <: AbstractMatrix{T},
+    M3 <: AbstractMatrix{T},
+    M4 <: AbstractMatrix{T},
+    MK <: Nothing,
+}
     return copy(solver_status.solution)
 end
 
@@ -118,12 +148,19 @@ transforming `u` or `v` into `s` using `A`, `B`, and `K` matrices.
 """
 function get_s(
     solver_status,
-    lqdm::SparseLQDynamicModel{T, V, M1, M2, M3, MK}
-) where {T, V <: AbstractVector{T}, M1 <: AbstractMatrix{T}, M2 <: AbstractMatrix{T}, M3 <: AbstractMatrix{T}, MK <: Union{Nothing, AbstractMatrix}}
+    lqdm::SparseLQDynamicModel{T, V, M1, M2, M3, MK},
+) where {
+    T,
+    V <: AbstractVector{T},
+    M1 <: AbstractMatrix{T},
+    M2 <: AbstractMatrix{T},
+    M3 <: AbstractMatrix{T},
+    MK <: Union{Nothing, AbstractMatrix},
+}
 
     solution = solver_status.solution
-    ns       = lqdm.dynamic_data.ns
-    N        = lqdm.dynamic_data.N
+    ns = lqdm.dynamic_data.ns
+    N = lqdm.dynamic_data.N
 
     s = solution[1:(ns * (N + 1))]
     return s
@@ -131,31 +168,39 @@ end
 
 function get_s(
     solver_status,
-    lqdm::DenseLQDynamicModel{T,V, M1, M2, M3, M4, MK}
-) where {T, V <: AbstractVector{T}, M1 <: AbstractMatrix{T}, M2 <: AbstractMatrix{T}, M3 <: AbstractMatrix{T}, M4 <: AbstractMatrix{T}, MK <: Union{Nothing, AbstractMatrix}}
+    lqdm::DenseLQDynamicModel{T, V, M1, M2, M3, M4, MK},
+) where {
+    T,
+    V <: AbstractVector{T},
+    M1 <: AbstractMatrix{T},
+    M2 <: AbstractMatrix{T},
+    M3 <: AbstractMatrix{T},
+    M4 <: AbstractMatrix{T},
+    MK <: Union{Nothing, AbstractMatrix},
+}
 
     dnlp = lqdm.dynamic_data
 
-    N    = dnlp.N
-    ns   = dnlp.ns
-    nu   = dnlp.nu
+    N = dnlp.N
+    ns = dnlp.ns
+    nu = dnlp.nu
 
-    block_A  = lqdm.blocks.A
-    block_B  = lqdm.blocks.B
+    block_A = lqdm.blocks.A
+    block_B = lqdm.blocks.B
     block_Aw = lqdm.blocks.Aw
 
     v = solver_status.solution
 
     As0 = zeros(T, ns * (N + 1))
-    Bv  = zeros(T, ns)
-    s   = zeros(T, ns * (N + 1))
+    Bv = zeros(T, ns)
+    s = zeros(T, ns * (N + 1))
 
-    for i in 1:N
+    for i = 1:N
         B_row_range = (1 + (i - 1) * ns):(i * ns)
         B_sub_block = view(block_B, B_row_range, :)
 
-        for j in 1:(N - i + 1)
-            v_sub_vec   = v[(1 + nu * (j - 1)):nu * j]
+        for j = 1:(N - i + 1)
+            v_sub_vec = v[(1 + nu * (j - 1)):(nu * j)]
             LinearAlgebra.mul!(Bv, B_sub_block, v_sub_vec)
 
             s[(1 + ns * (i + j - 1)):(ns * (i + j))] .+= Bv
@@ -176,12 +221,12 @@ for field in fieldnames(LQDynamicData)
             $($method)(LQDynamicData)
             $($method)(SparseLQDynamicModel)
             $($method)(DenseLQDynamicModel)
-        Return the value $($(QuoteNode(field))) from LQDynamicData or SparseLQDynamicModel.dynamic_data or DenseLQDynamicModel.dynamic_data
+        Return the value of $($(QuoteNode(field))) from `LQDynamicData` or `SparseLQDynamicModel.dynamic_data` or `DenseLQDynamicModel.dynamic_data`
         """
         $method(dyn_data::LQDynamicData) = getproperty(dyn_data, $(QuoteNode(field)))
     end
     @eval $method(dyn_model::SparseLQDynamicModel) = $method(dyn_model.dynamic_data)
-    @eval $method(dyn_model::DenseLQDynamicModel)  = $method(dyn_model.dynamic_data)
+    @eval $method(dyn_model::DenseLQDynamicModel) = $method(dyn_model.dynamic_data)
     @eval export $method
 end
 
@@ -192,12 +237,14 @@ for field in [:A, :B, :Q, :R, :Qf, :E, :F, :S, :K]
             $($method)(LQDynamicData, row, col, val)
             $($method)(SparseLQDynamicModel, row, col, val)
             $($method)(DenseLQDynamicModel, row, col, val)
-        Set the value of entry $($(QuoteNode(field)))[row, col] to val for LQDynamicData, SparseLQDynamicModel.dynamic_data, or DenseLQDynamicModel.dynamic_data
+        Set the value of entry $($(QuoteNode(field)))[row, col] to val for `LQDynamicData`, `SparseLQDynamicModel.dynamic_data`, or `DenseLQDynamicModel.dynamic_data`
         """
         $method(dyn_data::LQDynamicData, row, col, val) = (dyn_data.$field[row, col] = val)
     end
-    @eval $method(dyn_model::SparseLQDynamicModel, row, col, val) = (dyn_model.dynamic_data.$field[row, col] = val)
-    @eval $method(dyn_model::DenseLQDynamicModel, row, col, val)  = (dyn_model.dynamic_data.$field[row, col] = val)
+    @eval $method(dyn_model::SparseLQDynamicModel, row, col, val) =
+        (dyn_model.dynamic_data.$field[row, col] = val)
+    @eval $method(dyn_model::DenseLQDynamicModel, row, col, val) =
+        (dyn_model.dynamic_data.$field[row, col] = val)
     @eval export $method
 end
 
@@ -208,12 +255,14 @@ for field in [:s0, :sl, :su, :ul, :uu, :gl, :gu]
             $($method)(LQDynamicData, index, val)
             $($method)(SparseLQDynamicModel, index, val)
             $($method)(DenseLQDynamicModel, index, val)
-        Set the value of entry $($(QuoteNode(field)))[index] to val for LQDynamicData, SparseLQDynamicModel.dynamic_data, or DenseLQDynamicModel.dynamic_data
+        Set the value of entry $($(QuoteNode(field)))[index] to val for `LQDynamicData`, `SparseLQDynamicModel.dynamic_data`, or `DenseLQDynamicModel.dynamic_data`
         """
         $method(dyn_data::LQDynamicData, index, val) = (dyn_data.$field[index] = val)
     end
-    @eval $method(dyn_model::SparseLQDynamicModel, index, val) = (dyn_model.dynamic_data.$field[index] = val)
-    @eval $method(dyn_model::DenseLQDynamicModel, index, val)  = (dyn_model.dynamic_data.$field[index] = val)
+    @eval $method(dyn_model::SparseLQDynamicModel, index, val) =
+        (dyn_model.dynamic_data.$field[index] = val)
+    @eval $method(dyn_model::DenseLQDynamicModel, index, val) =
+        (dyn_model.dynamic_data.$field[index] = val)
     @eval export $method
 end
 
@@ -239,7 +288,7 @@ function NLPModels.hess_structure!(
     qp::SparseLQDynamicModel{T, V, M1, M2, M3},
     rows::AbstractVector{<:Integer},
     cols::AbstractVector{<:Integer},
-) where {T, V, M1 <: SparseMatrixCSC, M2 <: SparseMatrixCSC, M3<: AbstractMatrix}
+) where {T, V, M1 <: SparseMatrixCSC, M2 <: SparseMatrixCSC, M3 <: AbstractMatrix}
     fill_structure!(qp.data.H, rows, cols)
     return rows, cols
 end
@@ -249,7 +298,7 @@ function NLPModels.hess_structure!(
     qp::DenseLQDynamicModel{T, V, M1, M2, M3},
     rows::AbstractVector{<:Integer},
     cols::AbstractVector{<:Integer},
-) where {T, V, M1 <: Matrix, M2<: Matrix, M3<: Matrix}
+) where {T, V, M1 <: Matrix, M2 <: Matrix, M3 <: Matrix}
     count = 1
     for j = 1:(qp.meta.nvar)
         for i = j:(qp.meta.nvar)
@@ -277,7 +326,7 @@ function NLPModels.hess_coord!(
     x::AbstractVector{T},
     vals::AbstractVector{T};
     obj_weight::Real = one(eltype(x)),
-  ) where {T, V, M1 <: Matrix, M2 <: Matrix, M3 <: Matrix}
+) where {T, V, M1 <: Matrix, M2 <: Matrix, M3 <: Matrix}
     NLPModels.increment!(qp, :neval_hess)
     count = 1
     for j = 1:(qp.meta.nvar)
@@ -287,7 +336,7 @@ function NLPModels.hess_coord!(
         end
     end
     return vals
-  end
+end
 
 NLPModels.hess_coord!(
     qp::SparseLQDynamicModel,
@@ -309,7 +358,7 @@ function NLPModels.jac_structure!(
     qp::SparseLQDynamicModel{T, V, M1, M2, M3},
     rows::AbstractVector{<:Integer},
     cols::AbstractVector{<:Integer},
-) where {T, V, M1 <: SparseMatrixCSC, M2 <: SparseMatrixCSC, M3<: AbstractMatrix}
+) where {T, V, M1 <: SparseMatrixCSC, M2 <: SparseMatrixCSC, M3 <: AbstractMatrix}
     fill_structure!(qp.data.A, rows, cols)
     return rows, cols
 end
@@ -318,7 +367,7 @@ function NLPModels.jac_structure!(
     qp::DenseLQDynamicModel{T, V, M1, M2, M3},
     rows::AbstractVector{<:Integer},
     cols::AbstractVector{<:Integer},
-) where {T, V, M1<: Matrix, M2 <: Matrix, M3 <: Matrix}
+) where {T, V, M1 <: Matrix, M2 <: Matrix, M3 <: Matrix}
     count = 1
     for j = 1:(qp.meta.nvar)
         for i = 1:(qp.meta.ncon)
@@ -344,7 +393,7 @@ function NLPModels.jac_coord!(
     qp::DenseLQDynamicModel{T, V, M1, M2, M3},
     x::AbstractVector,
     vals::AbstractVector,
-    ) where {T, V, M1 <: Matrix, M2 <: Matrix, M3 <: Matrix}
+) where {T, V, M1 <: Matrix, M2 <: Matrix, M3 <: Matrix}
     NLPModels.increment!(qp, :neval_jac)
     count = 1
     for j = 1:(qp.meta.nvar)
@@ -356,56 +405,96 @@ function NLPModels.jac_coord!(
     return vals
 end
 
-function _dnlp_unsafe_wrap(tensor::A, dims::Tuple, shift=1) where {T, A <: AbstractArray{T}}
+function _dnlp_unsafe_wrap(
+    tensor::A,
+    dims::Tuple,
+    shift = 1,
+) where {T, A <: AbstractArray{T}}
     return unsafe_wrap(Matrix{T}, pointer(tensor, shift), dims)
 end
 
-function _dnlp_unsafe_wrap(tensor::A, dims::Tuple, shift=1) where {T, A <: CUDA.CuArray{T, 3, CUDA.Mem.DeviceBuffer}}
-    return unsafe_wrap(CUDA.CuArray{T, 2, CUDA.Mem.DeviceBuffer}, pointer(tensor, shift), dims)
+function _dnlp_unsafe_wrap(
+    tensor::A,
+    dims::Tuple,
+    shift = 1,
+) where {T, A <: CUDA.CuArray{T, 3, CUDA.Mem.DeviceBuffer}}
+    return unsafe_wrap(
+        CUDA.CuArray{T, 2, CUDA.Mem.DeviceBuffer},
+        pointer(tensor, shift),
+        dims,
+    )
 end
 
-function LinearAlgebra.mul!(y::V,
+function LinearAlgebra.mul!(
+    y::V,
     Jac::LQJacobianOperator{T, M, A},
-    x::V
-) where {T, V <: AbstractVector{T}, M <: AbstractMatrix{T},  A <: AbstractArray{T}}
+    x::V,
+) where {T, V <: AbstractVector{T}, M <: AbstractMatrix{T}, A <: AbstractArray{T}}
     fill!(y, zero(T))
 
-    J1  = Jac.truncated_jac1
-    J2  = Jac.truncated_jac2
-    J3  = Jac.truncated_jac3
+    J1 = Jac.truncated_jac1
+    J2 = Jac.truncated_jac2
+    J3 = Jac.truncated_jac3
 
-    N   = Jac.N
-    nu  = Jac.nu
-    nc  = Jac.nc
+    N = Jac.N
+    nu = Jac.nu
+    nc = Jac.nc
     nsc = Jac.nsc
     nuc = Jac.nuc
 
-    for i in 1:N
-        sub_B1  = _dnlp_unsafe_wrap(J1, (nc, nu), (1 + (i - 1) * (nc * nu)))
-        sub_B2  = _dnlp_unsafe_wrap(J2, (nsc, nu), (1 + (i - 1) * (nsc * nu)))
-        sub_B3  = _dnlp_unsafe_wrap(J3, (nuc, nu), (1 + (i - 1) * (nuc * nu)))
+    for i = 1:N
+        sub_B1 = _dnlp_unsafe_wrap(J1, (nc, nu), (1 + (i - 1) * (nc * nu)))
+        sub_B2 = _dnlp_unsafe_wrap(J2, (nsc, nu), (1 + (i - 1) * (nsc * nu)))
+        sub_B3 = _dnlp_unsafe_wrap(J3, (nuc, nu), (1 + (i - 1) * (nuc * nu)))
 
-        for j in 1:(N - i + 1)
+        for j = 1:(N - i + 1)
             sub_x = view(x, (1 + (j - 1) * nu):(j * nu))
-            LinearAlgebra.mul!(view(y, (1 + nc * (j + i - 2)):(nc * (j + i - 1) )), sub_B1, sub_x, 1, 1)
-            LinearAlgebra.mul!(view(y, (1 + nc * N + nsc * (j + i - 2)):(nc * N + nsc * (j + i - 1))), sub_B2, sub_x, 1, 1)
-            LinearAlgebra.mul!(view(y, (1 + nc * N + nsc * N + nuc * (j + i- 2)):(nc * N + nsc * N + nuc * (j + i - 1))), sub_B3, sub_x, 1, 1)
+            LinearAlgebra.mul!(
+                view(y, (1 + nc * (j + i - 2)):(nc * (j + i - 1))),
+                sub_B1,
+                sub_x,
+                1,
+                1,
+            )
+            LinearAlgebra.mul!(
+                view(y, (1 + nc * N + nsc * (j + i - 2)):(nc * N + nsc * (j + i - 1))),
+                sub_B2,
+                sub_x,
+                1,
+                1,
+            )
+            LinearAlgebra.mul!(
+                view(
+                    y,
+                    (1 + nc * N + nsc * N + nuc * (j + i - 2)):(nc * N + nsc * N + nuc * (j + i - 1)),
+                ),
+                sub_B3,
+                sub_x,
+                1,
+                1,
+            )
         end
     end
 end
 
-function LinearAlgebra.mul!(x::V,
+function LinearAlgebra.mul!(
+    x::V,
     Jac::LQJacobianOperator{T, M, A},
-    y::V
-) where {T, V <: CUDA.CuArray{T, 1, CUDA.Mem.DeviceBuffer}, M <: AbstractMatrix{T}, A <: AbstractArray{T}}
+    y::V,
+) where {
+    T,
+    V <: CUDA.CuArray{T, 1, CUDA.Mem.DeviceBuffer},
+    M <: AbstractMatrix{T},
+    A <: AbstractArray{T},
+}
 
-    J1  = Jac.truncated_jac1
-    J2  = Jac.truncated_jac2
-    J3  = Jac.truncated_jac3
+    J1 = Jac.truncated_jac1
+    J2 = Jac.truncated_jac2
+    J3 = Jac.truncated_jac3
 
-    N   = Jac.N
-    nu  = Jac.nu
-    nc  = Jac.nc
+    N = Jac.N
+    nu = Jac.nu
+    nc = Jac.nc
     nsc = Jac.nsc
     nuc = Jac.nuc
 
@@ -418,7 +507,7 @@ function LinearAlgebra.mul!(x::V,
     fill!(x2, zero(T))
     fill!(x3, zero(T))
 
-    for i in 1:N
+    for i = 1:N
         y1 .= y[(1 + (i - 1) * nu):(i * nu)]
 
         x1_view = view(x1, :, :, i:N)
@@ -444,36 +533,39 @@ end
 function LinearAlgebra.mul!(
     y::V,
     Jac::LinearOperators.AdjointLinearOperator{T, LQJacobianOperator{T, M, A}},
-    x::V
-) where {T, V <: AbstractVector{T}, M <: AbstractMatrix{T},  A <: AbstractArray{T}}
+    x::V,
+) where {T, V <: AbstractVector{T}, M <: AbstractMatrix{T}, A <: AbstractArray{T}}
     fill!(y, zero(T))
 
     jac_op = get_jacobian(Jac)
 
-    J1  = jac_op.truncated_jac1
-    J2  = jac_op.truncated_jac2
-    J3  = jac_op.truncated_jac3
+    J1 = jac_op.truncated_jac1
+    J2 = jac_op.truncated_jac2
+    J3 = jac_op.truncated_jac3
 
-    N   = jac_op.N
-    nu  = jac_op.nu
-    nc  = jac_op.nc
+    N = jac_op.N
+    nu = jac_op.nu
+    nc = jac_op.nc
     nsc = jac_op.nsc
     nuc = jac_op.nuc
 
-    for i in 1:N
-        sub_B1  = _dnlp_unsafe_wrap(J1, (nc, nu), (1 + (i - 1) * (nc * nu)))
-        sub_B2  = _dnlp_unsafe_wrap(J2, (nsc, nu), (1 + (i - 1) * (nsc * nu)))
-        sub_B3  = _dnlp_unsafe_wrap(J3, (nuc, nu), (1 + (i - 1) * (nuc * nu)))
+    for i = 1:N
+        sub_B1 = _dnlp_unsafe_wrap(J1, (nc, nu), (1 + (i - 1) * (nc * nu)))
+        sub_B2 = _dnlp_unsafe_wrap(J2, (nsc, nu), (1 + (i - 1) * (nsc * nu)))
+        sub_B3 = _dnlp_unsafe_wrap(J3, (nuc, nu), (1 + (i - 1) * (nuc * nu)))
 
-        for j in 1:(N - i + 1)
+        for j = 1:(N - i + 1)
 
             x1 = view(x, (1 + (j + i - 2) * nc):((j + i - 1) * nc))
             x2 = view(x, (1 + nc * N + (j + i - 2) * nsc):(nc * N + (j + i - 1) * nsc))
-            x3 = view(x, (1 + nc * N + nsc * N + (j + i - 2) * nuc):(nc * N + nsc * N + (j + i - 1) * nuc))
+            x3 = view(
+                x,
+                (1 + nc * N + nsc * N + (j + i - 2) * nuc):(nc * N + nsc * N + (j + i - 1) * nuc),
+            )
 
-            LinearAlgebra.mul!(view(y, (1 + nu * (j - 1)):(nu * j )), sub_B1', x1, 1, 1)
-            LinearAlgebra.mul!(view(y, (1 + nu * (j - 1)):(nu * j )), sub_B2', x2, 1, 1)
-            LinearAlgebra.mul!(view(y, (1 + nu * (j - 1)):(nu * j )), sub_B3', x3, 1, 1)
+            LinearAlgebra.mul!(view(y, (1 + nu * (j - 1)):(nu * j)), sub_B1', x1, 1, 1)
+            LinearAlgebra.mul!(view(y, (1 + nu * (j - 1)):(nu * j)), sub_B2', x2, 1, 1)
+            LinearAlgebra.mul!(view(y, (1 + nu * (j - 1)):(nu * j)), sub_B3', x3, 1, 1)
         end
     end
 end
@@ -482,19 +574,24 @@ end
 function LinearAlgebra.mul!(
     y::V,
     Jac::LinearOperators.AdjointLinearOperator{T, LQJacobianOperator{T, M, A}},
-    x::V
-) where {T, V <: CUDA.CuArray{T, 1, CUDA.Mem.DeviceBuffer}, M <: AbstractMatrix{T}, A <: AbstractArray{T}}
+    x::V,
+) where {
+    T,
+    V <: CUDA.CuArray{T, 1, CUDA.Mem.DeviceBuffer},
+    M <: AbstractMatrix{T},
+    A <: AbstractArray{T},
+}
     fill!(y, zero(T))
 
     jac_op = get_jacobian(Jac)
 
-    J1  = jac_op.truncated_jac1
-    J2  = jac_op.truncated_jac2
-    J3  = jac_op.truncated_jac3
+    J1 = jac_op.truncated_jac1
+    J2 = jac_op.truncated_jac2
+    J3 = jac_op.truncated_jac3
 
-    N   = jac_op.N
-    nu  = jac_op.nu
-    nc  = jac_op.nc
+    N = jac_op.N
+    nu = jac_op.nu
+    nc = jac_op.nc
     nsc = jac_op.nsc
     nuc = jac_op.nuc
 
@@ -508,7 +605,7 @@ function LinearAlgebra.mul!(
     x2 .= reshape(x[(1 + nc * N):((nc + nsc) * N)], (nsc, 1, N))
     x3 .= reshape(x[(1 + (nc + nsc) * N):((nc + nsc + nuc) * N)], (nuc, 1, N))
 
-    for i in 1:N
+    for i = 1:N
         fill!(y1, zero(T))
 
         y1_view = view(y1, :, :, 1:(N - i + 1))
@@ -525,7 +622,7 @@ function LinearAlgebra.mul!(
         CUBLAS.gemm_strided_batched!('T', 'N', 1, J2_view, x2_view, 1, y1_view)
         CUBLAS.gemm_strided_batched!('T', 'N', 1, J3_view, x3_view, 1, y1_view)
 
-        view(y, (1 + (i - 1) * nu):(i * nu)) .= sum(y1_view, dims=(2,3))
+        view(y, (1 + (i - 1) * nu):(i * nu)) .= sum(y1_view, dims = (2, 3))
     end
 
 end
@@ -538,49 +635,58 @@ Gets the `LQJacobianOperator` from `DenseLQDynamicModel` (if the `QPdata` contai
 or returns the `LQJacobian Operator` from the adjoint of the `LQJacobianOperator`
 """
 function get_jacobian(
-    lqdm::DenseLQDynamicModel{T, V, M1, M2, M3, M4, MK}
+    lqdm::DenseLQDynamicModel{T, V, M1, M2, M3, M4, MK},
 ) where {T, V, M1, M2, M3, M4, MK}
     return lqdm.data.A
 end
 
 function get_jacobian(
-    Jac::LinearOperators.AdjointLinearOperator{T, LQJacobianOperator{T, M, A}}
+    Jac::LinearOperators.AdjointLinearOperator{T, LQJacobianOperator{T, M, A}},
 ) where {T, M <: AbstractMatrix{T}, A <: AbstractArray{T}}
     return Jac'
 end
 
 function Base.length(
-    Jac::LQJacobianOperator{T, M, A}
+    Jac::LQJacobianOperator{T, M, A},
 ) where {T, M <: AbstractMatrix{T}, A <: AbstractArray{T}}
-    return length(Jac.truncated_jac1) + length(Jac.truncated_jac2) + length(Jac.truncated_jac3)
+    return length(Jac.truncated_jac1) +
+           length(Jac.truncated_jac2) +
+           length(Jac.truncated_jac3)
 end
 
 function Base.size(
-    Jac::LQJacobianOperator{T, M, A}
+    Jac::LQJacobianOperator{T, M, A},
 ) where {T, M <: AbstractMatrix{T}, A <: AbstractArray{T}}
-    return (size(Jac.truncated_jac1, 1) + size(Jac.truncated_jac2, 1) + size(Jac.truncated_jac3, 1), size(Jac.truncated_jac1,2))
+    return (
+        size(Jac.truncated_jac1, 1) +
+        size(Jac.truncated_jac2, 1) +
+        size(Jac.truncated_jac3, 1),
+        size(Jac.truncated_jac1, 2),
+    )
 end
 
 function Base.eltype(
-    Jac::LQJacobianOperator{T, M, A}
+    Jac::LQJacobianOperator{T, M, A},
 ) where {T, M <: AbstractMatrix{T}, A <: AbstractMatrix{T}}
     return T
 end
 
 function Base.isreal(
-    Jac::LQJacobianOperator{T, M, A}
+    Jac::LQJacobianOperator{T, M, A},
 ) where {T, M <: AbstractMatrix{T}, A <: AbstractMatrix{T}}
-    return isreal(Jac.truncated_jac1) && isreal(Jac.truncated_jac2) && isreal(Jac.truncated_jac3)
+    return isreal(Jac.truncated_jac1) &&
+           isreal(Jac.truncated_jac2) &&
+           isreal(Jac.truncated_jac3)
 end
 
 function Base.show(
-    Jac::LQJacobianOperator{T, M, A}
+    Jac::LQJacobianOperator{T, M, A},
 ) where {T, M <: AbstractMatrix{T}, A <: AbstractMatrix{T}}
     show(Jac.truncated_jac1)
 end
 
 function Base.display(
-    Jac::LQJacobianOperator{T, M, A}
+    Jac::LQJacobianOperator{T, M, A},
 ) where {T, M <: AbstractMatrix{T}, A <: AbstractMatrix{T}}
     display(Jac.truncated_jac1)
 end
@@ -590,7 +696,7 @@ end
 Resets the values of attributes `SJ1`, `SJ2`, and `SJ3` to zero
 """
 function LinearOperators.reset!(
-    Jac::LQJacobianOperator{T, M, A}
+    Jac::LQJacobianOperator{T, M, A},
 ) where {T, M <: AbstractMatrix{T}, A <: AbstractMatrix{T}}
     fill!(Jac.SJ1, T(0))
     fill!(Jac.SJ2, T(0))
@@ -598,7 +704,8 @@ function LinearOperators.reset!(
 end
 
 function NLPModels.jac_op(
-    lqdm::DenseLQDynamicModel{T, V, M1, M2, M3, M4, MK}, x::V
+    lqdm::DenseLQDynamicModel{T, V, M1, M2, M3, M4, MK},
+    x::V,
 ) where {T, V <: AbstractVector{T}, M1, M2 <: LQJacobianOperator, M3, M4, MK}
     return lqdm.data.A
 end
@@ -615,16 +722,16 @@ function add_jtsj!(
     Jac::LQJacobianOperator{T, M, A},
     Σ::V,
     alpha::Number = 1,
-    beta::Number = 1
+    beta::Number = 1,
 ) where {T, V <: AbstractVector{T}, M <: AbstractMatrix{T}, A <: AbstractArray{T}}
 
-    J1  = Jac.truncated_jac1
-    J2  = Jac.truncated_jac2
-    J3  = Jac.truncated_jac3
+    J1 = Jac.truncated_jac1
+    J2 = Jac.truncated_jac2
+    J3 = Jac.truncated_jac3
 
-    N   = Jac.N
-    nu  = Jac.nu
-    nc  = Jac.nc
+    N = Jac.N
+    nu = Jac.nu
+    nc = Jac.nc
     nsc = Jac.nsc
     nuc = Jac.nuc
 
@@ -634,31 +741,53 @@ function add_jtsj!(
 
     LinearAlgebra.lmul!(beta, H)
 
-    for i in 1:N
+    for i = 1:N
         left_block1 = _dnlp_unsafe_wrap(J1, (nc, nu), (1 + (i - 1) * (nc * nu)))
         left_block2 = _dnlp_unsafe_wrap(J2, (nsc, nu), (1 + (i - 1) * (nsc * nu)))
         left_block3 = _dnlp_unsafe_wrap(J3, (nuc, nu), (1 + (i - 1) * (nuc * nu)))
 
-        for j in 1:(N + 1 - i)
+        for j = 1:(N + 1 - i)
             Σ_range1 = (1 + (N - j) * nc):((N - j + 1) * nc)
             Σ_range2 = (1 + nc * N + (N - j) * nsc):(nc * N + (N - j + 1) * nsc)
-            Σ_range3 = (1 + (nc + nsc) * N + (N - j) * nuc):((nc + nsc) * N + (N - j + 1) * nuc)
+            Σ_range3 =
+                (1 + (nc + nsc) * N + (N - j) * nuc):((nc + nsc) * N + (N - j + 1) * nuc)
 
             ΣJ1 .= left_block1 .* view(Σ, Σ_range1)
             ΣJ2 .= left_block2 .* view(Σ, Σ_range2)
             ΣJ3 .= left_block3 .* view(Σ, Σ_range3)
 
-            for k in 1:(N - j - i + 2)
-                right_block1 = _dnlp_unsafe_wrap(J1, (nc, nu), (1 + (k + i - 2) * (nc * nu)))
-                right_block2 = _dnlp_unsafe_wrap(J2, (nsc, nu), (1 + (k + i - 2) * (nsc * nu)))
-                right_block3 = _dnlp_unsafe_wrap(J3, (nuc, nu), (1 + (k + i - 2) * (nuc * nu)))
+            for k = 1:(N - j - i + 2)
+                right_block1 =
+                    _dnlp_unsafe_wrap(J1, (nc, nu), (1 + (k + i - 2) * (nc * nu)))
+                right_block2 =
+                    _dnlp_unsafe_wrap(J2, (nsc, nu), (1 + (k + i - 2) * (nsc * nu)))
+                right_block3 =
+                    _dnlp_unsafe_wrap(J3, (nuc, nu), (1 + (k + i - 2) * (nuc * nu)))
 
-                row_range = (1 + nu * (N - i - j + 1)):(nu * (N - i -j + 2))
+                row_range = (1 + nu * (N - i - j + 1)):(nu * (N - i - j + 2))
                 col_range = (1 + nu * (N - i - k - j + 2)):(nu * (N - i - k - j + 3))
 
-                LinearAlgebra.mul!(view(H, row_range, col_range), ΣJ1', right_block1, alpha, 1)
-                LinearAlgebra.mul!(view(H, row_range, col_range), ΣJ2', right_block2, alpha, 1)
-                LinearAlgebra.mul!(view(H, row_range, col_range), ΣJ3', right_block3, alpha, 1)
+                LinearAlgebra.mul!(
+                    view(H, row_range, col_range),
+                    ΣJ1',
+                    right_block1,
+                    alpha,
+                    1,
+                )
+                LinearAlgebra.mul!(
+                    view(H, row_range, col_range),
+                    ΣJ2',
+                    right_block2,
+                    alpha,
+                    1,
+                )
+                LinearAlgebra.mul!(
+                    view(H, row_range, col_range),
+                    ΣJ3',
+                    right_block3,
+                    alpha,
+                    1,
+                )
             end
         end
     end
@@ -669,16 +798,16 @@ function add_jtsj!(
     Jac::LQJacobianOperator{T, M, A},
     Σ::V,
     alpha::Number = 1,
-    beta::Number = 1
+    beta::Number = 1,
 ) where {T, V <: CUDA.CuVector, M <: AbstractMatrix{T}, A <: AbstractArray{T}}
 
-    J1  = Jac.truncated_jac1
-    J2  = Jac.truncated_jac2
-    J3  = Jac.truncated_jac3
+    J1 = Jac.truncated_jac1
+    J2 = Jac.truncated_jac2
+    J3 = Jac.truncated_jac3
 
-    N   = Jac.N
-    nu  = Jac.nu
-    nc  = Jac.nc
+    N = Jac.N
+    nu = Jac.nu
+    nc = Jac.nc
     nsc = Jac.nsc
     nuc = Jac.nuc
 
@@ -690,26 +819,27 @@ function add_jtsj!(
 
     LinearAlgebra.lmul!(beta, H)
 
-    for i in 1:N
+    for i = 1:N
         left_block1 = view(J1, :, :, i)
         left_block2 = view(J2, :, :, i)
         left_block3 = view(J3, :, :, i)
 
-        for j in 1:(N + 1 - i)
+        for j = 1:(N + 1 - i)
             Σ_range1 = (1 + (N - j) * nc):((N - j + 1) * nc)
             Σ_range2 = (1 + nc * N + (N - j) * nsc):(nc * N + (N - j + 1) * nsc)
-            Σ_range3 = (1 + (nc + nsc) * N + (N - j) * nuc):((nc + nsc) * N + (N - j + 1) * nuc)
+            Σ_range3 =
+                (1 + (nc + nsc) * N + (N - j) * nuc):((nc + nsc) * N + (N - j + 1) * nuc)
 
             ΣJ1 .= left_block1 .* view(Σ, Σ_range1)
             ΣJ2 .= left_block2 .* view(Σ, Σ_range2)
             ΣJ3 .= left_block3 .* view(Σ, Σ_range3)
 
-            for k in 1:(N - j - i + 2)
+            for k = 1:(N - j - i + 2)
                 right_block1 = view(J1, :, :, (k + i - 1))
                 right_block2 = view(J2, :, :, (k + i - 1))
                 right_block3 = view(J3, :, :, (k + i - 1))
 
-                row_range = (1 + nu * (N - i - j + 1)):(nu * (N - i -j + 2))
+                row_range = (1 + nu * (N - i - j + 1)):(nu * (N - i - j + 2))
                 col_range = (1 + nu * (N - i - k - j + 2)):(nu * (N - i - k - j + 3))
 
                 LinearAlgebra.mul!(H_sub_block, ΣJ1', right_block1)
@@ -735,7 +865,7 @@ objective function (i.e., `lqdm.data.c` and `lqdm.data.c0`). This provides a way
 """
 function reset_s0!(
     lqdm::SparseLQDynamicModel{T, V, M1, M2, M3, MK},
-    s0::V
+    s0::V,
 ) where {T, V <: AbstractVector{T}, M1, M2, M3, MK}
     dnlp = lqdm.dynamic_data
     ns = dnlp.ns
@@ -748,17 +878,17 @@ end
 
 function reset_s0!(
     lqdm::DenseLQDynamicModel{T, V, M1, M2, M3, M4, MK},
-    s0::V
+    s0::V,
 ) where {T, V <: AbstractVector{T}, M1, M2, M3, M4, MK <: Nothing}
 
-    dnlp         = lqdm.dynamic_data
+    dnlp = lqdm.dynamic_data
     dense_blocks = lqdm.blocks
 
-    N  = dnlp.N
+    N = dnlp.N
     ns = dnlp.ns
     nu = dnlp.nu
-    E  = dnlp.E
-    F  = dnlp.E
+    E = dnlp.E
+    F = dnlp.E
     ul = dnlp.ul
     uu = dnlp.uu
     sl = dnlp.sl
@@ -768,14 +898,14 @@ function reset_s0!(
     nc = size(E, 1)
 
     # Get matrices for multiplying by s0
-    block_A     = dense_blocks.A
-    block_Aw    = dense_blocks.Aw
-    block_h     = dense_blocks.h
-    block_h0    = dense_blocks.h01
-    block_d     = dense_blocks.d
-    block_dw    = dense_blocks.dw
-    block_h02   = dense_blocks.h02
-    h_constant  = dense_blocks.h_constant
+    block_A = dense_blocks.A
+    block_Aw = dense_blocks.Aw
+    block_h = dense_blocks.h
+    block_h0 = dense_blocks.h01
+    block_d = dense_blocks.d
+    block_dw = dense_blocks.dw
+    block_h02 = dense_blocks.h02
+    h_constant = dense_blocks.h_constant
     h0_constant = dense_blocks.h0_constant
 
     lcon = lqdm.meta.lcon
@@ -784,14 +914,14 @@ function reset_s0!(
     # Reset s0
     lqdm.dynamic_data.s0 .= s0
 
-    As0  = _init_similar(s0, ns * (N + 1), T)
-    Qs0  = _init_similar(s0, ns, T)
+    As0 = _init_similar(s0, ns * (N + 1), T)
+    Qs0 = _init_similar(s0, ns, T)
 
     dl = repeat(gl, N)
     du = repeat(gu, N)
 
     bool_vec_s = (sl .!= -Inf .|| su .!= Inf)
-    nsc   = sum(bool_vec_s)
+    nsc = sum(bool_vec_s)
 
     sl = sl[bool_vec_s]
     su = su[bool_vec_s]
@@ -800,11 +930,11 @@ function reset_s0!(
     LinearAlgebra.mul!(du, block_d, s0, -1, 1)
 
     # Reset constraint bounds corresponding to E and F matrices
-    lcon[1:nc * N] .= dl
-    ucon[1:nc * N] .= du
+    lcon[1:(nc * N)] .= dl
+    ucon[1:(nc * N)] .= du
 
-    lcon[1:nc * N] .-= block_dw
-    ucon[1:nc * N] .-= block_dw
+    lcon[1:(nc * N)] .-= block_dw
+    ucon[1:(nc * N)] .-= block_dw
 
     LinearAlgebra.mul!(As0, block_A, s0)
 
@@ -819,26 +949,30 @@ function reset_s0!(
     lqdm.data.c0 += h0_constant
     lqdm.data.c0 += LinearAlgebra.dot(s0, block_h02)
 
-    for i in 1:N
+    for i = 1:N
         # Reset bounds on constraints from state variable bounds
-        lcon[(1 + nc * N + nsc * (i - 1)):(nc * N + nsc * i)] .= sl .- As0[(1 + ns * i):(ns * (i + 1))][bool_vec_s] .- block_Aw[(1 + ns * i):((i + 1) * ns)][bool_vec_s]
-        ucon[(1 + nc * N + nsc * (i - 1)):(nc * N + nsc * i)] .= su .- As0[(1 + ns * i):(ns * (i + 1))][bool_vec_s] .- block_Aw[(1 + ns * i):((i + 1) * ns)][bool_vec_s]
+        lcon[(1 + nc * N + nsc * (i - 1)):(nc * N + nsc * i)] .=
+            sl .- As0[(1 + ns * i):(ns * (i + 1))][bool_vec_s] .-
+            block_Aw[(1 + ns * i):((i + 1) * ns)][bool_vec_s]
+        ucon[(1 + nc * N + nsc * (i - 1)):(nc * N + nsc * i)] .=
+            su .- As0[(1 + ns * i):(ns * (i + 1))][bool_vec_s] .-
+            block_Aw[(1 + ns * i):((i + 1) * ns)][bool_vec_s]
     end
 end
 
 function reset_s0!(
     lqdm::DenseLQDynamicModel{T, V, M1, M2, M3, M4, MK},
-    s0::V
+    s0::V,
 ) where {T, V <: AbstractVector{T}, M1, M2, M3, M4, MK <: AbstractMatrix{T}}
-    dnlp         = lqdm.dynamic_data
+    dnlp = lqdm.dynamic_data
     dense_blocks = lqdm.blocks
 
-    N  = dnlp.N
+    N = dnlp.N
     ns = dnlp.ns
     nu = dnlp.nu
-    E  = dnlp.E
-    F  = dnlp.E
-    K  = dnlp.K
+    E = dnlp.E
+    F = dnlp.E
+    K = dnlp.K
     ul = dnlp.ul
     uu = dnlp.uu
     sl = dnlp.sl
@@ -848,16 +982,16 @@ function reset_s0!(
     nc = size(E, 1)
 
     # Get matrices for multiplying by s0
-    block_A     = dense_blocks.A
-    block_Aw    = dense_blocks.Aw
-    block_h     = dense_blocks.h
-    block_h0    = dense_blocks.h01
-    block_d     = dense_blocks.d
-    block_dw    = dense_blocks.dw
-    block_KA    = dense_blocks.KA
-    block_KAw   = dense_blocks.KAw
-    block_h02   = dense_blocks.h02
-    h_constant  = dense_blocks.h_constant
+    block_A = dense_blocks.A
+    block_Aw = dense_blocks.Aw
+    block_h = dense_blocks.h
+    block_h0 = dense_blocks.h01
+    block_d = dense_blocks.d
+    block_dw = dense_blocks.dw
+    block_KA = dense_blocks.KA
+    block_KAw = dense_blocks.KAw
+    block_h02 = dense_blocks.h02
+    h_constant = dense_blocks.h_constant
     h0_constant = dense_blocks.h0_constant
 
     lcon = lqdm.meta.lcon
@@ -867,15 +1001,15 @@ function reset_s0!(
     lqdm.dynamic_data.s0 .= s0
 
     lqdm.data.c0 += LinearAlgebra.dot(s0, block_h02)
-    As0  = _init_similar(s0, ns * (N + 1), T)
-    Qs0  = _init_similar(s0, ns, T)
+    As0 = _init_similar(s0, ns * (N + 1), T)
+    Qs0 = _init_similar(s0, ns, T)
     KAs0 = _init_similar(s0, nu * N, T)
 
-    dl   = repeat(gl, N)
-    du   = repeat(gu, N)
+    dl = repeat(gl, N)
+    du = repeat(gu, N)
 
     bool_vec_s = (sl .!= -Inf .|| su .!= Inf)
-    nsc   = sum(bool_vec_s)
+    nsc = sum(bool_vec_s)
 
     bool_vec_u = (ul .!= -Inf .|| uu .!= Inf)
     nuc = sum(bool_vec_u)
@@ -890,11 +1024,11 @@ function reset_s0!(
     LinearAlgebra.mul!(du, block_d, s0, -1, 1)
 
     # Reset constraint bounds corresponding to E and F matrices
-    lcon[1:nc * N] .= dl
-    ucon[1:nc * N] .= du
+    lcon[1:(nc * N)] .= dl
+    ucon[1:(nc * N)] .= du
 
-    lcon[1:nc * N] .-= block_dw
-    ucon[1:nc * N] .-= block_dw
+    lcon[1:(nc * N)] .-= block_dw
+    ucon[1:(nc * N)] .-= block_dw
 
     LinearAlgebra.mul!(As0, block_A, s0)
     LinearAlgebra.mul!(KAs0, block_KA, s0)
@@ -910,13 +1044,21 @@ function reset_s0!(
     lqdm.data.c0 += h0_constant
     lqdm.data.c0 += LinearAlgebra.dot(s0, block_h02)
 
-    for i in 1:N
+    for i = 1:N
         # Reset bounds on constraints from state variable bounds
-        lcon[(1 + nc * N + nsc * (i - 1)):(nc * N + nsc * i)] .= sl .- As0[(1 + ns * i):(ns * (i + 1))][bool_vec_s] .- block_Aw[(1 + i * ns):((i + 1) * ns)][bool_vec_s]
-        ucon[(1 + nc * N + nsc * (i - 1)):(nc * N + nsc * i)] .= su .- As0[(1 + ns * i):(ns * (i + 1))][bool_vec_s] .- block_Aw[(1 + i * ns):((i + 1) * ns)][bool_vec_s]
+        lcon[(1 + nc * N + nsc * (i - 1)):(nc * N + nsc * i)] .=
+            sl .- As0[(1 + ns * i):(ns * (i + 1))][bool_vec_s] .-
+            block_Aw[(1 + i * ns):((i + 1) * ns)][bool_vec_s]
+        ucon[(1 + nc * N + nsc * (i - 1)):(nc * N + nsc * i)] .=
+            su .- As0[(1 + ns * i):(ns * (i + 1))][bool_vec_s] .-
+            block_Aw[(1 + i * ns):((i + 1) * ns)][bool_vec_s]
 
         # Reset bounds on constraints from input variable bounds
-        lcon[(1 + (nc + nsc) * N + nuc * (i - 1)):((nc + nsc) * N + nuc * i)] .= ul .- KAs0[(1 + nu * (i - 1)):(nu * i)][bool_vec_u] .- block_KAw[(1 + nu * (i - 1)):(nu * i)][bool_vec_u]
-        ucon[(1 + (nc + nsc) * N + nuc * (i - 1)):((nc + nsc) * N + nuc * i)] .= uu .- KAs0[(1 + nu * (i - 1)):(nu * i)][bool_vec_u] .- block_KAw[(1 + nu * (i - 1)):(nu * i)][bool_vec_u]
+        lcon[(1 + (nc + nsc) * N + nuc * (i - 1)):((nc + nsc) * N + nuc * i)] .=
+            ul .- KAs0[(1 + nu * (i - 1)):(nu * i)][bool_vec_u] .-
+            block_KAw[(1 + nu * (i - 1)):(nu * i)][bool_vec_u]
+        ucon[(1 + (nc + nsc) * N + nuc * (i - 1)):((nc + nsc) * N + nuc * i)] .=
+            uu .- KAs0[(1 + nu * (i - 1)):(nu * i)][bool_vec_u] .-
+            block_KAw[(1 + nu * (i - 1)):(nu * i)][bool_vec_u]
     end
 end
