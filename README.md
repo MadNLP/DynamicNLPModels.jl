@@ -29,13 +29,13 @@ DynamicNLPModels.jl can construct both sparse and condensed formulations for MPC
 The general sparse formulation used within DynamicNLPModels.jl is
 
 $$\begin{align*}
-\min_{s, u, v} &\; s_N^\top Q_f s_N + \frac{1}{2} \sum_{i = 0}^{N-1} \left[ \begin{array}{c} s_i \\ u_i \end{array} \right]^\top \left[ \begin{array}{cc} Q & S \\ S^\top & R \end{array} \right] \left[ \begin{array}{c} s_i \\ u_i \end{array} \right]\\
-          \textrm{s.t.} &\;s_{i+1} = As_i + Bu_i + w_i \quad \forall i = 0, 1, \cdots, N - 1 \\
-          &\; u_i = Ks_i + v_i \quad  \forall i = 0, 1, \cdots, N - 1 \\
-          &\; g^l \le E s_i + F u_i \le g^u \quad \forall i = 0, 1, \cdots, N - 1\\
-          &\; s^l \le s_i \le s^u \quad \forall i = 0, 1, \cdots, N \\
-          &\; u^l \le u_i \le u^u \quad \forall i = 0, 1, \cdots, N - 1\\
-          &\; s_0 = \bar{s} 
+\min_{s, u, v} \quad & s_N^\top Q_f s_N + \frac{1}{2} \sum_{i = 0}^{N-1} \left[ \begin{array}{c} s_i \\ u_i \end{array} \right]^\top \left[ \begin{array}{cc} Q & S \\ S^\top & R \end{array} \right] \left[ \begin{array}{c} s_i \\ u_i \end{array} \right]\\
+          \textrm{s.t.} \quad & s_{i+1} = As_i + Bu_i + w_i \quad \forall i = 0, 1, \cdots, N - 1 \\
+          & u_i = Ks_i + v_i \quad  \forall i = 0, 1, \cdots, N - 1 \\
+          & g^l \le E s_i + F u_i \le g^u \quad \forall i = 0, 1, \cdots, N - 1\\
+          & s^l \le s_i \le s^u \quad \forall i = 0, 1, \cdots, N \\
+          & u^l \le u_i \le u^u \quad \forall i = 0, 1, \cdots, N - 1\\
+          & s_0 = \bar{s} 
 \end{align*}$$
 
 where $s_i$ are the states, $u_i$ are the inputs$, $N$ is the time horizon, $\bar{s}$ are the initial states, and $Q$, $R$, $A$, and $B$ are user defined data. The matrices $Q_f$, $S$, $K$, $E$, and $F$ and the vectors $w$, $g^l$, $g^u$, $s^l$, $s^u$, $u^l$, and $u^u$ are optional data. $v_t$ is only needed in the condensed formulation, and it arises when $K$ is defined by the user to ensure numerical stability of the condensed problem. 
@@ -43,8 +43,8 @@ where $s_i$ are the states, $u_i$ are the inputs$, $N$ is the time horizon, $\ba
 The condensed formulation used within DynamicNLPModels.jl is 
 
 $$\begin{align*}
-\min_{\boldsymbol{v}} &\;\; \frac{1}{2} \boldsymbol{v}^\top \boldsymbol{H} \boldsymbol{v} + \boldsymbol{h}^\top \boldsymbol{v} + \boldsymbol{h}_0\\
-        \textrm{s.t.} &\; d^l \le \boldsymbol{J} \boldsymbol{v} \le d^u.
+\min_{\boldsymbol{v}} \quad & \frac{1}{2} \boldsymbol{v}^\top \boldsymbol{H} \boldsymbol{v} + \boldsymbol{h}^\top \boldsymbol{v} + \boldsymbol{h}_0\\
+        \textrm{s.t.} \quad & d^l \le \boldsymbol{J} \boldsymbol{v} \le d^u.
 \end{align*}$$
 
 ## Getting Started
